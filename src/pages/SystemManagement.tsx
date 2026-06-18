@@ -56,6 +56,9 @@ interface RedeemCode {
   group_id?: number | null
   group?: Group | null
   group_duration_days: number
+  subscription_plan_id?: number | null
+  subscription_plan?: SubscriptionPlan | null
+  subscription_duration_days: number
   allow_stacking: boolean
   max_uses: number
   used_count: number
@@ -64,11 +67,30 @@ interface RedeemCode {
   created_at: string
 }
 
+interface SubscriptionPlan {
+  id: number
+  name: string
+  reset_amount: string | number
+  reset_interval_days: number
+  enabled: boolean
+  created_at: string
+}
+
+interface SubscriptionPlanDraft {
+  id?: number
+  name: string
+  reset_amount: string
+  reset_interval_days: string
+  enabled: boolean
+}
+
 interface RedeemCodeDraft {
   code: string
   amount: string
   group_id: string
   group_duration_days: string
+  subscription_plan_id: string
+  subscription_duration_days: string
   allow_stacking: boolean
   max_uses: string
   enabled: boolean
@@ -164,16 +186,21 @@ type SystemTab =
   | "navigation"
   | "statusMonitor"
   | "groups"
+  | "subscriptionPlans"
   | "redeemCodes"
 
-type SystemSection = "general" | "auth" | "content" | "operations"
+type SystemSection = "general" | "auth" | "content" | "operations" | "subscriptions" | "redeemCodes"
 
 const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   general: ["basic", "billing", "checkIn", "security"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
-  operations: ["statusMonitor", "groups", "redeemCodes"],
+  operations: ["statusMonitor", "groups"],
+  subscriptions: ["subscriptionPlans"],
+  redeemCodes: ["redeemCodes"],
 }
+
+const premiumOnlySystemTabs: SystemTab[] = ["subscriptionPlans", "redeemCodes"]
 
 interface NavRow {
   id: string
@@ -218,6 +245,8 @@ const defaultRedeemDraft: RedeemCodeDraft = {
   amount: "",
   group_id: "",
   group_duration_days: "",
+  subscription_plan_id: "",
+  subscription_duration_days: "",
   allow_stacking: false,
   max_uses: "1",
   enabled: true,
@@ -227,6 +256,13 @@ const defaultRedeemDraft: RedeemCodeDraft = {
 const defaultGroupDraft: GroupDraft = {
   name: "",
   multiplier: "1",
+}
+
+const defaultSubscriptionPlanDraft: SubscriptionPlanDraft = {
+  name: "",
+  reset_amount: "",
+  reset_interval_days: "30",
+  enabled: true,
 }
 
 const defaultStatusMonitorDraft: StatusMonitorDraft = {
@@ -254,6 +290,8 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
   const [redeemGroupFilter, setRedeemGroupFilter] = useState("all")
   const [redeemSort, setRedeemSort] = useState("created_desc")
   const [selectedRedeemCodeIDs, setSelectedRedeemCodeIDs] = useState<number[]>([])
+  const [subscriptionPlanDraft, setSubscriptionPlanDraft] = useState<SubscriptionPlanDraft>(defaultSubscriptionPlanDraft)
+  const [isSubscriptionPlanDialogOpen, setIsSubscriptionPlanDialogOpen] = useState(false)
   const [groupDraft, setGroupDraft] = useState<GroupDraft>(defaultGroupDraft)
   const [isGroupDialogOpen, setIsGroupDialogOpen] = useState(false)
   const [statusMonitorDraft, setStatusMonitorDraft] = useState<StatusMonitorDraft>(defaultStatusMonitorDraft)
@@ -277,8 +315,17 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
   })
   const { data: redeemCodes = [] } = useQuery<RedeemCode[]>({
     queryKey: ["redeem-codes"],
+    enabled: settings?.edition === "premium",
     queryFn: async () => {
       const res = await api.get("/redeem-codes")
+      return Array.isArray(res.data) ? res.data : []
+    },
+  })
+  const { data: subscriptionPlans = [] } = useQuery<SubscriptionPlan[]>({
+    queryKey: ["subscription-plans"],
+    enabled: settings?.edition === "premium",
+    queryFn: async () => {
+      const res = await api.get("/subscription-plans")
       return Array.isArray(res.data) ? res.data : []
     },
   })
@@ -304,11 +351,19 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
     }
   }, [settings])
 
+  const isPremiumEdition = form.edition === "premium"
+
   useEffect(() => {
     if (!allowedTabs.includes(activeTab)) {
       setActiveTab(allowedTabs[0])
     }
   }, [activeTab, allowedTabs])
+
+  useEffect(() => {
+    if (settings && !isPremiumEdition && premiumOnlySystemTabs.includes(activeTab)) {
+      setIsPremiumNoticeOpen(true)
+    }
+  }, [activeTab, isPremiumEdition, settings])
 
   const saveSettings = useMutation({
     mutationFn: async () => {
@@ -390,6 +445,34 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
     onError: () => setStatus(copy.statusMonitorCheckFailed),
   })
 
+  const saveSubscriptionPlan = useMutation({
+    mutationFn: async () => {
+      const payload = subscriptionPlanPayload(subscriptionPlanDraft)
+      if (subscriptionPlanDraft.id) {
+        const res = await api.put(`/subscription-plans/${subscriptionPlanDraft.id}`, payload)
+        return res.data
+      }
+      const res = await api.post("/subscription-plans", payload)
+      return res.data
+    },
+    onSuccess: () => {
+      setSubscriptionPlanDraft(defaultSubscriptionPlanDraft)
+      setIsSubscriptionPlanDialogOpen(false)
+      setStatus(copy.subscriptionPlanSaved)
+      queryClient.invalidateQueries({ queryKey: ["subscription-plans"] })
+    },
+    onError: () => setStatus(copy.subscriptionPlanSaveFailed),
+  })
+
+  const deleteSubscriptionPlan = useMutation({
+    mutationFn: async (id: number) => api.delete(`/subscription-plans/${id}`),
+    onSuccess: () => {
+      setStatus(copy.subscriptionPlanDeleted)
+      queryClient.invalidateQueries({ queryKey: ["subscription-plans"] })
+    },
+    onError: () => setStatus(copy.subscriptionPlanDeleteFailed),
+  })
+
   const createRedeemCode = useMutation({
     mutationFn: async () => {
       const res = await api.post("/redeem-codes", redeemCodePayload(redeemDraft))
@@ -412,6 +495,8 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
         amount: code.amount,
         group_id: code.group_id || null,
         group_duration_days: code.group_duration_days || 0,
+        subscription_plan_id: code.subscription_plan_id || null,
+        subscription_duration_days: code.subscription_duration_days || 0,
         allow_stacking: Boolean(code.allow_stacking),
         max_uses: code.max_uses,
         enabled,
@@ -464,10 +549,10 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
     })
   }
 
-  const shouldShowSave = !["groups", "redeemCodes"].includes(activeTab)
-  const isPremiumEdition = form.edition === "premium"
+  const shouldShowSave = !["groups", "subscriptionPlans", "redeemCodes"].includes(activeTab)
   const visibleTabs = systemTabs(copy).filter((tab) => allowedTabs.includes(tab.id))
-  const canCreateRedeemCode = Number(redeemDraft.amount || 0) > 0 || Boolean(redeemDraft.group_id)
+  const canCreateRedeemCode = Number(redeemDraft.amount || 0) > 0 || Boolean(redeemDraft.group_id) || Boolean(redeemDraft.subscription_plan_id)
+  const canSaveSubscriptionPlan = Boolean(subscriptionPlanDraft.name.trim()) && Number(subscriptionPlanDraft.reset_amount || 0) > 0 && Number(subscriptionPlanDraft.reset_interval_days || 0) > 0
   const canSaveStatusMonitor = Boolean(statusMonitorDraft.name.trim() && statusMonitorDraft.target_url.trim())
   const visibleRedeemCodes = filterAndSortRedeemCodes(redeemCodes, {
     search: redeemSearch,
@@ -500,7 +585,7 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
             variant={activeTab === tab.id ? "default" : "outline"}
             className="shrink-0 gap-2"
             onClick={() => {
-              if (tab.id === "security" && !isPremiumEdition) {
+              if ((tab.id === "security" || premiumOnlySystemTabs.includes(tab.id)) && !isPremiumEdition) {
                 setIsPremiumNoticeOpen(true)
                 return
               }
@@ -915,7 +1000,88 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
         </SettingsPanel>
       )}
 
-      {activeTab === "redeemCodes" && (
+      {isPremiumEdition && activeTab === "subscriptionPlans" && (
+        <SettingsPanel title={copy.subscriptionPlans}>
+          <div className="space-y-5">
+            <div className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div className="text-sm font-medium">{copy.subscriptionPlans}</div>
+                <div className="text-xs text-muted-foreground">{copy.subscriptionPlansDescription}</div>
+              </div>
+              <Button
+                className="gap-2"
+                onClick={() => {
+                  setSubscriptionPlanDraft(defaultSubscriptionPlanDraft)
+                  setIsSubscriptionPlanDialogOpen(true)
+                }}
+              >
+                <Plus size={16} />
+                {copy.createSubscriptionPlan}
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto rounded-md border">
+              <div className="min-w-[720px]">
+                <div className="grid grid-cols-[1fr_150px_150px_120px_160px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <div>{copy.planName}</div>
+                  <div>{copy.resetAmount}</div>
+                  <div>{copy.resetInterval}</div>
+                  <div>{copy.status}</div>
+                  <div className="text-right">{t("common.actions")}</div>
+                </div>
+                {subscriptionPlans.length === 0 ? (
+                  <div className="px-3 py-8 text-center text-sm text-muted-foreground">{copy.noSubscriptionPlans}</div>
+                ) : (
+                  subscriptionPlans.map((plan) => (
+                    <div key={plan.id} className="grid grid-cols-[1fr_150px_150px_120px_160px] items-center border-b px-3 py-3 text-sm last:border-b-0">
+                      <div className="font-medium">{plan.name}</div>
+                      <div>${plan.reset_amount}</div>
+                      <div>{formatDuration(plan.reset_interval_days, copy)}</div>
+                      <div>{plan.enabled ? copy.enabled : copy.disabled}</div>
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => {
+                            setSubscriptionPlanDraft({
+                              id: plan.id,
+                              name: plan.name,
+                              reset_amount: String(plan.reset_amount ?? ""),
+                              reset_interval_days: String(plan.reset_interval_days ?? 30),
+                              enabled: plan.enabled,
+                            })
+                            setIsSubscriptionPlanDialogOpen(true)
+                          }}
+                        >
+                          {t("common.edit")}
+                        </Button>
+                        <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600" onClick={() => deleteSubscriptionPlan.mutate(plan.id)}>
+                          {t("common.delete")}
+                        </Button>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </div>
+            <SubscriptionPlanDialog
+              open={isSubscriptionPlanDialogOpen}
+              copy={copy}
+              draft={subscriptionPlanDraft}
+              canSave={canSaveSubscriptionPlan}
+              isSaving={saveSubscriptionPlan.isPending}
+              onDraftChange={setSubscriptionPlanDraft}
+              onClose={() => {
+                setIsSubscriptionPlanDialogOpen(false)
+                setSubscriptionPlanDraft(defaultSubscriptionPlanDraft)
+              }}
+              onSave={() => saveSubscriptionPlan.mutate()}
+            />
+          </div>
+        </SettingsPanel>
+      )}
+
+      {isPremiumEdition && activeTab === "redeemCodes" && (
         <SettingsPanel title={copy.redeemCodes}>
           <div className="space-y-5">
             <div className="flex flex-col gap-3 rounded-md border p-3">
@@ -971,8 +1137,8 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
             </div>
 
             <div className="overflow-x-auto rounded-md border">
-              <div className="min-w-[1040px]">
-                <div className="grid grid-cols-[42px_1.3fr_110px_140px_110px_120px_160px_110px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+              <div className="min-w-[1200px]">
+                <div className="grid grid-cols-[42px_1.3fr_100px_140px_110px_150px_110px_120px_160px_110px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
                   <label className="flex items-center">
                     <input
                       type="checkbox"
@@ -991,6 +1157,8 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
                   <div>{copy.amount}</div>
                   <div>{copy.groupGrant}</div>
                   <div>{copy.groupDuration}</div>
+                  <div>{copy.subscriptionPlan}</div>
+                  <div>{copy.subscriptionDuration}</div>
                   <div>{copy.usage}</div>
                   <div>{copy.expiresAt}</div>
                   <div>{copy.status}</div>
@@ -1000,7 +1168,7 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
                   <div className="px-3 py-8 text-center text-sm text-muted-foreground">{copy.noRedeemCodes}</div>
                 ) : (
                   visibleRedeemCodes.map((code) => (
-                    <div key={code.id} className="grid grid-cols-[42px_1.3fr_110px_140px_110px_120px_160px_110px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
+                    <div key={code.id} className="grid grid-cols-[42px_1.3fr_100px_140px_110px_150px_110px_120px_160px_110px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
                       <label className="flex items-center">
                         <input
                           type="checkbox"
@@ -1016,6 +1184,8 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
                       <div>${code.amount}</div>
                       <div>{code.group?.name || "-"}</div>
                       <div>{code.group_id ? formatDuration(code.group_duration_days, copy) : "-"}</div>
+                      <div>{code.subscription_plan?.name || "-"}</div>
+                      <div>{code.subscription_plan_id ? formatDuration(code.subscription_duration_days, copy) : "-"}</div>
                       <div>{code.used_count}/{code.max_uses}</div>
                       <div>{formatDateTime(code.expires_at)}</div>
                       <div>{redeemCodeStatusLabel(code, copy, t)}</div>
@@ -1037,6 +1207,7 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
               copy={copy}
               draft={redeemDraft}
               groups={groups}
+              subscriptionPlans={subscriptionPlans}
               canSave={canCreateRedeemCode}
               isSaving={createRedeemCode.isPending}
               onDraftChange={setRedeemDraft}
@@ -1066,6 +1237,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "navigation", label: copy.navigation, icon: ToggleLeft },
     { id: "statusMonitor", label: copy.statusMonitor, icon: Activity },
     { id: "groups", label: copy.groups, icon: Layers },
+    { id: "subscriptionPlans", label: copy.subscriptionPlans, icon: HandCoins },
     { id: "redeemCodes", label: copy.redeemCodes, icon: Gift },
   ]
 }
@@ -1290,6 +1462,7 @@ function RedeemCodeDialog({
   copy,
   draft,
   groups,
+  subscriptionPlans,
   canSave,
   isSaving,
   onDraftChange,
@@ -1300,6 +1473,7 @@ function RedeemCodeDialog({
   copy: SystemCopy
   draft: RedeemCodeDraft
   groups: Group[]
+  subscriptionPlans: SubscriptionPlan[]
   canSave: boolean
   isSaving: boolean
   onDraftChange: (draft: RedeemCodeDraft) => void
@@ -1354,6 +1528,22 @@ function RedeemCodeDialog({
             type="number"
             onChange={(value) => onDraftChange({ ...draft, group_duration_days: value })}
           />
+          <label className="block space-y-2 text-sm">
+            <span className="font-medium">{copy.subscriptionPlan}</span>
+            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.subscription_plan_id} onChange={(event) => onDraftChange({ ...draft, subscription_plan_id: event.target.value })}>
+              <option value="">{copy.noSubscriptionPlan}</option>
+              {subscriptionPlans.filter((plan) => plan.enabled).map((plan) => (
+                <option key={plan.id} value={plan.id}>{plan.name}</option>
+              ))}
+            </select>
+          </label>
+          <TextField
+            label={copy.subscriptionDuration}
+            value={draft.subscription_duration_days}
+            placeholder={copy.subscriptionDurationPlaceholder}
+            type="number"
+            onChange={(value) => onDraftChange({ ...draft, subscription_duration_days: value })}
+          />
           <label className="flex h-10 items-center gap-2 text-sm">
             <input type="checkbox" checked={draft.allow_stacking} onChange={(event) => onDraftChange({ ...draft, allow_stacking: event.target.checked })} />
             {copy.allowStacking}
@@ -1366,6 +1556,67 @@ function RedeemCodeDialog({
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
           <Button disabled={!canSave || isSaving} onClick={onSave}>{copy.createRedeemCode}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function SubscriptionPlanDialog({
+  open,
+  copy,
+  draft,
+  canSave,
+  isSaving,
+  onDraftChange,
+  onClose,
+  onSave,
+}: {
+  open: boolean
+  copy: SystemCopy
+  draft: SubscriptionPlanDraft
+  canSave: boolean
+  isSaving: boolean
+  onDraftChange: (draft: SubscriptionPlanDraft) => void
+  onClose: () => void
+  onSave: () => void
+}) {
+  const { t } = useI18n()
+  return (
+    <Dialog open={open} onOpenChange={(nextOpen) => !nextOpen && onClose()}>
+      <DialogContent className="max-w-lg">
+        <DialogHeader>
+          <DialogTitle>{draft.id ? copy.updateSubscriptionPlan : copy.createSubscriptionPlan}</DialogTitle>
+        </DialogHeader>
+        <div className="grid gap-3">
+          <TextField
+            label={copy.planName}
+            value={draft.name}
+            placeholder={copy.planNamePlaceholder}
+            onChange={(value) => onDraftChange({ ...draft, name: value })}
+          />
+          <TextField
+            label={copy.resetAmount}
+            value={draft.reset_amount}
+            placeholder={copy.resetAmountPlaceholder}
+            type="number"
+            onChange={(value) => onDraftChange({ ...draft, reset_amount: value })}
+          />
+          <TextField
+            label={copy.resetInterval}
+            value={draft.reset_interval_days}
+            placeholder={copy.resetIntervalPlaceholder}
+            type="number"
+            onChange={(value) => onDraftChange({ ...draft, reset_interval_days: value })}
+          />
+          <label className="flex h-10 items-center gap-2 text-sm">
+            <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+            {copy.enabled}
+          </label>
+        </div>
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
+          <Button disabled={!canSave || isSaving} onClick={onSave}>{draft.id ? copy.updateSubscriptionPlan : copy.createSubscriptionPlan}</Button>
         </DialogFooter>
       </DialogContent>
     </Dialog>
@@ -1430,10 +1681,21 @@ function redeemCodePayload(draft: RedeemCodeDraft) {
     amount: Number(draft.amount || 0),
     group_id: Number(draft.group_id || 0) || null,
     group_duration_days: Number(draft.group_duration_days || 0),
+    subscription_plan_id: Number(draft.subscription_plan_id || 0) || null,
+    subscription_duration_days: Number(draft.subscription_duration_days || 0),
     allow_stacking: draft.allow_stacking,
     max_uses: Number(draft.max_uses || 1),
     enabled: draft.enabled,
     expires_at: draft.expires_at,
+  }
+}
+
+function subscriptionPlanPayload(draft: SubscriptionPlanDraft) {
+  return {
+    name: draft.name.trim(),
+    reset_amount: Number(draft.reset_amount || 0),
+    reset_interval_days: Number(draft.reset_interval_days || 0),
+    enabled: draft.enabled,
   }
 }
 
@@ -1587,6 +1849,8 @@ function redeemCodeText(code: RedeemCode, copy: SystemCopy) {
     `${copy.amount}: ${code.amount}`,
     `${copy.groupGrant}: ${code.group?.name || "-"}`,
     `${copy.groupDuration}: ${code.group_id ? formatDuration(code.group_duration_days, copy) : "-"}`,
+    `${copy.subscriptionPlan}: ${code.subscription_plan?.name || "-"}`,
+    `${copy.subscriptionDuration}: ${code.subscription_plan_id ? formatDuration(code.subscription_duration_days, copy) : "-"}`,
     `${copy.usage}: ${code.used_count}/${code.max_uses}`,
     `${copy.expiresAt}: ${formatDateTime(code.expires_at)}`,
   ].join("\n")
@@ -1685,7 +1949,7 @@ const zhCopy = {
   ssrfAllowedHosts: "SSRF 允许主机",
   ssrfAllowedHostsPlaceholder: "每行或用逗号分隔，例如：internal-api.example.com\n192.168.1.10",
   premiumRequiredTitle: "需要高级版",
-  premiumRequiredDescription: "安全策略属于高级版功能。升级到高级版后可以启用网关限流、敏感词过滤和 SSRF 防护。",
+  premiumRequiredDescription: "该功能属于高级版功能。升级到高级版后可以使用安全策略、订阅套餐和兑换码等高级能力。",
   premiumRequiredAction: "知道了",
   auth: "登录认证",
   email: "邮件配置",
@@ -1821,6 +2085,25 @@ const zhCopy = {
   noGroupGrant: "不授予分组",
   groupDuration: "分组时长",
   groupDurationPlaceholder: "分组天数，0 为永久",
+  subscriptionPlans: "订阅套餐",
+  subscriptionPlansDescription: "创建可通过兑换码授予的周期额度套餐",
+  createSubscriptionPlan: "创建套餐",
+  updateSubscriptionPlan: "更新套餐",
+  subscriptionPlanSaved: "套餐已保存",
+  subscriptionPlanSaveFailed: "套餐保存失败",
+  subscriptionPlanDeleted: "套餐已删除",
+  subscriptionPlanDeleteFailed: "套餐删除失败，可能仍在使用中",
+  noSubscriptionPlans: "暂无套餐",
+  planName: "套餐名称",
+  planNamePlaceholder: "例如 Pro 月度",
+  resetAmount: "重置额度",
+  resetAmountPlaceholder: "每周期额度",
+  resetInterval: "重置周期",
+  resetIntervalPlaceholder: "天数，例如 30",
+  subscriptionPlan: "订阅套餐",
+  noSubscriptionPlan: "不授予套餐",
+  subscriptionDuration: "订阅时长",
+  subscriptionDurationPlaceholder: "订阅天数，0 为永久",
   allowStacking: "允许叠加时长",
   permanent: "永久",
   days: "天",
@@ -1852,6 +2135,7 @@ const zhCopy = {
   expiresAt: "过期时间",
   status: "状态",
   enabled: "启用",
+  disabled: "禁用",
 }
 
 const enCopy: SystemCopy = {
@@ -1903,7 +2187,7 @@ const enCopy: SystemCopy = {
   ssrfAllowedHosts: "SSRF allowed hosts",
   ssrfAllowedHostsPlaceholder: "One per line or comma-separated, e.g. internal-api.example.com\n192.168.1.10",
   premiumRequiredTitle: "Premium edition required",
-  premiumRequiredDescription: "Security Policy is a premium feature. Upgrade to enable gateway rate limiting, sensitive-word filtering, and SSRF protection.",
+  premiumRequiredDescription: "This is a premium feature. Upgrade to use Security Policy, subscription plans, redeem codes, and other premium capabilities.",
   premiumRequiredAction: "Got it",
   auth: "Authentication",
   email: "Email",
@@ -2039,6 +2323,25 @@ const enCopy: SystemCopy = {
   noGroupGrant: "No group grant",
   groupDuration: "Group duration",
   groupDurationPlaceholder: "Days, 0 means permanent",
+  subscriptionPlans: "Subscription Plans",
+  subscriptionPlansDescription: "Create recurring quota plans that can be granted by redeem codes.",
+  createSubscriptionPlan: "Create plan",
+  updateSubscriptionPlan: "Update plan",
+  subscriptionPlanSaved: "Subscription plan saved",
+  subscriptionPlanSaveFailed: "Failed to save subscription plan",
+  subscriptionPlanDeleted: "Subscription plan deleted",
+  subscriptionPlanDeleteFailed: "Failed to delete subscription plan, it may still be in use",
+  noSubscriptionPlans: "No subscription plans",
+  planName: "Plan name",
+  planNamePlaceholder: "For example, Pro monthly",
+  resetAmount: "Reset amount",
+  resetAmountPlaceholder: "Quota per period",
+  resetInterval: "Reset interval",
+  resetIntervalPlaceholder: "Days, for example 30",
+  subscriptionPlan: "Subscription plan",
+  noSubscriptionPlan: "No subscription plan",
+  subscriptionDuration: "Subscription duration",
+  subscriptionDurationPlaceholder: "Days, 0 means permanent",
   allowStacking: "Allow duration stacking",
   permanent: "Permanent",
   days: " days",
@@ -2070,4 +2373,5 @@ const enCopy: SystemCopy = {
   expiresAt: "Expires",
   status: "Status",
   enabled: "Enabled",
+  disabled: "Disabled",
 }

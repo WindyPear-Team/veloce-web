@@ -198,6 +198,22 @@ function App() {
                   }
                 />
                 <Route
+                  path="admin/subscriptions"
+                  element={
+                    <AdminRoute>
+                      <SystemManagement section="subscriptions" />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="admin/redeem-codes"
+                  element={
+                    <AdminRoute>
+                      <SystemManagement section="redeemCodes" />
+                    </AdminRoute>
+                  }
+                />
+                <Route
                   path="channels"
                   element={
                     <AdminRoute>
