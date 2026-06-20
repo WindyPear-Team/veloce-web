@@ -3,6 +3,7 @@ import {
   ArrowDown,
   ArrowUp,
   CalendarCheck,
+  CreditCard,
   Download,
   FileText,
   Gift,
@@ -184,6 +185,7 @@ interface SystemSettings extends PublicSettings {
 type SystemTab =
   | "basic"
   | "billing"
+  | "payment"
   | "checkIn"
   | "security"
   | "auth"
@@ -202,7 +204,7 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   general: ["basic", "billing", "checkIn", "security"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
-  operations: ["statusMonitor", "groups"],
+  operations: ["statusMonitor", "payment", "groups", "subscriptionPlans", "redeemCodes"],
   subscriptions: ["subscriptionPlans"],
   redeemCodes: ["redeemCodes"],
 }
@@ -289,12 +291,13 @@ const defaultStatusMonitorDraft: StatusMonitorDraft = {
   enabled: true,
 }
 
-export default function SystemManagement({ section = "general" }: { section?: SystemSection }) {
+export default function SystemManagement({ section = "general", initialTab }: { section?: SystemSection; initialTab?: SystemTab }) {
   const { language, t } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
   const queryClient = useQueryClient()
   const allowedTabs = systemSectionTabs[section] || systemSectionTabs.general
-  const [activeTab, setActiveTab] = useState<SystemTab>(allowedTabs[0])
+  const defaultTab = initialTab && allowedTabs.includes(initialTab) ? initialTab : allowedTabs[0]
+  const [activeTab, setActiveTab] = useState<SystemTab>(defaultTab)
   const [form, setForm] = useState<SystemSettings>(defaultSystemSettings)
   const [navRows, setNavRows] = useState<NavRow[]>([])
   const [redeemDraft, setRedeemDraft] = useState<RedeemCodeDraft>(defaultRedeemDraft)
@@ -369,9 +372,9 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
 
   useEffect(() => {
     if (!allowedTabs.includes(activeTab)) {
-      setActiveTab(allowedTabs[0])
+      setActiveTab(defaultTab)
     }
-  }, [activeTab, allowedTabs])
+  }, [activeTab, allowedTabs, defaultTab])
 
   useEffect(() => {
     if (settings && !isPremiumEdition && premiumOnlySystemTabs.includes(activeTab)) {
@@ -380,8 +383,12 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
   }, [activeTab, isPremiumEdition, settings])
 
   const saveSettings = useMutation({
-    mutationFn: async () => {
-      const res = await api.put("/settings", { ...form, top_nav_items: serializeTopNavRows(navRows) })
+    mutationFn: async (checkInStreakRewards: string) => {
+      const res = await api.put("/settings", {
+        ...form,
+        checkin_streak_rewards: checkInStreakRewards,
+        top_nav_items: serializeTopNavRows(navRows),
+      })
       return res.data
     },
     onSuccess: (savedSettings: SystemSettings) => {
@@ -577,6 +584,16 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
   const selectedRedeemCodes = redeemCodes.filter((code) => selectedRedeemCodeIDs.includes(code.id))
   const allVisibleRedeemCodesSelected = visibleRedeemCodes.length > 0 && visibleRedeemCodes.every((code) => selectedRedeemCodeIDs.includes(code.id))
 
+  const handleSaveSettings = () => {
+    const streakRewards = validateCheckInStreakRewards(form.checkin_streak_rewards, copy)
+    if (!streakRewards.valid) {
+      setStatus(streakRewards.error)
+      setActiveTab("checkIn")
+      return
+    }
+    saveSettings.mutate(streakRewards.value)
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -586,7 +603,7 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
           {status && <div className="mt-2 text-sm text-muted-foreground">{status}</div>}
         </div>
         {shouldShowSave && (
-          <Button onClick={() => saveSettings.mutate()} disabled={saveSettings.isPending}>
+          <Button onClick={handleSaveSettings} disabled={saveSettings.isPending}>
             {t("admin.save")}
           </Button>
         )}
@@ -675,44 +692,48 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
                 </div>
               </div>
             </div>
+          </div>
+        </SettingsPanel>
+      )}
 
-            <div className="space-y-4">
-              <SectionTitle title={copy.paymentSettings} description={copy.paymentSettingsDescription} />
-              <div className="grid gap-4 lg:grid-cols-2">
-                <ToggleField label={copy.paymentEnabled} checked={form.payment_enabled} onChange={(checked) => updateField("payment_enabled", checked)} />
-                <TextField label={copy.currencyDisplayName} value={form.payment_currency_display_name} placeholder="$" onChange={(value) => updateField("payment_currency_display_name", value)} />
-                <TextField label={copy.usdToRMBRate} value={form.payment_usd_to_rmb_rate} placeholder="7.20" type="number" onChange={(value) => updateField("payment_usd_to_rmb_rate", value)} />
-                <TextField label={copy.minRechargeAmount} value={form.payment_min_recharge_amount} placeholder="1" type="number" onChange={(value) => updateField("payment_min_recharge_amount", value)} />
-                <TextField label={copy.rechargePresets} value={jsonListToCSV(form.payment_recharge_presets)} placeholder="5,10,20,50,100" onChange={(value) => updateField("payment_recharge_presets", csvToJSONString(value))} />
-                <TextField label={copy.paymentMethods} value={jsonListToCSV(form.payment_methods)} placeholder="alipay,wxpay" onChange={(value) => updateField("payment_methods", csvToJSONString(value))} />
-                <label className="grid gap-2 text-sm">
-                  <span className="font-medium">{copy.paymentGatewayProvider}</span>
-                  <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.payment_gateway_provider || "yipay"} onChange={(event) => updateField("payment_gateway_provider", event.target.value)}>
-                    <option value="yipay">{copy.paymentProviderYipay}</option>
-                    <option value="openpayment">{copy.paymentProviderOpenPayment}</option>
-                  </select>
-                </label>
-                {(form.payment_gateway_provider || "yipay") === "openpayment" ? (
-                  <>
-                    <TextField label={copy.openPaymentBaseURL} value={form.payment_openpayment_base_url} placeholder="https://pay.example.com" onChange={(value) => updateField("payment_openpayment_base_url", value)} />
-                    <TextField label={copy.openPaymentConfigURL} value={form.payment_openpayment_config_url} placeholder="https://pay.example.com/.well-known/openpayment-configuation" onChange={(value) => updateField("payment_openpayment_config_url", value)} />
-                    <TextField label={copy.openPaymentMerchantID} value={form.payment_openpayment_merchant_id} placeholder="1000" onChange={(value) => updateField("payment_openpayment_merchant_id", value)} />
-                    <TextField label={copy.openPaymentKey} value={form.payment_openpayment_key} placeholder={copy.openPaymentKeyPlaceholder} type="password" onChange={(value) => updateField("payment_openpayment_key", value)} />
-                    <TextField label={copy.openPaymentNotifyURL} value={form.payment_openpayment_notify_url} placeholder="https://api.example.com/api/payment/openpayment/notify" onChange={(value) => updateField("payment_openpayment_notify_url", value)} />
-                    <TextField label={copy.openPaymentReturnURL} value={form.payment_openpayment_return_url} placeholder="https://api.example.com/api/payment/openpayment/return" onChange={(value) => updateField("payment_openpayment_return_url", value)} />
-                  </>
-                ) : (
-                  <>
-                    <TextField label={copy.yipayGatewayURL} value={form.payment_yipay_gateway_url} placeholder="https://pay.example.com/submit.php" onChange={(value) => updateField("payment_yipay_gateway_url", value)} />
-                    <TextField label={copy.yipayPID} value={form.payment_yipay_pid} placeholder="1000" onChange={(value) => updateField("payment_yipay_pid", value)} />
-                    <TextField label={copy.yipayKey} value={form.payment_yipay_key} placeholder={copy.yipayKeyPlaceholder} type="password" onChange={(value) => updateField("payment_yipay_key", value)} />
-                    <TextField label={copy.yipayNotifyURL} value={form.payment_yipay_notify_url} placeholder="https://api.example.com/api/payment/yipay/notify" onChange={(value) => updateField("payment_yipay_notify_url", value)} />
-                    <TextField label={copy.yipayReturnURL} value={form.payment_yipay_return_url} placeholder="https://api.example.com/api/payment/yipay/return" onChange={(value) => updateField("payment_yipay_return_url", value)} />
-                  </>
-                )}
-              </div>
-              <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{(form.payment_gateway_provider || "yipay") === "openpayment" ? copy.openPaymentGatewayHint : copy.yipayGatewayHint}</div>
+      {activeTab === "payment" && (
+        <SettingsPanel title={copy.paymentInterface}>
+          <div className="space-y-4">
+            <SectionTitle title={copy.paymentSettings} description={copy.paymentSettingsDescription} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ToggleField label={copy.paymentEnabled} checked={form.payment_enabled} onChange={(checked) => updateField("payment_enabled", checked)} />
+              <TextField label={copy.currencyDisplayName} value={form.payment_currency_display_name} placeholder="$" onChange={(value) => updateField("payment_currency_display_name", value)} />
+              <TextField label={copy.usdToRMBRate} value={form.payment_usd_to_rmb_rate} placeholder="7.20" type="number" onChange={(value) => updateField("payment_usd_to_rmb_rate", value)} />
+              <TextField label={copy.minRechargeAmount} value={form.payment_min_recharge_amount} placeholder="1" type="number" onChange={(value) => updateField("payment_min_recharge_amount", value)} />
+              <TextField label={copy.rechargePresets} value={jsonListToCSV(form.payment_recharge_presets)} placeholder="5,10,20,50,100" onChange={(value) => updateField("payment_recharge_presets", csvToJSONString(value))} />
+              <TextField label={copy.paymentMethods} value={jsonListToCSV(form.payment_methods)} placeholder="alipay,wxpay" onChange={(value) => updateField("payment_methods", csvToJSONString(value))} />
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">{copy.paymentGatewayProvider}</span>
+                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.payment_gateway_provider || "yipay"} onChange={(event) => updateField("payment_gateway_provider", event.target.value)}>
+                  <option value="yipay">{copy.paymentProviderYipay}</option>
+                  <option value="openpayment">{copy.paymentProviderOpenPayment}</option>
+                </select>
+              </label>
+              {(form.payment_gateway_provider || "yipay") === "openpayment" ? (
+                <>
+                  <TextField label={copy.openPaymentBaseURL} value={form.payment_openpayment_base_url} placeholder="https://pay.example.com" onChange={(value) => updateField("payment_openpayment_base_url", value)} />
+                  <TextField label={copy.openPaymentConfigURL} value={form.payment_openpayment_config_url} placeholder="https://pay.example.com/.well-known/openpayment-configuation" onChange={(value) => updateField("payment_openpayment_config_url", value)} />
+                  <TextField label={copy.openPaymentMerchantID} value={form.payment_openpayment_merchant_id} placeholder="1000" onChange={(value) => updateField("payment_openpayment_merchant_id", value)} />
+                  <TextField label={copy.openPaymentKey} value={form.payment_openpayment_key} placeholder={copy.openPaymentKeyPlaceholder} type="password" onChange={(value) => updateField("payment_openpayment_key", value)} />
+                  <ReadonlyField label={copy.openPaymentNotifyURL} value={callbackURLFromBaseURL(form.base_url, "/api/payment/openpayment/notify")} placeholder={copy.generatedFromBaseURL} />
+                  <ReadonlyField label={copy.openPaymentReturnURL} value={callbackURLFromBaseURL(form.base_url, "/api/payment/openpayment/return")} placeholder={copy.generatedFromBaseURL} />
+                </>
+              ) : (
+                <>
+                  <TextField label={copy.yipayGatewayURL} value={form.payment_yipay_gateway_url} placeholder="https://pay.example.com/submit.php" onChange={(value) => updateField("payment_yipay_gateway_url", value)} />
+                  <TextField label={copy.yipayPID} value={form.payment_yipay_pid} placeholder="1000" onChange={(value) => updateField("payment_yipay_pid", value)} />
+                  <TextField label={copy.yipayKey} value={form.payment_yipay_key} placeholder={copy.yipayKeyPlaceholder} type="password" onChange={(value) => updateField("payment_yipay_key", value)} />
+                  <TextField label={copy.yipayNotifyURL} value={form.payment_yipay_notify_url} placeholder="https://api.example.com/api/payment/yipay/notify" onChange={(value) => updateField("payment_yipay_notify_url", value)} />
+                  <TextField label={copy.yipayReturnURL} value={form.payment_yipay_return_url} placeholder="https://api.example.com/api/payment/yipay/return" onChange={(value) => updateField("payment_yipay_return_url", value)} />
+                </>
+              )}
             </div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{(form.payment_gateway_provider || "yipay") === "openpayment" ? copy.openPaymentGatewayHint : copy.yipayGatewayHint}</div>
           </div>
         </SettingsPanel>
       )}
@@ -731,7 +752,7 @@ export default function SystemManagement({ section = "general" }: { section?: Sy
               <TextField label={copy.checkInRandomMin} value={form.checkin_random_min} placeholder="0" type="number" onChange={(value) => updateField("checkin_random_min", value)} />
               <TextField label={copy.checkInRandomMax} value={form.checkin_random_max} placeholder="1" type="number" onChange={(value) => updateField("checkin_random_max", value)} />
             </div>
-            <TextareaField label={copy.checkInStreakRewards} value={form.checkin_streak_rewards} placeholder={copy.checkInStreakRewardsPlaceholder} onChange={(value) => updateField("checkin_streak_rewards", value)} />
+            <TextareaField label={copy.checkInStreakRewards} value={form.checkin_streak_rewards} placeholder={copy.checkInStreakRewardsPlaceholder} help={copy.checkInStreakRewardsHelp} onChange={(value) => updateField("checkin_streak_rewards", value)} />
           </div>
         </SettingsPanel>
       )}
@@ -1262,6 +1283,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
   return [
     { id: "basic", label: copy.basic, icon: Globe2 },
     { id: "billing", label: copy.billing, icon: HandCoins },
+    { id: "payment", label: copy.paymentInterface, icon: CreditCard },
     { id: "checkIn", label: copy.checkInSettings, icon: CalendarCheck },
     { id: "security", label: copy.security, icon: ShieldCheck },
     { id: "auth", label: copy.auth, icon: KeyRound },
@@ -1317,15 +1339,34 @@ function TextField({
   )
 }
 
+function ReadonlyField({
+  label,
+  value,
+  placeholder,
+}: {
+  label: string
+  value: string
+  placeholder: string
+}) {
+  return (
+    <label className="block space-y-2 text-sm">
+      <span className="font-medium">{label}</span>
+      <Input value={value} placeholder={placeholder} readOnly className="bg-muted/50" />
+    </label>
+  )
+}
+
 function TextareaField({
   label,
   value,
   placeholder,
+  help,
   onChange,
 }: {
   label: string
   value: string
   placeholder: string
+  help?: string
   onChange: (value: string) => void
 }) {
   return (
@@ -1337,6 +1378,7 @@ function TextareaField({
         className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
         onChange={(event) => onChange(event.target.value)}
       />
+      {help && <p className="text-xs leading-5 text-muted-foreground">{help}</p>}
     </label>
   )
 }
@@ -1932,6 +1974,40 @@ function csvToJSONString(value: string) {
   return JSON.stringify(value.split(",").map((item) => item.trim()).filter(Boolean))
 }
 
+function callbackURLFromBaseURL(baseURL: string, path: string) {
+  const trimmed = baseURL.trim().replace(/\/+$/, "")
+  return trimmed ? `${trimmed}${path}` : ""
+}
+
+function validateCheckInStreakRewards(raw: string, copy: SystemCopy): { valid: true; value: string } | { valid: false; error: string } {
+  const text = raw.trim() || "{}"
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch {
+    return { valid: false, error: copy.checkInStreakRewardsInvalidJSON }
+  }
+  if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+    return { valid: false, error: copy.checkInStreakRewardsInvalidObject }
+  }
+
+  const normalized: Record<string, string> = {}
+  for (const [day, amount] of Object.entries(parsed)) {
+    const normalizedDay = day.trim()
+    if (!/^[1-9]\d*$/.test(normalizedDay)) {
+      return { valid: false, error: copy.checkInStreakRewardsInvalidDay.replace("{day}", day) }
+    }
+    const normalizedAmount = typeof amount === "number" ? String(amount) : typeof amount === "string" ? amount.trim() : ""
+    const parsedAmount = Number(normalizedAmount)
+    if (!normalizedAmount || !Number.isFinite(parsedAmount) || parsedAmount < 0) {
+      return { valid: false, error: copy.checkInStreakRewardsInvalidAmount.replace("{day}", day) }
+    }
+    normalized[normalizedDay] = normalizedAmount
+  }
+
+  return { valid: true, value: JSON.stringify(normalized) }
+}
+
 type SystemCopy = typeof zhCopy
 
 const zhCopy = {
@@ -1950,9 +2026,15 @@ const zhCopy = {
   checkInStreakCycleDays: "连续签到循环天数",
   checkInStreakRewards: "连续签到奖励 JSON",
   checkInStreakRewardsPlaceholder: "例如 {\"3\":\"1\",\"7\":\"3\"}，表示第 3 天额外 1，第 7 天额外 3",
+  checkInStreakRewardsHelp: "写法：JSON 对象，key 是连续签到第几天，value 是额外奖励金额，例如 {\"3\":\"1\",\"7\":\"3\"}。开启 7 天循环时，第 10 天会按第 3 天计算。",
+  checkInStreakRewardsInvalidJSON: "连续签到奖励 JSON 格式不正确",
+  checkInStreakRewardsInvalidObject: "连续签到奖励必须是 JSON 对象，例如 {\"3\":\"1\",\"7\":\"3\"}",
+  checkInStreakRewardsInvalidDay: "连续签到奖励的天数必须是正整数：{day}",
+  checkInStreakRewardsInvalidAmount: "连续签到奖励的金额必须是非负数字，出错天数：{day}",
   checkInRandomEnabled: "启用随机奖励",
   checkInRandomMin: "随机奖励最小值",
   checkInRandomMax: "随机奖励最大值",
+  paymentInterface: "支付接口",
   paymentSettings: "支付充值",
   paymentSettingsDescription: "配置用户余额充值、人民币结算汇率、易支付或 OPS 网关。",
   paymentEnabled: "启用支付充值",
@@ -1976,9 +2058,10 @@ const zhCopy = {
   openPaymentMerchantID: "OPS 商户号",
   openPaymentKey: "OPS 商户密钥",
   openPaymentKeyPlaceholder: "用于 OPS MD5 或 HMAC-SHA256 签名的商户密钥",
-  openPaymentNotifyURL: "OPS 异步通知地址（可选）",
-  openPaymentReturnURL: "OPS 同步跳转地址（可选）",
+  openPaymentNotifyURL: "OPS 异步通知地址",
+  openPaymentReturnURL: "OPS 同步跳转地址",
   openPaymentGatewayHint: "OPS 模式会读取 /.well-known/openpayment-configuation（规范中的 configuation 拼写是固定路径），并按发现配置中的端点、字段别名、支付方式和签名规则发起支付。发现配置地址留空时会根据 Base URL 自动生成。",
+  generatedFromBaseURL: "由 Base URL 自动生成",
   security: "安全策略",
   rateLimitEnabled: "启用网关速率限制",
   rateLimitRPM: "每分钟请求数",
@@ -2199,9 +2282,15 @@ const enCopy: SystemCopy = {
   checkInStreakCycleDays: "Streak cycle days",
   checkInStreakRewards: "Streak rewards JSON",
   checkInStreakRewardsPlaceholder: "For example {\"3\":\"1\",\"7\":\"3\"}; day 3 grants +1 and day 7 grants +3",
+  checkInStreakRewardsHelp: "Format: a JSON object. The key is the streak day and the value is the extra reward amount, for example {\"3\":\"1\",\"7\":\"3\"}. With a 7-day cycle, day 10 uses the day 3 rule.",
+  checkInStreakRewardsInvalidJSON: "Streak rewards JSON is invalid",
+  checkInStreakRewardsInvalidObject: "Streak rewards must be a JSON object, for example {\"3\":\"1\",\"7\":\"3\"}",
+  checkInStreakRewardsInvalidDay: "Streak reward day must be a positive integer: {day}",
+  checkInStreakRewardsInvalidAmount: "Streak reward amount must be a non-negative number. Invalid day: {day}",
   checkInRandomEnabled: "Enable random reward",
   checkInRandomMin: "Random reward minimum",
   checkInRandomMax: "Random reward maximum",
+  paymentInterface: "Payment Gateway",
   paymentSettings: "Payment Recharge",
   paymentSettingsDescription: "Configure user balance recharge, RMB settlement rate, and the Yipay or OPS gateway.",
   paymentEnabled: "Enable payment recharge",
@@ -2225,9 +2314,10 @@ const enCopy: SystemCopy = {
   openPaymentMerchantID: "OPS merchant ID",
   openPaymentKey: "OPS merchant key",
   openPaymentKeyPlaceholder: "Merchant key used for OPS MD5 or HMAC-SHA256 signing",
-  openPaymentNotifyURL: "OPS notify URL override (optional)",
-  openPaymentReturnURL: "OPS return URL override (optional)",
+  openPaymentNotifyURL: "OPS notify URL",
+  openPaymentReturnURL: "OPS return URL",
   openPaymentGatewayHint: "OPS mode reads /.well-known/openpayment-configuation. The configuation spelling is part of the spec. Leave discovery URL empty to generate it from the platform base URL.",
+  generatedFromBaseURL: "Generated from Base URL",
   security: "Security Policy",
   rateLimitEnabled: "Enable gateway rate limiting",
   rateLimitRPM: "Requests per minute",

@@ -31,8 +31,6 @@ const systemSubItems: SystemSubItem[] = [
   { path: "/dashboard/admin/auth", zh: "认证邮件", en: "Auth & Email" },
   { path: "/dashboard/admin/content", zh: "内容导航", en: "Content & Navigation" },
   { path: "/dashboard/admin/operations", zh: "运营工具", en: "Operations" },
-  { path: "/dashboard/admin/subscriptions", zh: "订阅套餐", en: "Subscriptions" },
-  { path: "/dashboard/admin/redeem-codes", zh: "兑换码", en: "Redeem Codes" },
 ]
 
 const userMenuItems: MenuItem[] = [

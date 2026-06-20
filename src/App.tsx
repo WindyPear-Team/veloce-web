@@ -21,8 +21,15 @@ import PublicContent from "./pages/PublicContent"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
+import type { TranslationKey } from "./lib/i18n"
+import type { PublicSettings } from "./lib/public-settings"
+import { withPublicSettingsDefaults } from "./lib/public-settings"
 
 const queryClient = new QueryClient()
+
+type Language = "zh" | "en"
+
+type Translate = (key: TranslationKey, params?: Record<string, string | number>) => string
 
 interface CurrentUser {
   is_admin: boolean
@@ -113,6 +120,93 @@ const SetupGate = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>
 }
 
+const DocumentTitle = () => {
+  const location = useLocation()
+  const { language, t } = useI18n()
+  const { data: settings } = useQuery<PublicSettings>({
+    queryKey: ["public-settings"],
+    queryFn: async () => {
+      const res = await api.get("/public/settings")
+      return res.data
+    },
+  })
+  const publicSettings = withPublicSettingsDefaults(settings)
+
+  useEffect(() => {
+    const siteName = publicSettings.site_name.trim() || "flai"
+    const pageTitle = pageTitleForPath(location.pathname, language, t)
+    document.title = pageTitle && pageTitle !== siteName ? `${pageTitle} - ${siteName}` : siteName
+  }, [language, location.pathname, publicSettings.site_name, t])
+
+  return null
+}
+
+function pageTitleForPath(pathname: string, language: Language, t: Translate) {
+  const normalizedPathname = pathname.replace(/\/+$/, "") || "/"
+  const publicTitles =
+    language === "zh"
+      ? {
+          "/": "首页",
+          "/setup": "初始化站点",
+          "/login": "登录",
+          "/models": "模型列表",
+          "/status": "状态监测",
+          "/about": "关于",
+          "/privacy": "隐私政策",
+          "/terms": "用户协议",
+        }
+      : {
+          "/": "Home",
+          "/setup": "Initial Setup",
+          "/login": "Sign in",
+          "/models": "Models",
+          "/status": "Status",
+          "/about": "About",
+          "/privacy": "Privacy",
+          "/terms": "Terms",
+        }
+
+  if (normalizedPathname in publicTitles) {
+    return publicTitles[normalizedPathname as keyof typeof publicTitles]
+  }
+
+  if (normalizedPathname === "/dashboard") {
+    return t("dashboard.title")
+  }
+  if (normalizedPathname === "/dashboard/admin-overview") {
+    return t("nav.adminOverview")
+  }
+  if (normalizedPathname.startsWith("/dashboard/admin/")) {
+    return t("system.title")
+  }
+  if (normalizedPathname === "/dashboard/channels") {
+    return t("channels.title")
+  }
+  if (normalizedPathname === "/dashboard/users") {
+    return t("users.title")
+  }
+  if (normalizedPathname === "/dashboard/models") {
+    return t("models.title")
+  }
+  if (normalizedPathname === "/dashboard/logs") {
+    return t("usage.title")
+  }
+  if (normalizedPathname === "/dashboard/api-keys") {
+    return t("settings.apiKeys")
+  }
+  if (normalizedPathname === "/dashboard/chat") {
+    return language === "zh" ? "聊天" : "Chat"
+  }
+  if (normalizedPathname === "/dashboard/images") {
+    return language === "zh" ? "AI 绘画" : "AI Images"
+  }
+  if (normalizedPathname === "/dashboard/settings") {
+    return t("settings.title")
+  }
+
+  return ""
+}
+
 function App() {
   const [isAuthenticated] = useState(() => {
     const token = getTokenFromURL()
@@ -137,6 +231,7 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <I18nProvider>
         <BrowserRouter>
+          <DocumentTitle />
           <SetupGate>
             <Routes>
               <Route path="/" element={<Home />} />
@@ -201,7 +296,7 @@ function App() {
                   path="admin/subscriptions"
                   element={
                     <AdminRoute>
-                      <SystemManagement section="subscriptions" />
+                      <SystemManagement section="operations" initialTab="subscriptionPlans" />
                     </AdminRoute>
                   }
                 />
@@ -209,7 +304,7 @@ function App() {
                   path="admin/redeem-codes"
                   element={
                     <AdminRoute>
-                      <SystemManagement section="redeemCodes" />
+                      <SystemManagement section="operations" initialTab="redeemCodes" />
                     </AdminRoute>
                   }
                 />
