@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
+import { createPortal } from "react-dom"
 import { Link } from "react-router-dom"
-import { Bot, Check, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
+import { Bot, Check, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -114,6 +115,11 @@ interface ChatStoreKeys {
   userChannel: string
 }
 
+interface ParsedSSEEvent {
+  type: string
+  payload: any
+}
+
 const sessionsStoreKey = "windypear.chat.sessions.v1"
 const legacyMessagesStoreKey = "windypear.chat.messages.v1"
 const selectedSessionStoreKey = "windypear.chat.selected_session.v1"
@@ -164,6 +170,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectedUserChannelID, setSelectedUserChannelID] = useState(() => Number(localStorage.getItem(storeKeys.userChannel) || 0))
   const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
   const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isSessionsSidebarOpen, setIsSessionsSidebarOpen] = useState(false)
   const [configTab, setConfigTab] = useState<SessionConfigTab>("basic")
   const [pendingAgentID, setPendingAgentID] = useState("")
   const [pendingSkillID, setPendingSkillID] = useState("")
@@ -171,6 +178,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [prompt, setPrompt] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isSending, setIsSending] = useState(false)
+  const [isStreamActive, setIsStreamActive] = useState(false)
+  const abortControllerRef = useRef<AbortController | null>(null)
   const [editingMessageID, setEditingMessageID] = useState("")
   const [editingContent, setEditingContent] = useState("")
 
@@ -410,6 +419,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     })
     setSessions((current) => [session, ...current])
     setActiveSessionID(session.id)
+    setIsSessionsSidebarOpen(false)
     setPrompt("")
     setAttachments([])
     cancelEdit()
@@ -434,6 +444,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         return { ...updater(session), updated_at: new Date().toISOString() }
       })
     )
+  }
+
+  const selectSession = (sessionID: string) => {
+    setActiveSessionID(sessionID)
+    setIsSessionsSidebarOpen(false)
+    cancelEdit()
   }
 
   const setSessionAgent = (agentID: string) => {
@@ -513,6 +529,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }))
   }
 
+  const stopStreaming = () => {
+    abortControllerRef.current?.abort()
+  }
+
   const sendMessage = async () => {
     const content = prompt.trim()
     const rawKey = selectedAPIKey?.api_key.trim() || ""
@@ -548,40 +568,152 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     cancelEdit()
 
     try {
-      let answer = ""
-      let answerToolCalls: ChatToolCall[] = []
       if (isAdvanced) {
-        const res = await api.post("/user/advanced-chat/completions", {
-          model: resolvedModel,
-          user_channel_id: selectedUserChannel?.id || 0,
-          messages: nextMessages.map((message) => ({ role: message.role, content: message.content })),
-          agent_id: session.agent_id || "",
-          skill_ids: session.skill_ids,
-          mcp_server_ids: session.mcp_server_ids,
-        })
-        answer = typeof res.data?.message?.content === "string" ? res.data.message.content : ""
-        answerToolCalls = normalizeToolCalls(res.data?.tool_call_details)
-      } else {
-        const systemPrompt = ""
-        const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, systemPrompt)
-        const response = await fetch(request.url, {
-          method: "POST",
-          headers: request.headers,
-          body: JSON.stringify(request.body),
-        })
-        const text = await response.text()
-        let payload: any = null
+        const assistantMessage = createMessage("assistant", "", [])
+        const assistantMessageID = assistantMessage.id
+        const controller = new AbortController()
+        abortControllerRef.current = controller
+        setIsStreamActive(true)
+        updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
+
+        let accumulatedText = ""
         try {
-          payload = text ? JSON.parse(text) : null
-        } catch {
-          payload = null
+          const token = localStorage.getItem("token") || ""
+          const response = await fetch("/api/user/advanced-chat/completions", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              model: resolvedModel,
+              user_channel_id: selectedUserChannel?.id || 0,
+              messages: nextMessages.map((message) => ({ role: message.role, content: message.content })),
+              agent_id: session.agent_id || "",
+              skill_ids: session.skill_ids,
+              mcp_server_ids: session.mcp_server_ids,
+              stream: true,
+            }),
+            signal: controller.signal,
+          })
+          if (!response.ok) {
+            throw new Error(await responseErrorMessage(response))
+          }
+          if (!response.body) {
+            throw new Error(copy.emptyResponse)
+          }
+
+          const reader = response.body.getReader()
+          const decoder = new TextDecoder()
+          let buffer = ""
+          for (;;) {
+            const { done, value } = await reader.read()
+            if (done) {
+              break
+            }
+            buffer += decoder.decode(value, { stream: true })
+            const parts = buffer.split(/\r?\n\r?\n/)
+            buffer = parts.pop() || ""
+            for (const part of parts) {
+              const event = parseSSEEvent(part)
+              if (!event) {
+                continue
+              }
+              if (event.type === "text") {
+                const delta = typeof event.payload.delta === "string" ? event.payload.delta : ""
+                if (!delta) {
+                  continue
+                }
+                accumulatedText += delta
+                updateSession(session.id, (current) => ({
+                  ...current,
+                  messages: current.messages.map((message) =>
+                    message.id === assistantMessageID ? { ...message, content: accumulatedText } : message
+                  ),
+                }))
+              } else if (event.type === "status") {
+                const statusText = streamStatusText(event.payload, copy)
+                if (!statusText || accumulatedText) {
+                  continue
+                }
+                updateSession(session.id, (current) => ({
+                  ...current,
+                  messages: current.messages.map((message) =>
+                    message.id === assistantMessageID ? { ...message, content: statusText } : message
+                  ),
+                }))
+              } else if (event.type === "tool_call") {
+                const nextToolCalls = normalizeToolCalls([event.payload])
+                if (nextToolCalls.length === 0) {
+                  continue
+                }
+                updateSession(session.id, (current) => ({
+                  ...current,
+                  messages: current.messages.map((message) =>
+                    message.id === assistantMessageID
+                      ? { ...message, tool_calls: mergeToolCalls(message.tool_calls || [], nextToolCalls) }
+                      : message
+                  ),
+                }))
+              } else if (event.type === "done") {
+                const finalContent = typeof event.payload.message?.content === "string" ? event.payload.message.content : accumulatedText
+                const finalToolCalls = normalizeToolCalls(event.payload.tool_call_details)
+                updateSession(session.id, (current) => ({
+                  ...current,
+                  messages: current.messages.map((message) =>
+                    message.id === assistantMessageID
+                      ? { ...message, content: finalContent || copy.emptyResponse, tool_calls: finalToolCalls }
+                      : message
+                  ),
+                }))
+              } else if (event.type === "error") {
+                throw new Error(typeof event.payload.error === "string" ? event.payload.error : copy.sendFailed)
+              }
+            }
+          }
+        } catch (err) {
+          if (err instanceof DOMException && err.name === "AbortError") {
+            updateSession(session.id, (current) => ({
+              ...current,
+              messages: current.messages.map((message) =>
+                message.id === assistantMessageID && !message.content ? { ...message, content: copy.stopped } : message
+              ),
+            }))
+          } else {
+            updateSession(session.id, (current) => ({
+              ...current,
+              messages: current.messages.filter((message) => message.id !== assistantMessageID || message.content || (message.tool_calls || []).length > 0),
+            }))
+            error(apiErrorMessage(err, err instanceof Error ? err.message : copy.sendFailed))
+          }
+        } finally {
+          abortControllerRef.current = null
+          setIsStreamActive(false)
+          setIsSending(false)
         }
-        if (!response.ok) {
-          throw new Error(payload?.error || payload?.message || text || `HTTP ${response.status}`)
-        }
-        answer = responseTextFromPayload(payload)
+        return
       }
-      const assistantMessage = createMessage("assistant", answer || copy.emptyResponse, answerToolCalls)
+
+      let answer = ""
+      const systemPrompt = ""
+      const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, systemPrompt)
+      const response = await fetch(request.url, {
+        method: "POST",
+        headers: request.headers,
+        body: JSON.stringify(request.body),
+      })
+      const text = await response.text()
+      let payload: any = null
+      try {
+        payload = text ? JSON.parse(text) : null
+      } catch {
+        payload = null
+      }
+      if (!response.ok) {
+        throw new Error(payload?.error || payload?.message || text || `HTTP ${response.status}`)
+      }
+      answer = responseTextFromPayload(payload)
+      const assistantMessage = createMessage("assistant", answer || copy.emptyResponse)
       updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
     } catch (err) {
       error(apiErrorMessage(err, err instanceof Error ? err.message : copy.sendFailed))
@@ -693,11 +825,77 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     </Card>
   )
 
+  const sessionsSidebar = (
+    <aside className="flex h-full w-72 flex-col border-l bg-card">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b px-4">
+        <div className="min-w-0">
+          <div className="truncate text-base font-semibold">{copy.sessions}</div>
+        </div>
+        <Button variant="ghost" size="sm" className="xl:hidden" onClick={() => setIsSessionsSidebarOpen(false)} aria-label={copy.closeSessions}>
+          <X size={16} />
+        </Button>
+      </div>
+      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+        {sessions.map((session) => (
+          <div
+            key={session.id}
+            className={cn(
+              "grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border p-2",
+              session.id === activeSession?.id && "border-primary bg-primary/5"
+            )}
+          >
+            <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
+              <div className="truncate text-sm font-medium">{session.title || copy.untitledSession}</div>
+              <div className="mt-1 text-xs text-muted-foreground">
+                {copy.messageCount.replace("{count}", String(session.messages.length))}
+              </div>
+            </button>
+            <Button variant="ghost" size="sm" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
+              <Trash2 size={15} />
+            </Button>
+          </div>
+        ))}
+      </div>
+    </aside>
+  )
+  const sessionsSidebarPortal =
+    typeof document === "undefined"
+      ? null
+      : createPortal(
+          <>
+            <div className="fixed right-0 top-16 z-20 hidden h-[calc(100vh-4rem)] xl:flex">{sessionsSidebar}</div>
+
+            {isSessionsSidebarOpen && (
+              <div className="fixed inset-0 top-16 z-40 xl:hidden">
+                <button
+                  type="button"
+                  className="absolute inset-0 bg-black/50"
+                  aria-label={copy.closeSessions}
+                  onClick={() => setIsSessionsSidebarOpen(false)}
+                />
+                <div className="relative z-50 ml-auto h-full w-72 max-w-[85vw]">{sessionsSidebar}</div>
+              </div>
+            )}
+          </>,
+          document.body
+        )
+
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+    <div className="space-y-6 xl:pr-72">
+      {sessionsSidebarPortal}
+      <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-4 border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:-mx-8 lg:px-8">
         <h1 className="text-3xl font-bold">{copy.title}</h1>
         <div className="flex flex-wrap gap-2">
+          <Button
+            variant="outline"
+            className="gap-2 xl:hidden"
+            onClick={() => setIsSessionsSidebarOpen((open) => !open)}
+            aria-label={isSessionsSidebarOpen ? copy.closeSessions : copy.openSessions}
+            aria-expanded={isSessionsSidebarOpen}
+          >
+            <Menu size={16} />
+            {copy.sessions}
+          </Button>
           {isAdvanced && (
             <Button variant="outline" className="gap-2" onClick={() => setIsConfigOpen(true)}>
               <Settings size={16} />
@@ -711,43 +909,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         </div>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)]">
-        <Card className="h-fit">
-          <CardHeader>
-            <CardTitle>{copy.sessions}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-2">
-            {sessions.map((session) => (
-              <div
-                key={session.id}
-                className={cn(
-                  "grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border p-2",
-                  session.id === activeSession?.id && "border-primary bg-primary/5"
-                )}
-              >
-                <button
-                  type="button"
-                  className="min-w-0 text-left"
-                  onClick={() => {
-                    setActiveSessionID(session.id)
-                    cancelEdit()
-                  }}
-                >
-                  <div className="truncate text-sm font-medium">{session.title || copy.untitledSession}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">
-                    {copy.messageCount.replace("{count}", String(session.messages.length))}
-                  </div>
-                </button>
-                <Button variant="ghost" size="sm" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
-                  <Trash2 size={15} />
-                </Button>
-              </div>
-            ))}
-          </CardContent>
-        </Card>
-
-        <div className="space-y-4">
-          {!isAdvanced && basicConfig}
+      <div className="space-y-4">
+        {!isAdvanced && basicConfig}
 
           <Card>
             <CardHeader>
@@ -900,14 +1063,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </div>
                   )}
                 </div>
-                <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending} onClick={sendMessage}>
-                  <Send size={16} />
-                  {isSending ? copy.sending : copy.send}
-                </Button>
+                {isAdvanced && isStreamActive ? (
+                  <Button variant="outline" className="gap-2 self-end" onClick={stopStreaming}>
+                    <X size={16} />
+                    {copy.stop}
+                  </Button>
+                ) : (
+                  <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending} onClick={sendMessage}>
+                    <Send size={16} />
+                    {isSending ? copy.sending : copy.send}
+                  </Button>
+                )}
               </div>
             </CardContent>
           </Card>
-        </div>
       </div>
 
       {isAdvanced && (
@@ -1241,6 +1410,57 @@ function chatRequestPayload(endpoint: ChatEndpoint, modelName: string, messages:
   }
 }
 
+async function responseErrorMessage(response: Response) {
+  const text = await response.text().catch(() => "")
+  try {
+    const payload = text ? JSON.parse(text) : null
+    if (typeof payload?.error === "string" && payload.error) {
+      return payload.error
+    }
+    if (typeof payload?.message === "string" && payload.message) {
+      return payload.message
+    }
+  } catch {
+    // Fall through to plain text / status.
+  }
+  return text || `HTTP ${response.status}`
+}
+
+function parseSSEEvent(raw: string): ParsedSSEEvent | null {
+  let type = "message"
+  const dataLines: string[] = []
+  for (const line of raw.split(/\r?\n/)) {
+    if (line.startsWith("event:")) {
+      type = line.slice(6).trim()
+    } else if (line.startsWith("data:")) {
+      dataLines.push(line.slice(5).trimStart())
+    }
+  }
+  if (dataLines.length === 0) {
+    return null
+  }
+  try {
+    return { type, payload: JSON.parse(dataLines.join("\n")) }
+  } catch {
+    return null
+  }
+}
+
+function streamStatusText(payload: any, copy: typeof zhCopy) {
+  const message = typeof payload?.message === "string" ? payload.message : ""
+  if (message === "stream_started") {
+    return copy.streamStarted
+  }
+  if (message === "loading_tools") {
+    return copy.streamLoadingTools
+  }
+  if (message === "model_round") {
+    const round = typeof payload?.round === "number" ? String(payload.round) : ""
+    return round ? copy.streamModelRound.replace("{round}", round) : copy.streamThinking
+  }
+  return ""
+}
+
 function responseTextFromPayload(payload: any): string {
   const chatText = payload?.choices?.[0]?.message?.content || payload?.choices?.[0]?.text
   if (typeof chatText === "string") {
@@ -1461,6 +1681,19 @@ function normalizeToolCalls(value: unknown): ChatToolCall[] {
   return calls
 }
 
+function mergeToolCalls(current: ChatToolCall[], incoming: ChatToolCall[]) {
+  const merged = [...current]
+  for (const next of incoming) {
+    const index = merged.findIndex((item) => item.name === next.name && item.server === next.server && item.tool === next.tool)
+    if (index >= 0) {
+      merged[index] = { ...merged[index], ...next }
+    } else {
+      merged.push(next)
+    }
+  }
+  return merged
+}
+
 function normalizeAgent(value: unknown): ChatAgent | null {
   if (!isRecord(value)) {
     return null
@@ -1591,6 +1824,8 @@ function toolStatusLabel(status: string, copy: typeof zhCopy) {
   switch (status) {
     case "ok":
       return copy.toolStatusOk
+    case "running":
+      return copy.toolStatusRunning
     case "missing":
       return copy.toolStatusMissing
     case "invalid_arguments":
@@ -1620,6 +1855,8 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 const zhCopy = {
   title: "聊天",
   sessions: "会话",
+  openSessions: "打开会话",
+  closeSessions: "关闭会话",
   newSession: "新会话",
   untitledSession: "新会话",
   messageCount: "{count} 条消息",
@@ -1698,8 +1935,15 @@ const zhCopy = {
   modelRequired: "请选择模型",
   sendFailed: "发送失败",
   emptyResponse: "空响应",
+  stopped: "已停止",
+  stop: "停止",
+  streamStarted: "已连接，正在准备...",
+  streamLoadingTools: "正在加载 MCP 工具...",
+  streamModelRound: "正在请求模型（第 {round} 轮）...",
+  streamThinking: "正在思考...",
   usedTools: "本轮调用工具",
   toolStatusOk: "成功",
+  toolStatusRunning: "调用中",
   toolStatusError: "失败",
   toolStatusMissing: "未找到",
   toolStatusInvalidArguments: "参数错误",
@@ -1708,6 +1952,8 @@ const zhCopy = {
 const enCopy: typeof zhCopy = {
   title: "Chat",
   sessions: "Sessions",
+  openSessions: "Open sessions",
+  closeSessions: "Close sessions",
   newSession: "New chat",
   untitledSession: "New chat",
   messageCount: "{count} messages",
@@ -1786,8 +2032,15 @@ const enCopy: typeof zhCopy = {
   modelRequired: "Select a model",
   sendFailed: "Send failed",
   emptyResponse: "Empty response",
+  stopped: "Stopped",
+  stop: "Stop",
+  streamStarted: "Connected, preparing...",
+  streamLoadingTools: "Loading MCP tools...",
+  streamModelRound: "Calling model (round {round})...",
+  streamThinking: "Thinking...",
   usedTools: "Tools used in this turn",
   toolStatusOk: "OK",
+  toolStatusRunning: "Running",
   toolStatusError: "Error",
   toolStatusMissing: "Missing",
   toolStatusInvalidArguments: "Bad args",
