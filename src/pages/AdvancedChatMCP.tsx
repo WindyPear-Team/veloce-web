@@ -12,6 +12,7 @@ interface MCPServer {
   id: string
   name: string
   url: string
+  headers?: string
   enabled: boolean
   request_mode: "backend" | "frontend" | string
 }
@@ -20,6 +21,7 @@ interface MCPDraft {
   id?: string
   name: string
   url: string
+  headers: string
   enabled: boolean
 }
 
@@ -47,6 +49,7 @@ const defaultAttachmentSettings = {
 const emptyDraft: MCPDraft = {
   name: "",
   url: "",
+  headers: "",
   enabled: true,
 }
 
@@ -86,7 +89,7 @@ export default function AdvancedChatMCP() {
   const saveServers = useMutation({
     mutationFn: async () => {
       const res = await api.put("/user/advanced-chat/mcp-servers", {
-        custom_mcp_servers: customServers.map((server) => ({ ...server, request_mode: "frontend" })),
+        custom_mcp_servers: customServers.map((server) => ({ ...server, request_mode: "backend" })),
       })
       return normalizeAdvancedChatSettings(res.data)
     },
@@ -108,6 +111,7 @@ export default function AdvancedChatMCP() {
       id: server.id,
       name: server.name,
       url: server.url,
+      headers: server.headers || "",
       enabled: server.enabled,
     })
     setIsDialogOpen(true)
@@ -118,8 +122,9 @@ export default function AdvancedChatMCP() {
       id: draft.id || createID(),
       name: draft.name.trim(),
       url: draft.url.trim(),
+      headers: draft.headers.trim(),
       enabled: draft.enabled,
-      request_mode: "frontend",
+      request_mode: "backend",
     }
     if (!next.name || !next.url) {
       error("请输入 MCP 名称和服务器地址")
@@ -138,7 +143,7 @@ export default function AdvancedChatMCP() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">MCP 服务器</h1>
-          <div className="mt-2 text-sm text-muted-foreground">管理员内置 MCP 和你的自定义 MCP 会在同一列表中展示；自定义 MCP 由浏览器前端请求使用。</div>
+          <div className="mt-2 text-sm text-muted-foreground">管理员内置 MCP 和你的自定义 MCP 会在同一列表中展示；所有 MCP 均由后端统一请求调用。</div>
         </div>
         <div className="flex gap-2">
           <Button variant="outline" className="gap-2" onClick={openCreateDialog}>
@@ -205,11 +210,20 @@ export default function AdvancedChatMCP() {
               <span className="font-medium">服务器地址</span>
               <Input value={draft.url} placeholder="https://mcp.example.com" onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} />
             </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">请求头（可选）</span>
+              <textarea
+                className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                value={draft.headers}
+                placeholder={'{"Authorization":"Bearer ..."} 或每行 Header: value'}
+                onChange={(event) => setDraft((current) => ({ ...current, headers: event.target.value }))}
+              />
+            </label>
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
               启用
             </label>
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">用户自定义 MCP 会保存到后端，但实际使用时由前端请求。</div>
+            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">用户自定义 MCP 会保存到后端，并由后端在聊天时统一调用。请求头仅用于后端访问该 MCP 服务器。</div>
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
@@ -244,8 +258,9 @@ function normalizeMCPServer(value: unknown): MCPServer {
     id: typeof item.id === "string" && item.id ? item.id : createID(),
     name: typeof item.name === "string" ? item.name : "",
     url: typeof item.url === "string" ? item.url : "",
+    headers: typeof item.headers === "string" ? item.headers : "",
     enabled: item.enabled !== false,
-    request_mode: typeof item.request_mode === "string" ? item.request_mode : "frontend",
+    request_mode: typeof item.request_mode === "string" ? item.request_mode : "backend",
   }
 }
 

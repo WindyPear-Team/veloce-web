@@ -102,6 +102,7 @@ interface ChatStoreKeys {
   model: string
   endpoint: string
   apiKey: string
+  userChannel: string
 }
 
 const sessionsStoreKey = "windypear.chat.sessions.v1"
@@ -128,6 +129,7 @@ const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
     model: modelStoreKey,
     endpoint: endpointStoreKey,
     apiKey: apiKeyStoreKey,
+    userChannel: "windypear.chat.user_channel_id.v1",
   },
   advanced: {
     sessions: "windypear.advanced_chat.sessions.v1",
@@ -135,6 +137,7 @@ const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
     model: "windypear.advanced_chat.model.v1",
     endpoint: "windypear.advanced_chat.endpoint.v1",
     apiKey: "windypear.advanced_chat.api_key_id.v1",
+    userChannel: "windypear.advanced_chat.user_channel_id.v1",
   },
 }
 
@@ -149,6 +152,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [modelName, setModelName] = useState(() => localStorage.getItem(storeKeys.model) || "")
   const [endpointMode, setEndpointMode] = useState<ChatEndpoint>(() => readStoredEndpoint(storeKeys.endpoint))
   const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(storeKeys.apiKey) || 0))
+  const [selectedUserChannelID, setSelectedUserChannelID] = useState(() => Number(localStorage.getItem(storeKeys.userChannel) || 0))
   const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [configTab, setConfigTab] = useState<SessionConfigTab>("basic")
@@ -171,6 +175,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const { data: apiKeys = [] } = useQuery<APIKey[]>({
     queryKey: ["api-keys", "chat"],
+    enabled: !isAdvanced,
     queryFn: async () => {
       const res = await api.get("/user/api-keys")
       return Array.isArray(res.data) ? res.data.map(normalizeAPIKey) : []
@@ -225,6 +230,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     return agents.find((agent) => agent.id === activeSession?.agent_id)
   }, [activeSession?.agent_id, agents, isAdvanced])
   const activeModelName = isAdvanced ? activeSession?.model_name || selectedAgent?.default_model || modelName : modelName
+  const selectableUserChannels = useMemo(
+    () => catalog.filter((channel) => !activeModelName || channel.models.includes(activeModelName)),
+    [activeModelName, catalog]
+  )
+  const selectedUserChannel = useMemo(
+    () => selectableUserChannels.find((channel) => channel.id === selectedUserChannelID) || selectableUserChannels[0],
+    [selectableUserChannels, selectedUserChannelID]
+  )
   const currentAdvancedSettings = useMemo<AdvancedChatSettings>(
     () => ({ ...defaultAdvancedChatSettings, ...(advancedSettings ?? {}) }),
     [advancedSettings]
@@ -245,14 +258,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     return skills.filter((skill) => !selectedIDs.has(skill.id))
   }, [activeSession?.skill_ids, skills])
   const skillMCPServerIDs = useMemo(() => uniqueStrings(selectedSkills.flatMap((skill) => skill.mcp_server_ids)), [selectedSkills])
-  const activeMCPServerIDs = useMemo(
-    () => uniqueStrings([...(activeSession?.mcp_server_ids || []), ...skillMCPServerIDs]),
-    [activeSession?.mcp_server_ids, skillMCPServerIDs]
-  )
-  const activeMCPServers = useMemo(() => {
-    const selectedIDs = new Set(activeMCPServerIDs)
-    return enabledMCPServers.filter((server) => selectedIDs.has(server.id))
-  }, [activeMCPServerIDs, enabledMCPServers])
   const sessionMCPServers = useMemo(() => {
     const selectedIDs = new Set(activeSession?.mcp_server_ids || [])
     return enabledMCPServers.filter((server) => selectedIDs.has(server.id))
@@ -304,10 +309,29 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [selectedAPIKey, selectedAPIKeyID])
 
   useEffect(() => {
+    if (!isAdvanced) {
+      return
+    }
+    if (!selectedUserChannel && selectedUserChannelID !== 0) {
+      setSelectedUserChannelID(0)
+      return
+    }
+    if (!selectedUserChannelID && selectedUserChannel) {
+      setSelectedUserChannelID(selectedUserChannel.id)
+    }
+  }, [isAdvanced, selectedUserChannel, selectedUserChannelID])
+
+  useEffect(() => {
     if (selectedAPIKeyID) {
       localStorage.setItem(storeKeys.apiKey, String(selectedAPIKeyID))
     }
   }, [selectedAPIKeyID, storeKeys.apiKey])
+
+  useEffect(() => {
+    if (isAdvanced && selectedUserChannelID) {
+      localStorage.setItem(storeKeys.userChannel, String(selectedUserChannelID))
+    }
+  }, [isAdvanced, selectedUserChannelID, storeKeys.userChannel])
 
   useEffect(() => {
     if (!isAdvanced && !modelName && modelOptions.length > 0) {
@@ -478,12 +502,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!session) {
       return
     }
-    if (!rawKey) {
-      error(copy.keyRequired)
-      return
-    }
     if (!resolvedModel) {
       error(copy.modelRequired)
+      return
+    }
+    if (isAdvanced && !selectedUserChannel) {
+      error(copy.channelRequired)
+      return
+    }
+    if (!isAdvanced && !rawKey) {
+      error(copy.keyRequired)
       return
     }
     if (!content && attachments.length === 0) {
@@ -501,28 +529,41 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     cancelEdit()
 
     try {
-      const systemPrompt = buildAdvancedSystemPrompt(selectedAgent, selectedSkills, activeMCPServers)
-      const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, systemPrompt)
-      const response = await fetch(request.url, {
-        method: "POST",
-        headers: request.headers,
-        body: JSON.stringify(request.body),
-      })
-      const text = await response.text()
-      let payload: any = null
-      try {
-        payload = text ? JSON.parse(text) : null
-      } catch {
-        payload = null
+      let answer = ""
+      if (isAdvanced) {
+        const res = await api.post("/user/advanced-chat/completions", {
+          model: resolvedModel,
+          user_channel_id: selectedUserChannel?.id || 0,
+          messages: nextMessages.map((message) => ({ role: message.role, content: message.content })),
+          agent_id: session.agent_id || "",
+          skill_ids: session.skill_ids,
+          mcp_server_ids: session.mcp_server_ids,
+        })
+        answer = typeof res.data?.message?.content === "string" ? res.data.message.content : ""
+      } else {
+        const systemPrompt = ""
+        const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, systemPrompt)
+        const response = await fetch(request.url, {
+          method: "POST",
+          headers: request.headers,
+          body: JSON.stringify(request.body),
+        })
+        const text = await response.text()
+        let payload: any = null
+        try {
+          payload = text ? JSON.parse(text) : null
+        } catch {
+          payload = null
+        }
+        if (!response.ok) {
+          throw new Error(payload?.error || payload?.message || text || `HTTP ${response.status}`)
+        }
+        answer = responseTextFromPayload(payload)
       }
-      if (!response.ok) {
-        throw new Error(payload?.error || payload?.message || text || `HTTP ${response.status}`)
-      }
-      const answer = responseTextFromPayload(payload)
       const assistantMessage = createMessage("assistant", answer || copy.emptyResponse)
       updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
     } catch (err) {
-      error(err instanceof Error ? err.message : copy.sendFailed)
+      error(apiErrorMessage(err, err instanceof Error ? err.message : copy.sendFailed))
     } finally {
       setIsSending(false)
     }
@@ -837,37 +878,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               {configTab === "basic" && (
                 <div className="space-y-4 rounded-md border p-3">
-                  <div className="grid gap-3 md:grid-cols-2">
-                    <label className="space-y-1 text-sm">
-                      <span className="font-medium">{copy.apiKey}</span>
-                      <select
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        value={selectedAPIKey?.id || ""}
-                        onChange={(event) => setSelectedAPIKeyID(Number(event.target.value) || 0)}
-                      >
-                        <option value="">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</option>
-                        {selectableAPIKeys.map((key) => (
-                          <option key={key.id} value={key.id}>
-                            {key.name || key.key_prefix}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <label className="space-y-1 text-sm">
-                      <span className="font-medium">{copy.endpoint}</span>
-                      <select
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        value={endpointMode}
-                        onChange={(event) => setEndpointMode(normalizeEndpoint(event.target.value))}
-                      >
-                        <option value="chat">{copy.chatCompletions}</option>
-                        <option value="responses">{copy.responsesAPI}</option>
-                        <option value="claude">{copy.claudeMessages}</option>
-                        <option value="gemini">{copy.geminiGenerate}</option>
-                      </select>
-                    </label>
-                  </div>
-
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{copy.sessionModel}</span>
                     <select
@@ -879,6 +889,22 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       {modelOptions.map((model) => (
                         <option key={model} value={model}>
                           {model}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">{copy.channel}</span>
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={selectedUserChannel?.id || ""}
+                      onChange={(event) => setSelectedUserChannelID(Number(event.target.value) || 0)}
+                    >
+                      <option value="">{selectableUserChannels.length ? copy.selectChannel : copy.noChannels}</option>
+                      {selectableUserChannels.map((channel) => (
+                        <option key={channel.id} value={channel.id}>
+                          {channel.name}
                         </option>
                       ))}
                     </select>
@@ -1150,23 +1176,6 @@ function chatRequestPayload(endpoint: ChatEndpoint, modelName: string, messages:
       ...messages.map((message) => ({ role: message.role, content: message.content })),
     ],
   }
-}
-
-function buildAdvancedSystemPrompt(agent: ChatAgent | undefined, skills: ChatSkill[], mcpServers: MCPServer[]) {
-  const sections: string[] = []
-  if (agent?.prompt.trim()) {
-    sections.push(agent.prompt.trim())
-  }
-  for (const skill of skills) {
-    if (skill.prompt.trim()) {
-      sections.push(`[Skill: ${skill.name}]\n${skill.prompt.trim()}`)
-    }
-  }
-  if (mcpServers.length > 0) {
-    const serverLines = mcpServers.map((server) => `- ${server.name}: ${server.url} (${server.request_mode})`)
-    sections.push(["Available MCP servers for this session:", ...serverLines].join("\n"))
-  }
-  return sections.join("\n\n")
 }
 
 function responseTextFromPayload(payload: any): string {
@@ -1488,6 +1497,19 @@ function stringFromUnknown(value: unknown) {
   return undefined
 }
 
+function apiErrorMessage(err: unknown, fallback: string) {
+  if (isRecord(err)) {
+    const response = err.response
+    if (isRecord(response)) {
+      const data = response.data
+      if (isRecord(data) && typeof data.error === "string" && data.error) {
+        return data.error
+      }
+    }
+  }
+  return err instanceof Error && err.message ? err.message : fallback
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
@@ -1502,6 +1524,7 @@ const zhCopy = {
   config: "配置",
   advancedConfig: "高级聊天配置",
   apiKey: "令牌",
+  channel: "渠道",
   endpoint: "接口",
   agent: "智能体",
   noAgentSelected: "未选择智能体",
@@ -1550,7 +1573,9 @@ const zhCopy = {
   claudeMessages: "Claude Messages",
   geminiGenerate: "Gemini GenerateContent",
   selectKey: "选择令牌",
+  selectChannel: "选择渠道",
   noKeys: "没有可用令牌",
+  noChannels: "没有可用渠道",
   selectModel: "选择模型",
   conversation: "对话",
   noMessages: "暂无对话",
@@ -1566,6 +1591,7 @@ const zhCopy = {
   saveMessage: "保存消息",
   cancelEdit: "取消编辑",
   keyRequired: "请选择令牌",
+  channelRequired: "请选择渠道",
   modelRequired: "请选择模型",
   sendFailed: "发送失败",
   emptyResponse: "空响应",
@@ -1581,6 +1607,7 @@ const enCopy: typeof zhCopy = {
   config: "Config",
   advancedConfig: "Advanced chat config",
   apiKey: "Token",
+  channel: "Channel",
   endpoint: "Endpoint",
   agent: "Agent",
   noAgentSelected: "No agent",
@@ -1629,7 +1656,9 @@ const enCopy: typeof zhCopy = {
   claudeMessages: "Claude Messages",
   geminiGenerate: "Gemini GenerateContent",
   selectKey: "Select token",
+  selectChannel: "Select channel",
   noKeys: "No available tokens",
+  noChannels: "No available channels",
   selectModel: "Select model",
   conversation: "Conversation",
   noMessages: "No messages",
@@ -1645,6 +1674,7 @@ const enCopy: typeof zhCopy = {
   saveMessage: "Save message",
   cancelEdit: "Cancel edit",
   keyRequired: "Select a token first",
+  channelRequired: "Select a channel first",
   modelRequired: "Select a model",
   sendFailed: "Send failed",
   emptyResponse: "Empty response",
