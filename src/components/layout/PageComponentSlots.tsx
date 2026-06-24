@@ -218,73 +218,131 @@ function ComponentConfigEditor({
   pageKey: string
   slotKey: PageSlotKey
 }) {
-  if (item.type !== "custom_html" && item.type !== "iframe") {
+  const fields = componentConfigFields[item.type]
+  if (!fields || fields.length === 0) {
     return null
   }
 
-  const labels = editor.language === "zh" ? zhConfigLabels : enConfigLabels
   const config = item.config || {}
   const updateConfig = (patch: PageComponentConfig) => {
     editor.updateComponentConfig(pageKey, slotKey, item.id, { ...config, ...patch })
   }
 
   return (
-    <div data-no-drag className="mb-2 grid gap-3 rounded-md border bg-muted/30 p-3">
-      <label className="grid gap-1 text-xs font-medium">
-        <span>{labels.title}</span>
-        <input
-          className={configInputClass}
-          value={stringConfig(config, "title")}
-          onChange={(event) => updateConfig({ title: event.target.value })}
+    <div data-no-drag className="mb-2 grid gap-3 rounded-md border bg-muted/30 p-3 sm:grid-cols-2">
+      {fields.map((field) => (
+        <ConfigFieldControl
+          key={field.key}
+          config={config}
+          field={field}
+          language={editor.language}
+          onChange={(value) => updateConfig({ [field.key]: value })}
+        />
+      ))}
+    </div>
+  )
+}
+
+type ConfigFieldType = "text" | "textarea" | "number" | "select" | "checkbox"
+
+interface ConfigFieldOption {
+  value: string
+  label: {
+    zh: string
+    en: string
+  }
+}
+
+interface ConfigField {
+  key: string
+  label: {
+    zh: string
+    en: string
+  }
+  type: ConfigFieldType
+  placeholder?: string
+  min?: number
+  max?: number
+  rows?: number
+  span?: "full"
+  monospace?: boolean
+  options?: ConfigFieldOption[]
+}
+
+function ConfigFieldControl({
+  config,
+  field,
+  language,
+  onChange,
+}: {
+  config: PageComponentConfig
+  field: ConfigField
+  language: string
+  onChange: (value: string | boolean) => void
+}) {
+  const label = language === "zh" ? field.label.zh : field.label.en
+  const className = cn("grid gap-1 text-xs font-medium", field.span === "full" && "sm:col-span-2")
+
+  if (field.type === "textarea") {
+    return (
+      <label className={className}>
+        <span>{label}</span>
+        <textarea
+          className={cn(configInputClass, "min-h-24 py-2", field.monospace && "font-mono")}
+          rows={field.rows}
+          value={stringConfig(config, field.key)}
+          placeholder={field.placeholder}
+          onChange={(event) => onChange(event.target.value)}
         />
       </label>
-      {item.type === "custom_html" ? (
-        <>
-          <label className="grid gap-1 text-xs font-medium">
-            <span>{labels.height}</span>
-            <input
-              className={configInputClass}
-              type="number"
-              min="80"
-              max="1200"
-              value={stringConfig(config, "height")}
-              onChange={(event) => updateConfig({ height: event.target.value })}
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-medium">
-            <span>{labels.html}</span>
-            <textarea
-              className={cn(configInputClass, "min-h-32 py-2 font-mono")}
-              value={stringConfig(config, "html")}
-              onChange={(event) => updateConfig({ html: event.target.value })}
-            />
-          </label>
-        </>
-      ) : (
-        <>
-          <label className="grid gap-1 text-xs font-medium">
-            <span>{labels.url}</span>
-            <input
-              className={configInputClass}
-              value={stringConfig(config, "iframe_url")}
-              placeholder="https://example.com"
-              onChange={(event) => updateConfig({ iframe_url: event.target.value })}
-            />
-          </label>
-          <label className="grid gap-1 text-xs font-medium">
-            <span>{labels.height}</span>
-            <input
-              className={configInputClass}
-              type="number"
-              min="80"
-              max="1200"
-              value={stringConfig(config, "iframe_height")}
-              onChange={(event) => updateConfig({ iframe_height: event.target.value })}
-            />
-          </label>
-        </>
-      )}
-    </div>
+    )
+  }
+
+  if (field.type === "select") {
+    return (
+      <label className={className}>
+        <span>{label}</span>
+        <select
+          className={cn(configInputClass, "h-9")}
+          value={stringConfig(config, field.key)}
+          onChange={(event) => onChange(event.target.value)}
+        >
+          {(field.options || []).map((option) => (
+            <option key={option.value} value={option.value}>
+              {language === "zh" ? option.label.zh : option.label.en}
+            </option>
+          ))}
+        </select>
+      </label>
+    )
+  }
+
+  if (field.type === "checkbox") {
+    return (
+      <label className={cn(className, "flex-row items-center gap-2 rounded-md border bg-background px-3 py-2")}>
+        <input
+          type="checkbox"
+          checked={booleanConfig(config, field.key)}
+          onChange={(event) => onChange(event.target.checked ? "true" : "false")}
+        />
+        <span>{label}</span>
+      </label>
+    )
+  }
+
+  return (
+    <label className={className}>
+      <span>{label}</span>
+      <input
+        className={cn(configInputClass, "h-9")}
+        type={field.type === "number" ? "number" : "text"}
+        min={field.min}
+        max={field.max}
+        value={stringConfig(config, field.key)}
+        placeholder={field.placeholder}
+        onChange={(event) => onChange(event.target.value)}
+      />
+    </label>
   )
 }
 
@@ -311,23 +369,120 @@ function IconButton({
 const configInputClass =
   "w-full rounded-md border border-input bg-background px-3 text-sm font-normal ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
-const zhConfigLabels = {
-  height: "高度",
-  html: "HTML",
-  title: "标题",
-  url: "iframe 地址",
+const toneFieldOptions: ConfigFieldOption[] = [
+  { value: "neutral", label: { zh: "默认", en: "Neutral" } },
+  { value: "accent", label: { zh: "强调", en: "Accent" } },
+  { value: "success", label: { zh: "成功", en: "Success" } },
+  { value: "warning", label: { zh: "警告", en: "Warning" } },
+  { value: "danger", label: { zh: "危险", en: "Danger" } },
+]
+
+const alignFieldOptions: ConfigFieldOption[] = [
+  { value: "left", label: { zh: "左对齐", en: "Left" } },
+  { value: "center", label: { zh: "居中", en: "Center" } },
+]
+
+const objectFitFieldOptions: ConfigFieldOption[] = [
+  { value: "cover", label: { zh: "裁切铺满", en: "Cover" } },
+  { value: "contain", label: { zh: "完整显示", en: "Contain" } },
+]
+
+const componentConfigFields: Record<string, ConfigField[]> = {
+  custom_html: [
+    textField("title", "标题", "Title"),
+    numberField("height", "高度", "Height", 80, 1200),
+    textareaField("html", "HTML", "HTML", 8, "full", true),
+  ],
+  iframe: [
+    textField("title", "标题", "Title"),
+    textField("iframe_url", "iframe 地址", "Iframe URL", "https://example.com", "full"),
+    numberField("iframe_height", "高度", "Height", 80, 1200),
+  ],
+  title_bar: [
+    textField("eyebrow", "标签", "Eyebrow"),
+    selectField("align", "对齐", "Align", alignFieldOptions),
+    textField("title", "标题", "Title", undefined, "full"),
+    textareaField("subtitle", "说明", "Subtitle", 3, "full"),
+    selectField("tone", "色调", "Tone", toneFieldOptions),
+  ],
+  image_box: [
+    textField("title", "标题", "Title"),
+    textField("image_url", "图片地址", "Image URL", "https://example.com/image.jpg", "full"),
+    textareaField("caption", "说明", "Caption", 3, "full"),
+    textField("link_url", "点击链接", "Link URL", "https://example.com", "full"),
+    numberField("image_height", "图片高度", "Image height", 80, 1200),
+    selectField("object_fit", "图片显示", "Object fit", objectFitFieldOptions),
+  ],
+  image_marquee: [
+    textField("title", "标题", "Title"),
+    textareaField("image_urls", "图片地址列表", "Image URLs", 6, "full"),
+    textareaField("caption", "说明", "Caption", 3, "full"),
+    numberField("marquee_height", "高度", "Height", 80, 1200),
+    numberField("marquee_speed", "速度秒数", "Speed seconds", 8, 120),
+  ],
+  text_box: [
+    textField("title", "标题", "Title"),
+    textareaField("body", "正文", "Body", 6, "full"),
+    selectField("tone", "色调", "Tone", toneFieldOptions),
+  ],
+  clock: [
+    textField("title", "标题", "Title"),
+    textField("timezone", "时区", "Timezone", "Asia/Shanghai"),
+    textField("timezone_label", "时区显示名", "Timezone label"),
+    checkboxField("show_date", "显示日期", "Show date"),
+  ],
+  music_player: [
+    textField("title", "标题", "Title"),
+    textField("artist", "作者", "Artist"),
+    textField("audio_url", "音频地址", "Audio URL", "https://example.com/audio.mp3", "full"),
+    textField("cover_url", "封面地址", "Cover URL", "https://example.com/cover.jpg", "full"),
+  ],
+  callout_banner: [
+    textField("title", "标题", "Title"),
+    selectField("tone", "色调", "Tone", toneFieldOptions),
+    textareaField("body", "正文", "Body", 4, "full"),
+    textField("button_label", "按钮文字", "Button label"),
+    textField("button_url", "按钮链接", "Button URL", "https://example.com"),
+  ],
+  metric_tile: [
+    textField("title", "标题", "Title"),
+    selectField("tone", "色调", "Tone", toneFieldOptions),
+    textField("value", "数值", "Value"),
+    textareaField("helper", "说明", "Helper text", 3, "full"),
+  ],
 }
 
-const enConfigLabels = {
-  height: "Height",
-  html: "HTML",
-  title: "Title",
-  url: "Iframe URL",
+function textField(key: string, zh: string, en: string, placeholder?: string, span?: "full"): ConfigField {
+  return { key, label: { zh, en }, type: "text", placeholder, span }
+}
+
+function textareaField(key: string, zh: string, en: string, rows: number, span?: "full", monospace?: boolean): ConfigField {
+  return { key, label: { zh, en }, type: "textarea", rows, span, monospace }
+}
+
+function numberField(key: string, zh: string, en: string, min: number, max: number): ConfigField {
+  return { key, label: { zh, en }, type: "number", min, max }
+}
+
+function selectField(key: string, zh: string, en: string, options: ConfigFieldOption[]): ConfigField {
+  return { key, label: { zh, en }, type: "select", options }
+}
+
+function checkboxField(key: string, zh: string, en: string): ConfigField {
+  return { key, label: { zh, en }, type: "checkbox" }
 }
 
 function stringConfig(config: PageComponentConfig, key: string) {
   const value = config[key]
   return typeof value === "string" || typeof value === "number" ? String(value) : ""
+}
+
+function booleanConfig(config: PageComponentConfig, key: string) {
+  const value = config[key]
+  if (typeof value === "boolean") {
+    return value
+  }
+  return value === "true"
 }
 
 function slotLabel(pageKey: string, slotKey: PageSlotKey, copy: NonNullable<ReturnType<typeof usePageLayoutEditor>>["copy"]) {

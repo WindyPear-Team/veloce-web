@@ -3,22 +3,32 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  CalendarDays,
   CheckCircle2,
   Clock,
   Code2,
   CreditCard,
   Database,
   DollarSign,
+  ExternalLink,
+  FileText,
   Globe2,
+  Heading1,
+  ImageIcon,
+  Images,
   KeyRound,
   LineChart,
   Megaphone,
   MessageSquare,
+  MousePointerClick,
+  Music2,
   Server,
+  Sparkles,
   UserCircle,
   WalletCards,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
+import { useEffect, useMemo, useState } from "react"
 import { Link } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
@@ -136,6 +146,62 @@ export const pageComponentPresets: PageComponentPreset[] = [
     defaultWidth: "full",
     icon: Globe2,
   },
+  {
+    type: "title_bar",
+    label: { zh: "标题栏", en: "Title bar" },
+    description: { zh: "页面内标题、说明和强调标签。", en: "A page title, subtitle, and accent label." },
+    defaultWidth: "full",
+    icon: Heading1,
+  },
+  {
+    type: "image_box",
+    label: { zh: "图片框", en: "Image box" },
+    description: { zh: "展示一张图片，可附带标题、说明和链接。", en: "Shows one image with optional text and link." },
+    defaultWidth: "half",
+    icon: ImageIcon,
+  },
+  {
+    type: "image_marquee",
+    label: { zh: "滚动图片框", en: "Image marquee" },
+    description: { zh: "横向循环展示多张图片。", en: "Loops a row of images horizontally." },
+    defaultWidth: "full",
+    icon: Images,
+  },
+  {
+    type: "text_box",
+    label: { zh: "自定义文本框", en: "Text box" },
+    description: { zh: "展示管理员编写的多行文本。", en: "Displays admin-authored multiline text." },
+    defaultWidth: "half",
+    icon: FileText,
+  },
+  {
+    type: "clock",
+    label: { zh: "时钟", en: "Clock" },
+    description: { zh: "显示当前时间，可配置时区。", en: "Shows the current time with an optional timezone." },
+    defaultWidth: "third",
+    icon: Clock,
+  },
+  {
+    type: "music_player",
+    label: { zh: "音乐播放器", en: "Music player" },
+    description: { zh: "播放管理员配置的音频链接。", en: "Plays an admin-configured audio URL." },
+    defaultWidth: "half",
+    icon: Music2,
+  },
+  {
+    type: "callout_banner",
+    label: { zh: "行动横幅", en: "Callout banner" },
+    description: { zh: "突出展示一条引导和按钮。", en: "Highlights a message with a button." },
+    defaultWidth: "full",
+    icon: MousePointerClick,
+  },
+  {
+    type: "metric_tile",
+    label: { zh: "指标卡片", en: "Metric tile" },
+    description: { zh: "展示一个自定义数字或关键指标。", en: "Shows a custom number or key metric." },
+    defaultWidth: "third",
+    icon: Sparkles,
+  },
 ]
 
 export function PageComponent({ config, item, type }: { config?: PageComponentConfig; item?: PageComponentItem; type?: string }) {
@@ -156,6 +222,22 @@ export function PageComponent({ config, item, type }: { config?: PageComponentCo
       return <CustomHTMLWidget config={componentConfig} />
     case "iframe":
       return <IframeWidget config={componentConfig} />
+    case "title_bar":
+      return <TitleBarWidget config={componentConfig} />
+    case "image_box":
+      return <ImageBoxWidget config={componentConfig} />
+    case "image_marquee":
+      return <ImageMarqueeWidget config={componentConfig} />
+    case "text_box":
+      return <TextBoxWidget config={componentConfig} />
+    case "clock":
+      return <ClockWidget config={componentConfig} />
+    case "music_player":
+      return <MusicPlayerWidget config={componentConfig} />
+    case "callout_banner":
+      return <CalloutBannerWidget config={componentConfig} />
+    case "metric_tile":
+      return <MetricTileWidget config={componentConfig} />
     default:
       return null
   }
@@ -194,6 +276,74 @@ export function defaultConfigForPageComponent(type: string): PageComponentConfig
       title: "Iframe widget",
       iframe_url: "",
       iframe_height: "360",
+    }
+  }
+  if (type === "title_bar") {
+    return {
+      eyebrow: "Featured",
+      title: "Title bar",
+      subtitle: "Add a short description for this page section.",
+      align: "left",
+      tone: "neutral",
+    }
+  }
+  if (type === "image_box") {
+    return {
+      title: "Image box",
+      image_url: "",
+      caption: "Add an image URL and caption.",
+      link_url: "",
+      image_height: "260",
+      object_fit: "cover",
+    }
+  }
+  if (type === "image_marquee") {
+    return {
+      title: "Image marquee",
+      image_urls: "",
+      caption: "Add one image URL per line.",
+      marquee_height: "180",
+      marquee_speed: "28",
+    }
+  }
+  if (type === "text_box") {
+    return {
+      title: "Text box",
+      body: "Write custom text here.",
+      tone: "neutral",
+    }
+  }
+  if (type === "clock") {
+    return {
+      title: "Clock",
+      timezone: "",
+      timezone_label: "Local time",
+      show_date: "true",
+    }
+  }
+  if (type === "music_player") {
+    return {
+      title: "Music player",
+      artist: "Artist",
+      audio_url: "",
+      cover_url: "",
+    }
+  }
+  if (type === "callout_banner") {
+    return {
+      title: "Callout banner",
+      body: "Highlight an action, update, or important link.",
+      button_label: "Open",
+      button_url: "",
+      tone: "accent",
+    }
+  }
+  if (type === "metric_tile") {
+    return {
+      title: "Custom metric",
+      value: "128",
+      helper: "Add context for this number.",
+      tone: "accent",
     }
   }
   return {}
@@ -262,6 +412,249 @@ function IframeWidget({ config }: { config: PageComponentConfig }) {
   )
 }
 
+function TitleBarWidget({ config }: { config: PageComponentConfig }) {
+  const eyebrow = stringConfig(config, "eyebrow")
+  const title = stringConfig(config, "title") || "Title"
+  const subtitle = stringConfig(config, "subtitle")
+  const align = optionConfig(config, "align", ["left", "center"], "left")
+  const tone = optionConfig(config, "tone", toneOptions, "neutral")
+
+  return (
+    <section className={cn("rounded-md border px-5 py-4", toneSurfaceClass(tone), align === "center" && "text-center")}>
+      {eyebrow && <div className={cn("mb-1 text-xs font-semibold uppercase tracking-normal", toneTextClass(tone))}>{eyebrow}</div>}
+      <h2 className="text-xl font-semibold leading-tight">{title}</h2>
+      {subtitle && <p className="mt-2 text-sm leading-6 text-muted-foreground">{subtitle}</p>}
+    </section>
+  )
+}
+
+function ImageBoxWidget({ config }: { config: PageComponentConfig }) {
+  const { language } = useI18n()
+  const title = stringConfig(config, "title")
+  const imageUrl = stringConfig(config, "image_url")
+  const caption = stringConfig(config, "caption")
+  const linkUrl = stringConfig(config, "link_url")
+  const height = sizeConfig(config, "image_height", 260)
+  const fit = optionConfig(config, "object_fit", ["cover", "contain"], "cover") as "cover" | "contain"
+  const emptyText = language === "zh" ? "图片地址为空" : "No image URL"
+  const content = imageUrl ? (
+    <img src={imageUrl} alt={title || caption || "Image box"} className="w-full rounded-md border bg-muted" style={{ height, objectFit: fit }} />
+  ) : (
+    <div className="flex items-center justify-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground" style={{ height }}>
+      {emptyText}
+    </div>
+  )
+
+  return (
+    <Card className="h-full overflow-hidden">
+      {title && (
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={title ? "space-y-3" : "space-y-3 pt-6"}>
+        {linkUrl ? (
+          <a href={linkUrl} target="_blank" rel="noreferrer" className="block rounded-md outline-none ring-offset-background focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2">
+            {content}
+          </a>
+        ) : (
+          content
+        )}
+        {caption && <div className="text-sm leading-6 text-muted-foreground">{caption}</div>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function ImageMarqueeWidget({ config }: { config: PageComponentConfig }) {
+  const { language } = useI18n()
+  const title = stringConfig(config, "title")
+  const caption = stringConfig(config, "caption")
+  const images = parseLines(stringConfig(config, "image_urls"))
+  const height = sizeConfig(config, "marquee_height", 180)
+  const speed = numberConfig(config, "marquee_speed", 28, 8, 120)
+  const emptyText = language === "zh" ? "请每行填写一个图片地址" : "Add one image URL per line"
+  const loopImages = images.length > 0 ? [...images, ...images] : []
+
+  return (
+    <Card className="h-full overflow-hidden">
+      {title && (
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={title ? "space-y-3" : "space-y-3 pt-6"}>
+        {images.length === 0 ? (
+          <div className="flex items-center justify-center rounded-md border border-dashed bg-muted/40 text-sm text-muted-foreground" style={{ height }}>
+            {emptyText}
+          </div>
+        ) : (
+          <div className="overflow-hidden rounded-md border bg-muted/40" style={{ height }}>
+            <style>{`@keyframes flai-image-marquee { from { transform: translateX(0); } to { transform: translateX(-50%); } }`}</style>
+            <div className="flex h-full w-max gap-3 p-3" style={{ animation: `flai-image-marquee ${speed}s linear infinite` }}>
+              {loopImages.map((url, index) => (
+                <img key={`${url}-${index}`} src={url} alt="" className="h-full w-64 shrink-0 rounded-md border bg-background object-cover" />
+              ))}
+            </div>
+          </div>
+        )}
+        {caption && <div className="text-sm leading-6 text-muted-foreground">{caption}</div>}
+      </CardContent>
+    </Card>
+  )
+}
+
+function TextBoxWidget({ config }: { config: PageComponentConfig }) {
+  const title = stringConfig(config, "title")
+  const body = stringConfig(config, "body")
+  const tone = optionConfig(config, "tone", toneOptions, "neutral")
+
+  return (
+    <Card className={cn("h-full", tone === "neutral" ? undefined : toneBorderClass(tone))}>
+      {title && (
+        <CardHeader>
+          <CardTitle>{title}</CardTitle>
+        </CardHeader>
+      )}
+      <CardContent className={title ? undefined : "pt-6"}>
+        <div className={cn("whitespace-pre-wrap rounded-md px-4 py-3 text-sm leading-6", toneSurfaceClass(tone))}>{body}</div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function ClockWidget({ config }: { config: PageComponentConfig }) {
+  const { language } = useI18n()
+  const [now, setNow] = useState(() => new Date())
+  const locale = language === "zh" ? "zh-CN" : "en-US"
+  const title = stringConfig(config, "title") || (language === "zh" ? "时钟" : "Clock")
+  const timeZone = stringConfig(config, "timezone").trim()
+  const timeZoneLabel = stringConfig(config, "timezone_label") || (timeZone || (language === "zh" ? "本地时间" : "Local time"))
+  const showDate = booleanConfig(config, "show_date", true)
+
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(new Date()), 1000)
+    return () => window.clearInterval(timer)
+  }, [])
+
+  const timeText = useMemo(
+    () =>
+      formatDatePart(now, locale, timeZone, {
+        hour: "2-digit",
+        minute: "2-digit",
+        second: "2-digit",
+      }),
+    [locale, now, timeZone]
+  )
+  const dateText = useMemo(
+    () =>
+      formatDatePart(now, locale, timeZone, {
+        year: "numeric",
+        month: "short",
+        day: "2-digit",
+        weekday: "short",
+      }),
+    [locale, now, timeZone]
+  )
+
+  return (
+    <Card className="h-full">
+      <CardHeader className="flex flex-row items-center justify-between">
+        <CardTitle>{title}</CardTitle>
+        <CalendarDays className="h-5 w-5 text-muted-foreground" />
+      </CardHeader>
+      <CardContent>
+        <div className="rounded-md border bg-muted/30 p-4">
+          <div className="text-xs font-medium text-muted-foreground">{timeZoneLabel}</div>
+          <div className="mt-2 font-mono text-3xl font-semibold leading-none">{timeText}</div>
+          {showDate && <div className="mt-3 text-sm text-muted-foreground">{dateText}</div>}
+        </div>
+      </CardContent>
+    </Card>
+  )
+}
+
+function MusicPlayerWidget({ config }: { config: PageComponentConfig }) {
+  const { language } = useI18n()
+  const title = stringConfig(config, "title") || (language === "zh" ? "音乐播放器" : "Music player")
+  const artist = stringConfig(config, "artist")
+  const audioUrl = stringConfig(config, "audio_url")
+  const coverUrl = stringConfig(config, "cover_url")
+  const emptyText = language === "zh" ? "音频地址为空" : "No audio URL"
+
+  return (
+    <Card className="h-full overflow-hidden">
+      <CardContent className="flex h-full flex-col gap-4 pt-6">
+        <div className="flex items-center gap-4">
+          {coverUrl ? (
+            <img src={coverUrl} alt="" className="h-16 w-16 shrink-0 rounded-md border object-cover" />
+          ) : (
+            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-md border bg-muted/50">
+              <Music2 className="h-7 w-7 text-muted-foreground" />
+            </div>
+          )}
+          <div className="min-w-0">
+            <div className="truncate text-base font-semibold">{title}</div>
+            {artist && <div className="mt-1 truncate text-sm text-muted-foreground">{artist}</div>}
+          </div>
+        </div>
+        {audioUrl ? (
+          <audio controls className="w-full" src={audioUrl}>
+            {title}
+          </audio>
+        ) : (
+          <div className="rounded-md border border-dashed p-4 text-center text-sm text-muted-foreground">{emptyText}</div>
+        )}
+      </CardContent>
+    </Card>
+  )
+}
+
+function CalloutBannerWidget({ config }: { config: PageComponentConfig }) {
+  const title = stringConfig(config, "title")
+  const body = stringConfig(config, "body")
+  const buttonLabel = stringConfig(config, "button_label")
+  const buttonUrl = stringConfig(config, "button_url")
+  const tone = optionConfig(config, "tone", toneOptions, "accent")
+
+  return (
+    <section className={cn("flex flex-col gap-4 rounded-md border px-5 py-4 sm:flex-row sm:items-center sm:justify-between", toneSurfaceClass(tone), toneBorderClass(tone))}>
+      <div className="min-w-0">
+        {title && <h2 className="text-lg font-semibold leading-tight">{title}</h2>}
+        {body && <p className="mt-2 text-sm leading-6 text-muted-foreground">{body}</p>}
+      </div>
+      {buttonLabel && buttonUrl && (
+        <Button asChild className="shrink-0 gap-2">
+          <a href={buttonUrl} target="_blank" rel="noreferrer">
+            {buttonLabel}
+            <ExternalLink className="h-4 w-4" />
+          </a>
+        </Button>
+      )}
+    </section>
+  )
+}
+
+function MetricTileWidget({ config }: { config: PageComponentConfig }) {
+  const title = stringConfig(config, "title")
+  const value = stringConfig(config, "value")
+  const helper = stringConfig(config, "helper")
+  const tone = optionConfig(config, "tone", toneOptions, "accent")
+
+  return (
+    <Card className={cn("h-full", toneBorderClass(tone))}>
+      <CardContent className="pt-6">
+        <div className={cn("inline-flex rounded-md p-2", toneSurfaceClass(tone))}>
+          <Sparkles className={cn("h-5 w-5", toneTextClass(tone))} />
+        </div>
+        {title && <div className="mt-4 text-sm font-medium text-muted-foreground">{title}</div>}
+        <div className="mt-2 break-words text-3xl font-semibold leading-tight">{value}</div>
+        {helper && <div className="mt-2 text-sm leading-6 text-muted-foreground">{helper}</div>}
+      </CardContent>
+    </Card>
+  )
+}
+
 function stringConfig(config: PageComponentConfig, key: string) {
   const value = config[key]
   return typeof value === "string" ? value : ""
@@ -273,6 +666,92 @@ function sizeConfig(config: PageComponentConfig, key: string, fallback: number) 
     return fallback
   }
   return Math.min(1200, value)
+}
+
+function numberConfig(config: PageComponentConfig, key: string, fallback: number, min: number, max: number) {
+  const value = Number(config[key])
+  if (!Number.isFinite(value)) {
+    return fallback
+  }
+  return Math.min(max, Math.max(min, value))
+}
+
+function booleanConfig(config: PageComponentConfig, key: string, fallback: boolean) {
+  const value = config[key]
+  if (typeof value === "boolean") {
+    return value
+  }
+  if (typeof value === "string") {
+    return value === "true"
+  }
+  return fallback
+}
+
+function optionConfig(config: PageComponentConfig, key: string, options: readonly string[], fallback: string) {
+  const value = stringConfig(config, key)
+  return options.includes(value) ? value : fallback
+}
+
+function parseLines(value: string) {
+  return value
+    .split(/\r?\n/)
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+const toneOptions = ["neutral", "accent", "success", "warning", "danger"] as const
+
+function toneSurfaceClass(tone: string) {
+  switch (tone) {
+    case "accent":
+      return "bg-blue-50 dark:bg-blue-500/10"
+    case "success":
+      return "bg-emerald-50 dark:bg-emerald-500/10"
+    case "warning":
+      return "bg-amber-50 dark:bg-amber-500/10"
+    case "danger":
+      return "bg-red-50 dark:bg-red-500/10"
+    default:
+      return "bg-card"
+  }
+}
+
+function toneBorderClass(tone: string) {
+  switch (tone) {
+    case "accent":
+      return "border-blue-200 dark:border-blue-500/30"
+    case "success":
+      return "border-emerald-200 dark:border-emerald-500/30"
+    case "warning":
+      return "border-amber-200 dark:border-amber-500/30"
+    case "danger":
+      return "border-red-200 dark:border-red-500/30"
+    default:
+      return ""
+  }
+}
+
+function toneTextClass(tone: string) {
+  switch (tone) {
+    case "accent":
+      return "text-blue-700 dark:text-blue-300"
+    case "success":
+      return "text-emerald-700 dark:text-emerald-300"
+    case "warning":
+      return "text-amber-700 dark:text-amber-300"
+    case "danger":
+      return "text-red-700 dark:text-red-300"
+    default:
+      return "text-muted-foreground"
+  }
+}
+
+function formatDatePart(date: Date, locale: string, timeZone: string, options: Intl.DateTimeFormatOptions) {
+  try {
+    return new Intl.DateTimeFormat(locale, timeZone ? { ...options, timeZone } : options).format(date)
+  } catch {
+    return new Intl.DateTimeFormat(locale, options).format(date)
+  }
 }
 
 function DashboardStatsWidget() {
