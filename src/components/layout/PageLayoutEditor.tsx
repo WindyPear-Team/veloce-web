@@ -1,9 +1,17 @@
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import type { Dispatch, ReactNode, SetStateAction } from "react"
+import type { Dispatch, DragEvent, KeyboardEvent, ReactNode, SetStateAction } from "react"
 import { LayoutTemplate, Plus, RotateCcw, Save, X } from "lucide-react"
 import { useMutation, useQueryClient } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
-import { defaultConfigForPageComponent, defaultWidthForPageComponent, pageComponentLabel, pageComponentPresets } from "@/components/dashboard/DashboardWidgets"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  PageComponent,
+  defaultConfigForPageComponent,
+  defaultWidthForPageComponent,
+  pageComponentDescription,
+  pageComponentLabel,
+  pageComponentPresets,
+} from "@/components/dashboard/DashboardWidgets"
 import { useToast } from "@/components/ui/toast"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
@@ -13,6 +21,7 @@ import {
   ensureEditablePageSlots,
   getPageSlotItems,
   newPageComponentItem,
+  pageComponentDragType,
   pageKeyFromPathname,
   parsePageLayouts,
   serializePageLayouts,
@@ -32,10 +41,9 @@ interface PageLayoutEditorContextValue {
   isSaving: boolean
   currentPageKey: string
   language: string
-  selectedType: string
   copy: LayoutEditorCopy
-  setSelectedType: (type: string) => void
-  addComponent: (pageKey: string, slotKey: PageSlotKey) => void
+  addComponent: (pageKey: string, slotKey: PageSlotKey, type: string, index?: number) => void
+  addComponentToEnd: (type: string) => void
   cancelEditing: () => void
   deleteComponent: (pageKey: string, slotKey: PageSlotKey, id: string) => void
   getItems: (pageKey: string, slotKey: PageSlotKey, defaultItems?: PageComponentItem[]) => PageComponentItem[]
@@ -48,9 +56,6 @@ interface PageLayoutEditorContextValue {
 }
 
 const PageLayoutEditorContext = createContext<PageLayoutEditorContextValue | null>(null)
-
-const selectClass =
-  "h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus:ring-offset-2"
 
 export function PageLayoutEditorProvider({
   children,
@@ -65,7 +70,6 @@ export function PageLayoutEditorProvider({
   const { success, error } = useToast()
   const savedLayouts = useMemo(() => parsePageLayouts(pageLayoutsRaw), [pageLayoutsRaw])
   const [draftLayouts, setDraftLayouts] = useState<PageLayouts>(savedLayouts)
-  const [selectedType, setSelectedType] = useState(pageComponentPresets[0]?.type || "dashboard_stats")
   const normalizedCurrentPage = pageKeyFromPathname(currentPageKey)
 
   useEffect(() => {
@@ -95,14 +99,22 @@ export function PageLayoutEditorProvider({
     isSaving: saveMutation.isPending,
     currentPageKey: normalizedCurrentPage,
     language,
-    selectedType,
     copy,
-    setSelectedType,
-    addComponent: (pageKey, slotKey) => {
-      updateSlot(setDraftLayouts, pageKey, slotKey, (items) => [
-        ...items,
-        newPageComponentItem(selectedType, defaultWidthForPageComponent(selectedType), defaultConfigForPageComponent(selectedType)),
-      ])
+    addComponent: (pageKey, slotKey, type, index) => {
+      const component = newPageComponentItem(type, defaultWidthForPageComponent(type), defaultConfigForPageComponent(type))
+      updateSlot(setDraftLayouts, pageKey, slotKey, (items) => {
+        if (typeof index !== "number") {
+          return [...items, component]
+        }
+        const next = [...items]
+        next.splice(Math.max(0, Math.min(index, next.length)), 0, component)
+        return next
+      })
+    },
+    addComponentToEnd: (type) => {
+      const slotKey = normalizedCurrentPage === DASHBOARD_PAGE_KEY ? "main" : "after"
+      const component = newPageComponentItem(type, defaultWidthForPageComponent(type), defaultConfigForPageComponent(type))
+      updateSlot(setDraftLayouts, normalizedCurrentPage, slotKey, (items) => [...items, component])
     },
     cancelEditing: () => {
       setDraftLayouts(savedLayouts)
@@ -178,11 +190,11 @@ export function PageLayoutEditorProvider({
 
 export function PageLayoutEditBar() {
   const editor = usePageLayoutEditor()
+  const [isLibraryOpen, setIsLibraryOpen] = useState(false)
   if (!editor?.isEditing) {
     return null
   }
 
-  const slots = slotsForPage(editor.currentPageKey, editor.copy)
   const pageLabel = pageLabelForKey(editor.currentPageKey, editor.copy)
 
   return (
@@ -199,25 +211,11 @@ export function PageLayoutEditBar() {
         </div>
 
         <div className="flex flex-col gap-2 lg:flex-row lg:items-center">
-          <select
-            className={selectClass}
-            value={editor.selectedType}
-            aria-label={editor.copy.component}
-            onChange={(event) => editor.setSelectedType(event.target.value)}
-          >
-            {pageComponentPresets.map((preset) => (
-              <option key={preset.type} value={preset.type}>
-                {pageComponentLabel(preset.type, editor.language)}
-              </option>
-            ))}
-          </select>
           <div className="flex flex-wrap gap-2">
-            {slots.map((slot) => (
-              <Button key={slot.key} type="button" variant="outline" size="sm" className="gap-2" onClick={() => editor.addComponent(editor.currentPageKey, slot.key)}>
-                <Plus className="h-4 w-4" />
-                {slot.shortLabel}
-              </Button>
-            ))}
+            <Button type="button" size="sm" className="gap-2" onClick={() => setIsLibraryOpen(true)}>
+              <Plus className="h-4 w-4" />
+              {editor.copy.addComponent}
+            </Button>
             <Button type="button" variant="outline" size="sm" className="gap-2" onClick={editor.resetCurrentPage}>
               <RotateCcw className="h-4 w-4" />
               {editor.copy.reset}
@@ -233,12 +231,86 @@ export function PageLayoutEditBar() {
           </div>
         </div>
       </div>
+      <ComponentLibraryDialog open={isLibraryOpen} onOpenChange={setIsLibraryOpen} editor={editor} />
     </div>
   )
 }
 
 export function usePageLayoutEditor() {
   return useContext(PageLayoutEditorContext)
+}
+
+function ComponentLibraryDialog({
+  editor,
+  onOpenChange,
+  open,
+}: {
+  editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>
+  onOpenChange: (open: boolean) => void
+  open: boolean
+}) {
+  const addPreset = (type: string) => {
+    editor.addComponentToEnd(type)
+    onOpenChange(false)
+  }
+  const startPresetDrag = (event: DragEvent<HTMLDivElement>, type: string) => {
+    event.dataTransfer.effectAllowed = "copy"
+    event.dataTransfer.setData(pageComponentDragType, JSON.stringify({ action: "create", type }))
+    window.setTimeout(() => onOpenChange(false), 0)
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[88vh] w-[calc(100vw-2rem)] max-w-6xl overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>{editor.copy.addComponent}</DialogTitle>
+          <DialogDescription>{editor.copy.dragToPlace}</DialogDescription>
+        </DialogHeader>
+        <div className="grid max-h-[68vh] gap-4 overflow-y-auto pr-1 md:grid-cols-2 xl:grid-cols-3">
+          {pageComponentPresets.map((preset) => {
+            const label = pageComponentLabel(preset.type, editor.language)
+            const description = pageComponentDescription(preset.type, editor.language)
+            const Icon = preset.icon
+            return (
+              <div
+                key={preset.type}
+                role="button"
+                tabIndex={0}
+                draggable
+                className="group rounded-md border bg-card p-3 text-left shadow-sm outline-none transition-colors hover:border-primary/60 hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-ring"
+                onClick={() => addPreset(preset.type)}
+                onDragStart={(event) => startPresetDrag(event, preset.type)}
+                onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault()
+                    addPreset(preset.type)
+                  }
+                }}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex min-w-0 items-start gap-3">
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md border bg-background">
+                      <Icon className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="truncate text-sm font-semibold">{label}</div>
+                      <div className="mt-1 line-clamp-2 text-xs leading-5 text-muted-foreground">{description}</div>
+                    </div>
+                  </div>
+                  <div className="shrink-0 rounded-md border bg-background px-2 py-1 text-xs text-muted-foreground">{editor.copy.addToEnd}</div>
+                </div>
+                <div className="mt-3 h-44 overflow-hidden rounded-md border bg-background p-2">
+                  <div className="pointer-events-none w-[118%] origin-top-left scale-[0.85]">
+                    <PageComponent type={preset.type} config={defaultConfigForPageComponent(preset.type)} />
+                  </div>
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      </DialogContent>
+    </Dialog>
+  )
 }
 
 function updateSlot(
@@ -258,19 +330,6 @@ function updateSlot(
       [normalizedPageKey]: pageSlots,
     }
   })
-}
-
-function slotsForPage(pageKey: string, copy: LayoutEditorCopy): Array<{ key: PageSlotKey; label: string; shortLabel: string }> {
-  const baseSlots: Array<{ key: PageSlotKey; label: string; shortLabel: string }> = [
-    { key: "before", label: copy.positionBefore, shortLabel: copy.addBefore },
-    { key: "primary", label: copy.positionPrimary, shortLabel: copy.addPrimary },
-    { key: "secondary", label: copy.positionSecondary, shortLabel: copy.addSecondary },
-    { key: "after", label: copy.positionAfter, shortLabel: copy.addAfter },
-  ]
-  if (pageKeyFromPathname(pageKey) !== DASHBOARD_PAGE_KEY) {
-    return baseSlots
-  }
-  return [{ key: "main", label: copy.positionMain, shortLabel: copy.addMain }, ...baseSlots]
 }
 
 function pageLabelForKey(pageKey: string, copy: LayoutEditorCopy) {
@@ -312,8 +371,11 @@ interface LayoutEditorCopy {
   addMain: string
   addPrimary: string
   addSecondary: string
+  addToEnd: string
   component: string
   delete: string
+  dragComponentHere: string
+  dragToPlace: string
   emptySlot: string
   exit: string
   moveDown: string
@@ -358,9 +420,12 @@ const zhCopy: LayoutEditorCopy = {
   addMain: "插到首页",
   addPrimary: "插到中部",
   addSecondary: "插到后段",
+  addToEnd: "点按添加",
   component: "预设组件",
   delete: "删除",
-  emptySlot: "点击添加，把选中的组件插到这里",
+  dragComponentHere: "把组件拖到这里",
+  dragToPlace: "点按组件会追加到页面末尾，也可以按住组件预览拖到指定空位。",
+  emptySlot: "把组件拖到这里",
   exit: "退出",
   moveDown: "下移",
   moveUp: "上移",
@@ -404,9 +469,12 @@ const enCopy: LayoutEditorCopy = {
   addMain: "Add to dashboard",
   addPrimary: "Add middle",
   addSecondary: "Add lower",
+  addToEnd: "Click to add",
   component: "Preset component",
   delete: "Delete",
-  emptySlot: "Click add to place the selected component here",
+  dragComponentHere: "Drag a component here",
+  dragToPlace: "Click a component to append it to the end of the page, or drag a preview into a specific slot.",
+  emptySlot: "Drag a component here",
   exit: "Exit",
   moveDown: "Move down",
   moveUp: "Move up",

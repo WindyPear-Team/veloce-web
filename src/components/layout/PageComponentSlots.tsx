@@ -1,4 +1,4 @@
-import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react"
+import { ArrowDown, ArrowUp, Trash2 } from "lucide-react"
 import { useState } from "react"
 import type { DragEvent, ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button"
 import { PageComponent, pageComponentLabel, pageComponentPresets } from "@/components/dashboard/DashboardWidgets"
 import { usePageLayoutEditor } from "@/components/layout/PageLayoutEditor"
 import api from "@/lib/api"
-import { DASHBOARD_PAGE_KEY, getPageSlotItems, pageKeyFromPathname, parsePageLayouts } from "@/lib/page-layouts"
-import type { PageComponentConfig, PageComponentItem, PageComponentWidth, PageSlotKey } from "@/lib/page-layouts"
+import { DASHBOARD_PAGE_KEY, getPageSlotItems, pageComponentDragType, pageKeyFromPathname, parsePageLayouts } from "@/lib/page-layouts"
+import type { PageComponentConfig, PageComponentDragData, PageComponentItem, PageComponentWidth, PageSlotKey } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
 import { cn } from "@/lib/utils"
@@ -27,7 +27,6 @@ const widthClasses: Record<PageComponentWidth, string> = {
 
 const selectClass =
   "h-8 rounded-md border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-const componentDragType = "application/x-flai-page-component"
 
 export function PageComponentSlots({ pageKey, slotKey, defaultItems = [], className }: PageComponentSlotsProps) {
   const editor = usePageLayoutEditor()
@@ -99,33 +98,25 @@ function EditableSlot({
       }}
       onDrop={(event) => {
         const source = readComponentDragData(event)
-        if (!source || source.pageKey !== pageKey) {
+        if (!source || (source.action === "move" && source.pageKey !== pageKey)) {
           return
         }
         event.preventDefault()
-        editor.moveComponentTo(pageKey, source.slotKey, source.index, slotKey, items.length)
+        placeDraggedComponent(editor, pageKey, slotKey, items.length, source)
         setDragOverIndex(null)
       }}
     >
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <div className="text-sm font-medium">{label}</div>
-          <div className="text-xs text-muted-foreground">{pageComponentLabel(editor.selectedType, editor.language)}</div>
+          <div className="text-xs text-muted-foreground">{editor.copy.dragComponentHere}</div>
         </div>
-        <Button type="button" size="sm" className="gap-2" onClick={() => editor.addComponent(pageKey, slotKey)}>
-          <Plus className="h-4 w-4" />
-          {editor.copy.addComponent}
-        </Button>
       </div>
 
       {items.length === 0 ? (
-        <button
-          type="button"
-          className="flex min-h-20 w-full items-center justify-center rounded-md border border-dashed bg-background/70 px-4 py-6 text-center text-sm text-muted-foreground transition-colors hover:bg-background"
-          onClick={() => editor.addComponent(pageKey, slotKey)}
-        >
+        <div className="flex min-h-20 w-full items-center justify-center rounded-md border border-dashed bg-background/70 px-4 py-6 text-center text-sm text-muted-foreground">
           {editor.copy.emptySlot}
-        </button>
+        </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-6">
           {items.map((item, index) => (
@@ -139,7 +130,7 @@ function EditableSlot({
                   return
                 }
                 event.dataTransfer.effectAllowed = "move"
-                event.dataTransfer.setData(componentDragType, JSON.stringify({ pageKey, slotKey, index }))
+                event.dataTransfer.setData(pageComponentDragType, JSON.stringify({ action: "move", pageKey, slotKey, index }))
               }}
               onDragOver={(event) => {
                 if (hasComponentDragData(event)) {
@@ -152,12 +143,12 @@ function EditableSlot({
               onDragEnd={() => setDragOverIndex(null)}
               onDrop={(event) => {
                 const source = readComponentDragData(event)
-                if (!source || source.pageKey !== pageKey) {
+                if (!source || (source.action === "move" && source.pageKey !== pageKey)) {
                   return
                 }
                 event.preventDefault()
                 event.stopPropagation()
-                editor.moveComponentTo(pageKey, source.slotKey, source.index, slotKey, index)
+                placeDraggedComponent(editor, pageKey, slotKey, index, source)
                 setDragOverIndex(null)
               }}
             >
@@ -505,20 +496,45 @@ function slotLabel(pageKey: string, slotKey: PageSlotKey, copy: NonNullable<Retu
 }
 
 function hasComponentDragData(event: DragEvent) {
-  return Array.from(event.dataTransfer.types).includes(componentDragType)
+  return Array.from(event.dataTransfer.types).includes(pageComponentDragType)
 }
 
-function readComponentDragData(event: DragEvent) {
-  const raw = event.dataTransfer.getData(componentDragType)
+function placeDraggedComponent(
+  editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>,
+  pageKey: string,
+  slotKey: PageSlotKey,
+  index: number,
+  source: PageComponentDragData
+) {
+  if (source.action === "create") {
+    editor.addComponent(pageKey, slotKey, source.type, index)
+    return
+  }
+  editor.moveComponentTo(pageKey, source.slotKey, source.index, slotKey, index)
+}
+
+function readComponentDragData(event: DragEvent): PageComponentDragData | null {
+  const raw = event.dataTransfer.getData(pageComponentDragType)
   if (!raw) {
     return null
   }
   try {
-    const parsed = JSON.parse(raw) as { pageKey?: string; slotKey?: PageSlotKey; index?: number }
-    if (!parsed.pageKey || !parsed.slotKey || typeof parsed.index !== "number") {
+    const parsed = JSON.parse(raw) as Record<string, unknown>
+    const action = typeof parsed.action === "string" ? parsed.action : "move"
+    if (action === "create" && typeof parsed.type === "string" && parsed.type) {
+      return {
+        action: "create",
+        type: parsed.type,
+      }
+    }
+    if (action !== "move") {
+      return null
+    }
+    if (typeof parsed.pageKey !== "string" || !isPageSlotKey(parsed.slotKey) || typeof parsed.index !== "number") {
       return null
     }
     return {
+      action: "move",
       pageKey: pageKeyFromPathname(parsed.pageKey),
       slotKey: parsed.slotKey,
       index: parsed.index,
@@ -526,4 +542,8 @@ function readComponentDragData(event: DragEvent) {
   } catch {
     return null
   }
+}
+
+function isPageSlotKey(value: unknown): value is PageSlotKey {
+  return value === "before" || value === "main" || value === "primary" || value === "secondary" || value === "after"
 }

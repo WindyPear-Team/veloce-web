@@ -19,6 +19,12 @@ export type PageSlots = Partial<Record<PageSlotKey, PageComponentItem[]>>
 
 export type PageLayouts = Record<string, PageSlots>
 
+export const pageComponentDragType = "application/x-flai-page-component"
+
+export type PageComponentDragData =
+  | { action: "create"; type: string }
+  | { action: "move"; pageKey: string; slotKey: PageSlotKey; index: number }
+
 export const defaultDashboardComponents: PageComponentItem[] = [
   { id: "default-dashboard-stats", type: "dashboard_stats", width: "full" },
   { id: "default-dashboard-announcements", type: "announcements", width: "half" },
