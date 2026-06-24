@@ -25,6 +25,20 @@ export type PageComponentDragData =
   | { action: "create"; type: string }
   | { action: "move"; pageKey: string; slotKey: PageSlotKey; index: number }
 
+let activePageComponentDragData: PageComponentDragData | null = null
+
+export function setActivePageComponentDragData(data: PageComponentDragData) {
+  activePageComponentDragData = data
+}
+
+export function getActivePageComponentDragData() {
+  return activePageComponentDragData
+}
+
+export function clearActivePageComponentDragData() {
+  activePageComponentDragData = null
+}
+
 export const defaultDashboardComponents: PageComponentItem[] = [
   { id: "default-dashboard-stats", type: "dashboard_stats", width: "full" },
   { id: "default-dashboard-announcements", type: "announcements", width: "half" },

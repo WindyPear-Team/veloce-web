@@ -18,6 +18,7 @@ import { useI18n } from "@/lib/i18n"
 import {
   DASHBOARD_PAGE_KEY,
   clonePageSlots,
+  clearActivePageComponentDragData,
   ensureEditablePageSlots,
   getPageSlotItems,
   newPageComponentItem,
@@ -25,6 +26,7 @@ import {
   pageKeyFromPathname,
   parsePageLayouts,
   serializePageLayouts,
+  setActivePageComponentDragData,
 } from "@/lib/page-layouts"
 import type { PageComponentConfig, PageComponentItem, PageComponentWidth, PageLayouts, PageSlotKey } from "@/lib/page-layouts"
 
@@ -254,8 +256,11 @@ function ComponentLibraryDialog({
     onOpenChange(false)
   }
   const startPresetDrag = (event: DragEvent<HTMLDivElement>, type: string) => {
+    const dragData = { action: "create" as const, type }
+    setActivePageComponentDragData(dragData)
+    window.addEventListener("dragend", clearActivePageComponentDragData, { once: true })
     event.dataTransfer.effectAllowed = "copy"
-    event.dataTransfer.setData(pageComponentDragType, JSON.stringify({ action: "create", type }))
+    event.dataTransfer.setData(pageComponentDragType, JSON.stringify(dragData))
     window.setTimeout(() => onOpenChange(false), 0)
   }
 

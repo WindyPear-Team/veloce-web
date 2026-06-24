@@ -1,12 +1,21 @@
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react"
-import { useState } from "react"
+import { Fragment, useState } from "react"
 import type { DragEvent, ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
-import { PageComponent, pageComponentLabel, pageComponentPresets } from "@/components/dashboard/DashboardWidgets"
+import { PageComponent, defaultWidthForPageComponent, pageComponentLabel, pageComponentPresets } from "@/components/dashboard/DashboardWidgets"
 import { usePageLayoutEditor } from "@/components/layout/PageLayoutEditor"
 import api from "@/lib/api"
-import { DASHBOARD_PAGE_KEY, getPageSlotItems, pageComponentDragType, pageKeyFromPathname, parsePageLayouts } from "@/lib/page-layouts"
+import {
+  DASHBOARD_PAGE_KEY,
+  clearActivePageComponentDragData,
+  getActivePageComponentDragData,
+  getPageSlotItems,
+  pageComponentDragType,
+  pageKeyFromPathname,
+  parsePageLayouts,
+  setActivePageComponentDragData,
+} from "@/lib/page-layouts"
 import type { PageComponentConfig, PageComponentDragData, PageComponentItem, PageComponentWidth, PageSlotKey } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
@@ -23,6 +32,18 @@ const widthClasses: Record<PageComponentWidth, string> = {
   full: "lg:col-span-6",
   half: "lg:col-span-3",
   third: "lg:col-span-2",
+}
+
+const widthColumns: Record<PageComponentWidth, number> = {
+  full: 6,
+  half: 3,
+  third: 2,
+}
+
+interface DropTarget {
+  index: number
+  width: PageComponentWidth
+  fullRow: boolean
 }
 
 const selectClass =
@@ -86,7 +107,7 @@ function EditableSlot({
   slotKey: PageSlotKey
 }) {
   const label = slotLabel(pageKey, slotKey, editor.copy)
-  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+  const [dropTarget, setDropTarget] = useState<DropTarget | null>(null)
 
   return (
     <section
@@ -94,16 +115,26 @@ function EditableSlot({
       onDragOver={(event) => {
         if (hasComponentDragData(event)) {
           event.preventDefault()
+          const source = dragSourceForEvent(event)
+          if (source && isAllowedDropSource(source, pageKey)) {
+            setDropTarget((current) => current || dropTargetForEnd(items, source, editor, pageKey, slotKey))
+          }
         }
       }}
       onDrop={(event) => {
-        const source = readComponentDragData(event)
+        const source = dragSourceForEvent(event)
         if (!source || (source.action === "move" && source.pageKey !== pageKey)) {
           return
         }
         event.preventDefault()
-        placeDraggedComponent(editor, pageKey, slotKey, items.length, source)
-        setDragOverIndex(null)
+        placeDraggedComponent(editor, pageKey, slotKey, dropTarget?.index ?? items.length, source)
+        setDropTarget(null)
+        clearActivePageComponentDragData()
+      }}
+      onDragLeave={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+          setDropTarget(null)
+        }
       }}
     >
       <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -118,83 +149,174 @@ function EditableSlot({
           {editor.copy.emptySlot}
         </div>
       ) : (
-        <div className="grid gap-6 lg:grid-cols-6">
+        <div
+          className="grid gap-6 lg:grid-cols-6"
+          onDragOver={(event) => {
+            if (!hasComponentDragData(event) || (event.target as HTMLElement).closest("[data-page-component-item]")) {
+              return
+            }
+            const source = dragSourceForEvent(event)
+            if (!source || !isAllowedDropSource(source, pageKey)) {
+              return
+            }
+            event.preventDefault()
+            event.dataTransfer.dropEffect = "move"
+            setDropTarget(dropTargetFromGridPointer(event, items, source, editor, pageKey, slotKey))
+          }}
+        >
           {items.map((item, index) => (
-            <div
-              key={item.id}
-              draggable
-              className={cn("min-w-0 cursor-grab active:cursor-grabbing", widthClasses[item.width || "half"])}
-              onDragStart={(event) => {
-                if ((event.target as HTMLElement).closest("[data-no-drag]")) {
-                  event.preventDefault()
-                  return
-                }
-                event.dataTransfer.effectAllowed = "move"
-                event.dataTransfer.setData(pageComponentDragType, JSON.stringify({ action: "move", pageKey, slotKey, index }))
-              }}
-              onDragOver={(event) => {
-                if (hasComponentDragData(event)) {
-                  event.preventDefault()
-                  event.dataTransfer.dropEffect = "move"
-                  setDragOverIndex(index)
-                }
-              }}
-              onDragLeave={() => setDragOverIndex((current) => (current === index ? null : current))}
-              onDragEnd={() => setDragOverIndex(null)}
-              onDrop={(event) => {
-                const source = readComponentDragData(event)
-                if (!source || (source.action === "move" && source.pageKey !== pageKey)) {
-                  return
-                }
-                event.preventDefault()
-                event.stopPropagation()
-                placeDraggedComponent(editor, pageKey, slotKey, index, source)
-                setDragOverIndex(null)
-              }}
-            >
-              <div className={cn("rounded-md border bg-background p-2 shadow-sm", dragOverIndex === index && "ring-2 ring-primary")}>
-                <div className="mb-2 flex flex-col gap-2 rounded-md bg-muted/70 px-2 py-2 sm:flex-row sm:items-center sm:justify-between">
-                  <div className="min-w-0 text-xs font-medium">
-                    <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded bg-background">{index + 1}</span>
-                    <span>{pageComponentLabel(item.type, editor.language)}</span>
-                  </div>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <select
-                      className={selectClass}
-                      value={item.width || "half"}
-                      aria-label={editor.copy.width}
-                      onChange={(event) => editor.updateComponentWidth(pageKey, slotKey, item.id, event.target.value as PageComponentWidth)}
-                    >
-                      <option value="full">{editor.copy.widthFull}</option>
-                      <option value="half">{editor.copy.widthHalf}</option>
-                      <option value="third">{editor.copy.widthThird}</option>
-                    </select>
-                    <IconButton label={editor.copy.moveUp} disabled={index === 0} onClick={() => editor.moveComponent(pageKey, slotKey, index, -1)}>
-                      <ArrowUp className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton label={editor.copy.moveDown} disabled={index === items.length - 1} onClick={() => editor.moveComponent(pageKey, slotKey, index, 1)}>
-                      <ArrowDown className="h-4 w-4" />
-                    </IconButton>
-                    <IconButton label={editor.copy.delete} className="text-red-500 hover:text-red-600" onClick={() => editor.deleteComponent(pageKey, slotKey, item.id)}>
-                      <Trash2 className="h-4 w-4" />
-                    </IconButton>
-                  </div>
-                </div>
-                <ComponentConfigEditor
+            <Fragment key={item.id}>
+              {dropTarget?.index === index && (
+                <InsertionDropZone
+                  dropTarget={dropTarget}
                   editor={editor}
-                  item={item}
                   pageKey={pageKey}
                   slotKey={slotKey}
+                  index={index}
+                  onDropComplete={() => setDropTarget(null)}
                 />
-                <div className="pointer-events-none">
-                  <PageComponent item={item} />
+              )}
+              <div
+                key={item.id}
+                data-component-index={index}
+                data-page-component-item
+                draggable
+                className={cn("min-w-0 cursor-grab active:cursor-grabbing", widthClasses[item.width || "half"])}
+                onDragStart={(event) => {
+                  if ((event.target as HTMLElement).closest("[data-no-drag]")) {
+                    event.preventDefault()
+                    return
+                  }
+                  const dragData = { action: "move" as const, pageKey, slotKey, index }
+                  setActivePageComponentDragData(dragData)
+                  event.dataTransfer.effectAllowed = "move"
+                  event.dataTransfer.setData(pageComponentDragType, JSON.stringify(dragData))
+                }}
+                onDragOver={(event) => {
+                  if (hasComponentDragData(event)) {
+                    const source = dragSourceForEvent(event)
+                    if (!source || !isAllowedDropSource(source, pageKey)) {
+                      return
+                    }
+                    event.preventDefault()
+                    event.dataTransfer.dropEffect = "move"
+                    setDropTarget(dropTargetFromPointer(event, index, items, source, editor, pageKey, slotKey))
+                  }
+                }}
+                onDragEnd={() => {
+                  setDropTarget(null)
+                  clearActivePageComponentDragData()
+                }}
+                onDrop={(event) => {
+                  const source = dragSourceForEvent(event)
+                  if (!source || (source.action === "move" && source.pageKey !== pageKey)) {
+                    return
+                  }
+                  event.preventDefault()
+                  event.stopPropagation()
+                  const target = dropTarget || dropTargetFromPointer(event, index, items, source, editor, pageKey, slotKey)
+                  placeDraggedComponent(editor, pageKey, slotKey, target.index, source)
+                  setDropTarget(null)
+                  clearActivePageComponentDragData()
+                }}
+              >
+                <div className="rounded-md border bg-background p-2 shadow-sm">
+                  <div className="mb-2 flex flex-col gap-2 rounded-md bg-muted/70 px-2 py-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="min-w-0 text-xs font-medium">
+                      <span className="mr-2 inline-flex h-5 w-5 items-center justify-center rounded bg-background">{index + 1}</span>
+                      <span>{pageComponentLabel(item.type, editor.language)}</span>
+                    </div>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <select
+                        className={selectClass}
+                        value={item.width || "half"}
+                        aria-label={editor.copy.width}
+                        onChange={(event) => editor.updateComponentWidth(pageKey, slotKey, item.id, event.target.value as PageComponentWidth)}
+                      >
+                        <option value="full">{editor.copy.widthFull}</option>
+                        <option value="half">{editor.copy.widthHalf}</option>
+                        <option value="third">{editor.copy.widthThird}</option>
+                      </select>
+                      <IconButton label={editor.copy.moveUp} disabled={index === 0} onClick={() => editor.moveComponent(pageKey, slotKey, index, -1)}>
+                        <ArrowUp className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton label={editor.copy.moveDown} disabled={index === items.length - 1} onClick={() => editor.moveComponent(pageKey, slotKey, index, 1)}>
+                        <ArrowDown className="h-4 w-4" />
+                      </IconButton>
+                      <IconButton label={editor.copy.delete} className="text-red-500 hover:text-red-600" onClick={() => editor.deleteComponent(pageKey, slotKey, item.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </IconButton>
+                    </div>
+                  </div>
+                  <ComponentConfigEditor
+                    editor={editor}
+                    item={item}
+                    pageKey={pageKey}
+                    slotKey={slotKey}
+                  />
+                  <div className="pointer-events-none">
+                    <PageComponent item={item} />
+                  </div>
                 </div>
               </div>
-            </div>
+            </Fragment>
           ))}
+          {dropTarget?.index === items.length && (
+            <InsertionDropZone
+              dropTarget={dropTarget}
+              editor={editor}
+              pageKey={pageKey}
+              slotKey={slotKey}
+              index={items.length}
+              onDropComplete={() => setDropTarget(null)}
+            />
+          )}
         </div>
       )}
     </section>
+  )
+}
+
+function InsertionDropZone({
+  dropTarget,
+  editor,
+  index,
+  onDropComplete,
+  pageKey,
+  slotKey,
+}: {
+  dropTarget: DropTarget
+  editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>
+  index: number
+  onDropComplete: () => void
+  pageKey: string
+  slotKey: PageSlotKey
+}) {
+  return (
+    <div
+      className={dropTarget.fullRow ? "lg:col-span-6" : widthClasses[dropTarget.width]}
+      onDragOver={(event) => {
+        if (hasComponentDragData(event)) {
+          event.preventDefault()
+          event.dataTransfer.dropEffect = "move"
+        }
+      }}
+      onDrop={(event) => {
+        const source = dragSourceForEvent(event)
+        if (!source || (source.action === "move" && source.pageKey !== pageKey)) {
+          return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+        placeDraggedComponent(editor, pageKey, slotKey, index, source)
+        onDropComplete()
+        clearActivePageComponentDragData()
+      }}
+    >
+      <div className="flex min-h-16 items-center justify-center rounded-md border-2 border-dashed border-primary bg-primary/10 px-4 py-4 text-sm font-medium text-primary shadow-sm">
+        {editor.copy.dragComponentHere}
+      </div>
+    </div>
   )
 }
 
@@ -497,6 +619,154 @@ function slotLabel(pageKey: string, slotKey: PageSlotKey, copy: NonNullable<Retu
 
 function hasComponentDragData(event: DragEvent) {
   return Array.from(event.dataTransfer.types).includes(pageComponentDragType)
+}
+
+function dragSourceForEvent(event: DragEvent): PageComponentDragData | null {
+  return readComponentDragData(event) || getActivePageComponentDragData()
+}
+
+interface LayoutRow {
+  indices: number[]
+  width: number
+}
+
+function dropTargetFromPointer(
+  event: DragEvent<HTMLElement>,
+  index: number,
+  items: PageComponentItem[],
+  source: PageComponentDragData,
+  editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>,
+  pageKey: string,
+  slotKey: PageSlotKey
+): DropTarget {
+  const width = widthForDragSource(source, editor)
+  const row = rowForIndex(layoutRows(items), index)
+  const canInline = width !== "full" && row ? rowCanFitDrop(row, items, source, pageKey, slotKey, width) : false
+  const rect = event.currentTarget.getBoundingClientRect()
+  const leftEdge = rect.left + rect.width * 0.35
+  const rightEdge = rect.right - rect.width * 0.35
+
+  if (canInline && event.clientX <= leftEdge) {
+    return { index, width, fullRow: false }
+  }
+  if (canInline && event.clientX >= rightEdge) {
+    return { index: index + 1, width, fullRow: false }
+  }
+
+  const midpoint = rect.top + rect.height / 2
+  return { index: event.clientY > midpoint ? index + 1 : index, width, fullRow: true }
+}
+
+function dropTargetFromGridPointer(
+  event: DragEvent<HTMLDivElement>,
+  items: PageComponentItem[],
+  source: PageComponentDragData,
+  editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>,
+  pageKey: string,
+  slotKey: PageSlotKey
+): DropTarget {
+  const width = widthForDragSource(source, editor)
+  const rows = layoutRows(items)
+  const row = rowFromGridPointer(event, rows)
+  if (!row) {
+    return dropTargetForEnd(items, source, editor, pageKey, slotKey)
+  }
+
+  const canInline = width !== "full" && rowCanFitDrop(row, items, source, pageKey, slotKey, width)
+  const firstIndex = row.indices[0]
+  const lastIndex = row.indices[row.indices.length - 1]
+  if (canInline) {
+    const firstElement = event.currentTarget.querySelector<HTMLElement>(`[data-component-index="${firstIndex}"]`)
+    const lastElement = event.currentTarget.querySelector<HTMLElement>(`[data-component-index="${lastIndex}"]`)
+    if (firstElement && event.clientX < firstElement.getBoundingClientRect().left) {
+      return { index: firstIndex, width, fullRow: false }
+    }
+    if (lastElement && event.clientX > lastElement.getBoundingClientRect().right) {
+      return { index: lastIndex + 1, width, fullRow: false }
+    }
+  }
+
+  return { index: lastIndex + 1, width, fullRow: true }
+}
+
+function dropTargetForEnd(
+  items: PageComponentItem[],
+  source: PageComponentDragData,
+  editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>,
+  pageKey: string,
+  slotKey: PageSlotKey
+): DropTarget {
+  const width = widthForDragSource(source, editor)
+  const rows = layoutRows(items)
+  const lastRow = rows[rows.length - 1]
+  const canInline = Boolean(lastRow && width !== "full" && rowCanFitDrop(lastRow, items, source, pageKey, slotKey, width))
+  return { index: items.length, width, fullRow: !canInline }
+}
+
+function rowFromGridPointer(event: DragEvent<HTMLDivElement>, rows: LayoutRow[]) {
+  return rows.find((row) => {
+    const elements = row.indices
+      .map((index) => event.currentTarget.querySelector<HTMLElement>(`[data-component-index="${index}"]`))
+      .filter((element): element is HTMLElement => Boolean(element))
+    if (elements.length === 0) {
+      return false
+    }
+    const top = Math.min(...elements.map((element) => element.getBoundingClientRect().top))
+    const bottom = Math.max(...elements.map((element) => element.getBoundingClientRect().bottom))
+    return event.clientY >= top && event.clientY <= bottom
+  })
+}
+
+function rowForIndex(rows: LayoutRow[], index: number) {
+  return rows.find((row) => row.indices.includes(index))
+}
+
+function layoutRows(items: PageComponentItem[]): LayoutRow[] {
+  const rows: LayoutRow[] = []
+  let current: LayoutRow = { indices: [], width: 0 }
+  items.forEach((item, index) => {
+    const width = widthColumns[item.width || "half"]
+    if (current.indices.length > 0 && current.width + width > 6) {
+      rows.push(current)
+      current = { indices: [], width: 0 }
+    }
+    current.indices.push(index)
+    current.width += width
+    if (current.width >= 6) {
+      rows.push(current)
+      current = { indices: [], width: 0 }
+    }
+  })
+  if (current.indices.length > 0) {
+    rows.push(current)
+  }
+  return rows
+}
+
+function rowCanFitDrop(
+  row: LayoutRow,
+  items: PageComponentItem[],
+  source: PageComponentDragData,
+  pageKey: string,
+  slotKey: PageSlotKey,
+  width: PageComponentWidth
+) {
+  let occupied = row.width
+  if (source.action === "move" && source.pageKey === pageKey && source.slotKey === slotKey && row.indices.includes(source.index)) {
+    occupied -= widthColumns[items[source.index]?.width || "half"]
+  }
+  return occupied + widthColumns[width] <= 6
+}
+
+function widthForDragSource(source: PageComponentDragData, editor: NonNullable<ReturnType<typeof usePageLayoutEditor>>): PageComponentWidth {
+  if (source.action === "create") {
+    return defaultWidthForPageComponent(source.type)
+  }
+  return editor.getItems(source.pageKey, source.slotKey)[source.index]?.width || "half"
+}
+
+function isAllowedDropSource(source: PageComponentDragData, pageKey: string) {
+  return source.action === "create" || source.pageKey === pageKey
 }
 
 function placeDraggedComponent(
