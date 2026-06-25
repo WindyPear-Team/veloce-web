@@ -51,12 +51,31 @@ interface ChatSession {
   title: string
   messages: ChatMessage[]
   run_mode: ChatRunMode
+  latest_run?: ChatRun
   agent_id?: string
   skill_ids: string[]
   mcp_server_ids: string[]
   model_name?: string
+  user_channel_id?: number
   created_at: string
   updated_at: string
+}
+
+interface ChatRun {
+  id: string
+  session_id: string
+  assistant_message_id: string
+  mode: ChatRunMode
+  status: string
+  status_message?: string
+  current_round?: number
+  error_message?: string
+  tool_calls?: number
+  tool_call_details?: ChatToolCall[]
+  created_at?: string
+  updated_at?: string
+  started_at?: string
+  finished_at?: string
 }
 
 interface ChatAgent {
@@ -134,6 +153,7 @@ const apiKeyStoreKey = "windypear.chat.api_key_id.v1"
 const selectedAgentStoreKey = "windypear.advanced_chat.selected_agent.v1"
 const agentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
+const advancedSessionsQueryKey = ["advanced-chat-sessions"] as const
 const defaultAdvancedChatSettings: AdvancedChatSettings = {
   attachment_max_mb: 10,
   attachment_allowed_types: ["text/plain", "text/markdown", "application/json", "text/csv", "image/png", "image/jpeg", "application/pdf"],
@@ -167,7 +187,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const { t } = useI18n()
   const copy = useMemo(() => buildChatCopy(t), [t])
   const { error } = useToast()
-  const [sessions, setSessions] = useState<ChatSession[]>(() => readStoredSessions(storeKeys.sessions, variant === "basic"))
+  const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [createSession()] : readStoredSessions(storeKeys.sessions, true)))
   const [activeSessionID, setActiveSessionID] = useState(() => localStorage.getItem(storeKeys.selectedSession) || "")
   const [modelName, setModelName] = useState(() => localStorage.getItem(storeKeys.model) || "")
   const [endpointMode, setEndpointMode] = useState<ChatEndpoint>(() => readStoredEndpoint(storeKeys.endpoint))
@@ -236,6 +256,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     },
   })
 
+  const {
+    data: serverSessions = [],
+    isFetched: serverSessionsFetched,
+    refetch: refetchAdvancedSessions,
+  } = useQuery<ChatSession[]>({
+    queryKey: advancedSessionsQueryKey,
+    enabled: isAdvanced,
+    refetchInterval: 2500,
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/sessions")
+      return Array.isArray(res.data) ? res.data.map(normalizeSession).filter((session): session is ChatSession => Boolean(session)) : []
+    },
+  })
+
   const modelOptions = useMemo(() => uniqueModels(catalog), [catalog])
   const selectableAPIKeys = useMemo(() => apiKeys.filter((key) => key.enabled && key.api_key), [apiKeys])
   const selectedAPIKey = useMemo(
@@ -263,6 +297,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     return agents.find((agent) => agent.id === activeSession?.agent_id)
   }, [activeSession?.agent_id, agents, isAdvanced])
   const activeRunMode: ChatRunMode = isAdvanced ? activeSession?.run_mode || "chat" : "chat"
+  const activeRun = isAdvanced ? activeSession?.latest_run : undefined
+  const isActiveRunRunning = isRunActive(activeRun)
   const activeModelName = isAdvanced ? activeSession?.model_name || selectedAgent?.default_model || modelName : modelName
   const selectableUserChannels = useMemo(
     () => catalog.filter((channel) => !activeModelName || channel.models.includes(activeModelName)),
@@ -303,8 +339,18 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [activeSession?.mcp_server_ids, enabledMCPServers, skillMCPServerIDs])
 
   useEffect(() => {
+    if (isAdvanced) {
+      return
+    }
     localStorage.setItem(storeKeys.sessions, JSON.stringify(sessions))
-  }, [sessions, storeKeys.sessions])
+  }, [isAdvanced, sessions, storeKeys.sessions])
+
+  useEffect(() => {
+    if (!isAdvanced || !serverSessionsFetched || serverSessions.length === 0) {
+      return
+    }
+    setSessions((current) => mergeServerSessions(current, serverSessions))
+  }, [isAdvanced, serverSessions, serverSessionsFetched])
 
   useEffect(() => {
     if (!activeSessionID && sessions[0]) {
@@ -368,6 +414,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [isAdvanced, selectedUserChannelID, storeKeys.userChannel])
 
   useEffect(() => {
+    if (!isAdvanced || !activeSession?.user_channel_id || activeSession.user_channel_id === selectedUserChannelID) {
+      return
+    }
+    setSelectedUserChannelID(activeSession.user_channel_id)
+  }, [activeSession?.id, activeSession?.user_channel_id, isAdvanced, selectedUserChannelID])
+
+  useEffect(() => {
     if (!isAdvanced && !modelName && modelOptions.length > 0) {
       setModelName(modelOptions[0])
     }
@@ -429,9 +482,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setPrompt("")
     setAttachments([])
     cancelEdit()
+    if (isAdvanced) {
+      void persistAdvancedSession(session)
+    }
   }
 
   const deleteSession = (sessionID: string) => {
+    if (isAdvanced) {
+      void api.delete(`/user/advanced-chat/sessions/${encodeURIComponent(sessionID)}`).then(() => refetchAdvancedSessions()).catch(() => undefined)
+    }
     const nextSessions = sessions.filter((session) => session.id !== sessionID)
     const fallbackSessions = nextSessions.length > 0 ? nextSessions : [createSession()]
     setSessions(fallbackSessions)
@@ -441,15 +500,36 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     cancelEdit()
   }
 
-  const updateSession = (sessionID: string, updater: (session: ChatSession) => ChatSession) => {
+  const persistAdvancedSession = (session: ChatSession) => {
+    if (!isAdvanced || isRunActive(session.latest_run)) {
+      return
+    }
+    saveAdvancedSessionSnapshot(session)
+      .then((saved) => {
+        if (saved) {
+          setSessions((current) => upsertSession(current, saved))
+        }
+      })
+      .catch((err) => error(apiErrorMessage(err, err instanceof Error ? err.message : copy.sendFailed)))
+  }
+
+  const updateSession = (sessionID: string, updater: (session: ChatSession) => ChatSession, options: { persist?: boolean } = {}) => {
+    const baseSession = sessions.find((session) => session.id === sessionID)
+    const persistedSession = baseSession ? { ...updater(baseSession), updated_at: new Date().toISOString() } : undefined
     setSessions((current) =>
       current.map((session) => {
         if (session.id !== sessionID) {
           return session
         }
+        if (persistedSession) {
+          return persistedSession
+        }
         return { ...updater(session), updated_at: new Date().toISOString() }
       })
     )
+    if (options.persist && persistedSession) {
+      persistAdvancedSession(persistedSession)
+    }
   }
 
   const selectSession = (sessionID: string) => {
@@ -468,7 +548,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       ...session,
       agent_id: agentID || undefined,
       model_name: agent?.default_model || session.model_name || modelOptions[0] || "",
-    }))
+    }), { persist: true })
   }
 
   const removeAgentFromSession = () => {
@@ -478,12 +558,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     updateSession(activeSession.id, (session) => ({
       ...session,
       agent_id: undefined,
-    }))
+    }), { persist: true })
   }
 
   const handleSessionModelChange = (value: string) => {
     if (isAdvanced && activeSession) {
-      updateSession(activeSession.id, (session) => ({ ...session, model_name: value }))
+      updateSession(activeSession.id, (session) => ({ ...session, model_name: value }), { persist: true })
       return
     }
     setModelName(value)
@@ -493,7 +573,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || !activeSession) {
       return
     }
-    updateSession(activeSession.id, (session) => ({ ...session, run_mode: mode }))
+    updateSession(activeSession.id, (session) => ({ ...session, run_mode: mode }), { persist: true })
   }
 
   const addSessionSkill = (skillID: string) => {
@@ -506,7 +586,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     updateSession(activeSession.id, (session) => ({
       ...session,
       skill_ids: [...session.skill_ids, skillID],
-    }))
+    }), { persist: true })
   }
 
   const removeSessionSkill = (skillID: string) => {
@@ -516,7 +596,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     updateSession(activeSession.id, (session) => ({
       ...session,
       skill_ids: session.skill_ids.filter((id) => id !== skillID),
-    }))
+    }), { persist: true })
   }
 
   const addSessionMCPServer = (serverID: string) => {
@@ -529,7 +609,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     updateSession(activeSession.id, (session) => ({
       ...session,
       mcp_server_ids: [...session.mcp_server_ids, serverID],
-    }))
+    }), { persist: true })
   }
 
   const removeSessionMCPServer = (serverID: string) => {
@@ -539,7 +619,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     updateSession(activeSession.id, (session) => ({
       ...session,
       mcp_server_ids: session.mcp_server_ids.filter((id) => id !== serverID),
-    }))
+    }), { persist: true })
   }
 
   const stopStreaming = () => {
@@ -582,6 +662,51 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
     try {
       if (isAdvanced) {
+        if (activeRunMode === "assistant") {
+          const assistantMessage = createMessage("assistant", "", [])
+          updateSession(session.id, (current) => ({
+            ...current,
+            user_channel_id: selectedUserChannel?.id || current.user_channel_id,
+            messages: [...current.messages, assistantMessage],
+            latest_run: {
+              id: "",
+              session_id: session.id,
+              assistant_message_id: assistantMessage.id,
+              mode: "assistant",
+              status: "queued",
+              status_message: "assistant_started",
+            },
+          }))
+          try {
+            const res = await api.post("/user/advanced-chat/completions", {
+              session_id: session.id,
+              title: nextTitle,
+              model: resolvedModel,
+              user_channel_id: selectedUserChannel?.id || 0,
+              mode: "assistant",
+              messages: nextMessages.map((message) => ({ id: message.id, role: message.role, content: message.content })),
+              agent_id: session.agent_id || "",
+              skill_ids: session.skill_ids,
+              mcp_server_ids: session.mcp_server_ids,
+              stream: false,
+            })
+            const serverSession = normalizeSession(res.data?.session)
+            if (serverSession) {
+              setSessions((current) => upsertSession(current, serverSession))
+              setActiveSessionID(serverSession.id)
+            }
+            void refetchAdvancedSessions()
+          } catch (err) {
+            updateSession(session.id, (current) => ({
+              ...current,
+              latest_run: undefined,
+              messages: current.messages.filter((message) => message.id !== assistantMessage.id),
+            }))
+            throw err
+          }
+          return
+        }
+
         const assistantMessage = createMessage("assistant", "", [])
         const assistantMessageID = assistantMessage.id
         const controller = new AbortController()
@@ -599,10 +724,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               ...(token ? { Authorization: `Bearer ${token}` } : {}),
             },
             body: JSON.stringify({
+              session_id: session.id,
+              title: nextTitle,
               model: resolvedModel,
               user_channel_id: selectedUserChannel?.id || 0,
               mode: activeRunMode,
-              messages: nextMessages.map((message) => ({ role: message.role, content: message.content })),
+              messages: nextMessages.map((message) => ({ id: message.id, role: message.role, content: message.content })),
               agent_id: session.agent_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
@@ -704,6 +831,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           abortControllerRef.current = null
           setIsStreamActive(false)
           setIsSending(false)
+          void refetchAdvancedSessions()
         }
         return
       }
@@ -751,7 +879,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       messages: session.messages.map((message) =>
         message.id === editingMessageID ? { ...message, content, updated_at: new Date().toISOString() } : message
       ),
-    }))
+    }), { persist: true })
     cancelEdit()
   }
 
@@ -762,7 +890,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     updateSession(activeSession.id, (session) => ({
       ...session,
       messages: session.messages.filter((message) => message.id !== messageID),
-    }))
+    }), { persist: true })
     if (editingMessageID === messageID) {
       cancelEdit()
     }
@@ -864,8 +992,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 {copy.messageCount.replace("{count}", String(session.messages.length))}
               </div>
               {isAdvanced && session.run_mode === "assistant" && (
-                <div className="mt-1 inline-flex rounded-md border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary">
-                  {copy.assistantMode}
+                <div className="mt-1 flex flex-wrap gap-1">
+                  <span className="inline-flex rounded-md border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary">
+                    {copy.assistantMode}
+                  </span>
+                  {isRunActive(session.latest_run) && (
+                    <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700">
+                      {copy.runningAssistant}
+                    </span>
+                  )}
                 </div>
               )}
             </button>
@@ -916,7 +1051,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     activeRunMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
                   onClick={() => setSessionRunMode(mode)}
-                  disabled={isSending}
+                  disabled={isSending || isActiveRunRunning}
                 >
                   {mode === "assistant" ? copy.assistantMode : copy.chatMode}
                 </button>
@@ -955,8 +1090,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle>{copy.conversation}</CardTitle>
                 {isAdvanced && (
-                  <div className="rounded-md border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
-                    {activeRunMode === "assistant" ? copy.assistantModeHelp : copy.chatModeHelp}
+                  <div className="flex flex-wrap items-center gap-2">
+                    {isActiveRunRunning && activeRun && (
+                      <div className="rounded-md border border-primary/30 bg-primary/5 px-3 py-1 text-xs text-primary">
+                        {runStatusText(activeRun, copy)}
+                      </div>
+                    )}
+                    <div className="rounded-md border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+                      {activeRunMode === "assistant" ? copy.assistantModeHelp : copy.chatModeHelp}
+                    </div>
                   </div>
                 )}
               </div>
@@ -1005,7 +1147,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                     ))}
                                   </div>
                                 )}
-                                <MarkdownContent content={message.content} />
+                                <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
                               </>
                             )}
                           </div>
@@ -1080,6 +1222,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     value={prompt}
                     placeholder={isAdvanced && activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : copy.promptPlaceholder}
+                    disabled={isActiveRunRunning}
                     onChange={(event) => setPrompt(event.target.value)}
                     onKeyDown={(event) => {
                       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -1117,10 +1260,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     {copy.stop}
                   </Button>
                 ) : (
-                  <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending} onClick={sendMessage}>
+                  <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isActiveRunRunning} onClick={sendMessage}>
                     <Send size={16} />
                     {isAdvanced && activeRunMode === "assistant"
-                      ? isSending ? copy.runningAssistant : copy.runAssistant
+                      ? isSending || isActiveRunRunning ? copy.runningAssistant : copy.runAssistant
                       : isSending ? copy.sending : copy.send}
                   </Button>
                 )}
@@ -1183,7 +1326,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <select
                       className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                       value={selectedUserChannel?.id || ""}
-                      onChange={(event) => setSelectedUserChannelID(Number(event.target.value) || 0)}
+                      onChange={(event) => {
+                        const nextID = Number(event.target.value) || 0
+                        setSelectedUserChannelID(nextID)
+                        if (activeSession) {
+                          updateSession(activeSession.id, (session) => ({ ...session, user_channel_id: nextID || undefined }), { persist: true })
+                        }
+                      }}
                     >
                       <option value="">{selectableUserChannels.length ? copy.selectChannel : copy.noChannels}</option>
                       {selectableUserChannels.map((channel) => (
@@ -1758,6 +1907,29 @@ async function responseErrorMessage(response: Response) {
   return text || `HTTP ${response.status}`
 }
 
+async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSession | null> {
+  if (isRunActive(session.latest_run)) {
+    return null
+  }
+  const res = await api.put(`/user/advanced-chat/sessions/${encodeURIComponent(session.id)}`, {
+    id: session.id,
+    title: session.title,
+    run_mode: session.run_mode,
+    agent_id: session.agent_id || "",
+    skill_ids: session.skill_ids,
+    mcp_server_ids: session.mcp_server_ids,
+    model_name: session.model_name || "",
+    user_channel_id: session.user_channel_id || 0,
+    messages: session.messages.map((message) => ({
+      id: message.id,
+      role: message.role,
+      content: message.content,
+      tool_calls: message.tool_calls || [],
+    })),
+  })
+  return normalizeSession(res.data)
+}
+
 function parseSSEEvent(raw: string): ParsedSSEEvent | null {
   let type = "message"
   const dataLines: string[] = []
@@ -1962,10 +2134,12 @@ function normalizeSession(value: unknown): ChatSession | null {
     title: typeof value.title === "string" ? value.title : "",
     messages,
     run_mode: normalizeChatRunMode(value.run_mode),
+    latest_run: normalizeRun(value.latest_run),
     agent_id: stringFromUnknown(value.agent_id),
     skill_ids: stringArrayFromUnknown(value.skill_ids),
     mcp_server_ids: stringArrayFromUnknown(value.mcp_server_ids),
     model_name: stringFromUnknown(value.model_name),
+    user_channel_id: Number(value.user_channel_id || 0) || undefined,
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
@@ -1973,6 +2147,33 @@ function normalizeSession(value: unknown): ChatSession | null {
 
 function normalizeChatRunMode(value: unknown): ChatRunMode {
   return value === "assistant" ? "assistant" : "chat"
+}
+
+function normalizeRun(value: unknown): ChatRun | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+  const id = stringFromUnknown(value.id) || ""
+  const sessionID = stringFromUnknown(value.session_id) || ""
+  if (!id && !sessionID) {
+    return undefined
+  }
+  return {
+    id,
+    session_id: sessionID,
+    assistant_message_id: stringFromUnknown(value.assistant_message_id) || "",
+    mode: normalizeChatRunMode(value.mode),
+    status: typeof value.status === "string" && value.status ? value.status : "queued",
+    status_message: typeof value.status_message === "string" ? value.status_message : undefined,
+    current_round: typeof value.current_round === "number" ? value.current_round : undefined,
+    error_message: typeof value.error_message === "string" ? value.error_message : undefined,
+    tool_calls: typeof value.tool_calls === "number" ? value.tool_calls : undefined,
+    tool_call_details: normalizeToolCalls(value.tool_call_details),
+    created_at: typeof value.created_at === "string" ? value.created_at : undefined,
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : undefined,
+    started_at: typeof value.started_at === "string" ? value.started_at : undefined,
+    finished_at: typeof value.finished_at === "string" ? value.finished_at : undefined,
+  }
 }
 
 function normalizeMessage(value: unknown): ChatMessage | null {
@@ -2105,6 +2306,44 @@ function createID() {
 function titleFromMessage(content: string, copy: ChatCopy) {
   const title = content.replace(/\s+/g, " ").trim()
   return title ? title.slice(0, 28) : copy.untitledSession
+}
+
+function isRunActive(run?: ChatRun) {
+  return run?.status === "queued" || run?.status === "running"
+}
+
+function runStatusText(run: ChatRun, copy: ChatCopy) {
+  if (run.status === "queued") {
+    return copy.assistantStarted
+  }
+  const text = streamStatusText({ message: run.status_message || "assistant_started", round: run.current_round }, copy)
+  return text || copy.runningAssistant
+}
+
+function messageDisplayContent(message: ChatMessage, run: ChatRun | undefined, copy: ChatCopy) {
+  if (message.content) {
+    return message.content
+  }
+  if (run && isRunActive(run) && run.assistant_message_id === message.id) {
+    return runStatusText(run, copy)
+  }
+  return message.content
+}
+
+function upsertSession(current: ChatSession[], next: ChatSession) {
+  const index = current.findIndex((session) => session.id === next.id)
+  if (index < 0) {
+    return [next, ...current]
+  }
+  const updated = [...current]
+  updated[index] = next
+  return updated
+}
+
+function mergeServerSessions(current: ChatSession[], serverSessions: ChatSession[]) {
+  const serverIDs = new Set(serverSessions.map((session) => session.id))
+  const localDrafts = current.filter((session) => !serverIDs.has(session.id) && session.messages.length === 0)
+  return [...localDrafts, ...serverSessions]
 }
 
 function uniqueModels(catalog: UserChannelCatalog[]) {
