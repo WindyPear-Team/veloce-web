@@ -2300,6 +2300,13 @@ function metaModelLanguageTemplates(language: string) {
   otherwise => call "your-balanced-model"
 }`,
     },
+    {
+      label: zh ? "概率切换" : "Probabilistic switch",
+      dsl: `switch {
+  weight 80 => call "your-fast-model"
+  weight 20 => call "your-strong-model"
+}`,
+    },
   ]
 }
 
@@ -2309,7 +2316,8 @@ function metaModelLanguageReference(language: string) {
       {
         title: "动作",
         body: `call "model"
-route { when 条件 => 动作 otherwise => 动作 }`,
+route { when 条件 => 动作 otherwise => 动作 }
+switch { weight 80 => 动作 weight 20 => 动作 }`,
       },
       {
         title: "操作符",
@@ -2334,7 +2342,8 @@ api_key.quota_remaining`,
     {
       title: "Actions",
       body: `call "model"
-route { when condition => action otherwise => action }`,
+route { when condition => action otherwise => action }
+switch { weight 80 => action weight 20 => action }`,
     },
     {
       title: "Operators",
@@ -2983,7 +2992,7 @@ const zhCopy = {
   cachedInputPrice: "缓存输入价格",
   metaModelDSL: "Meta Module Language",
   metaModelDSLPlaceholder: "route {\n  when request.input_tokens <= 2000 => call \"your-real-model-a\"\n  otherwise => call \"your-real-model-b\"\n}",
-  metaModelDSLHelp: "call 中的模型名必须是已存在的真实模型。当前执行支持 call 和 route。条件支持数字、布尔和字符串匹配。",
+  metaModelDSLHelp: "call 中的模型名必须是已存在的真实模型。当前执行支持 call、route 和 switch。条件支持数字、布尔和字符串匹配。",
   validateMetaModel: "校验 DSL",
   subscriptionPlans: "订阅套餐",
   subscriptionPlansDescription: "创建可通过兑换码授予的周期额度套餐",
@@ -3296,7 +3305,7 @@ const enCopy: SystemCopy = {
   cachedInputPrice: "Cached input price",
   metaModelDSL: "Meta Module Language",
   metaModelDSLPlaceholder: "route {\n  when request.input_tokens <= 2000 => call \"your-real-model-a\"\n  otherwise => call \"your-real-model-b\"\n}",
-  metaModelDSLHelp: "Model names in call must reference existing real models. Current execution supports call and route. Conditions support number, boolean, and string matching.",
+  metaModelDSLHelp: "Model names in call must reference existing real models. Current execution supports call, route, and switch. Conditions support number, boolean, and string matching.",
   validateMetaModel: "Validate Language",
   subscriptionPlans: "Subscription Plans",
   subscriptionPlansDescription: "Create recurring quota plans that can be granted by redeem codes.",
