@@ -30,6 +30,7 @@ interface APIKey {
 
 interface ChatToolCall {
   id: string
+  round?: number
   name: string
   server?: string
   tool?: string
@@ -49,6 +50,7 @@ interface ChatSession {
   id: string
   title: string
   messages: ChatMessage[]
+  run_mode: ChatRunMode
   agent_id?: string
   skill_ids: string[]
   mcp_server_ids: string[]
@@ -102,6 +104,7 @@ interface ChatAttachment {
 
 type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
 type ChatMode = "basic" | "advanced"
+type ChatRunMode = "chat" | "assistant"
 type SessionConfigTab = "basic" | "agent" | "skills" | "mcp"
 
 interface ChatProps {
@@ -259,6 +262,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     return agents.find((agent) => agent.id === activeSession?.agent_id)
   }, [activeSession?.agent_id, agents, isAdvanced])
+  const activeRunMode: ChatRunMode = isAdvanced ? activeSession?.run_mode || "chat" : "chat"
   const activeModelName = isAdvanced ? activeSession?.model_name || selectedAgent?.default_model || modelName : modelName
   const selectableUserChannels = useMemo(
     () => catalog.filter((channel) => !activeModelName || channel.models.includes(activeModelName)),
@@ -485,6 +489,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setModelName(value)
   }
 
+  const setSessionRunMode = (mode: ChatRunMode) => {
+    if (!isAdvanced || !activeSession) {
+      return
+    }
+    updateSession(activeSession.id, (session) => ({ ...session, run_mode: mode }))
+  }
+
   const addSessionSkill = (skillID: string) => {
     if (!activeSession) {
       return
@@ -590,6 +601,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             body: JSON.stringify({
               model: resolvedModel,
               user_channel_id: selectedUserChannel?.id || 0,
+              mode: activeRunMode,
               messages: nextMessages.map((message) => ({ role: message.role, content: message.content })),
               agent_id: session.agent_id || "",
               skill_ids: session.skill_ids,
@@ -851,6 +863,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <div className="mt-1 text-xs text-muted-foreground">
                 {copy.messageCount.replace("{count}", String(session.messages.length))}
               </div>
+              {isAdvanced && session.run_mode === "assistant" && (
+                <div className="mt-1 inline-flex rounded-md border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary">
+                  {copy.assistantMode}
+                </div>
+              )}
             </button>
             <Button variant="ghost" size="sm" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
               <Trash2 size={15} />
@@ -888,6 +905,24 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-4 border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:-mx-8 lg:px-8">
         <h1 className="text-3xl font-bold">{copy.title}</h1>
         <div className="flex flex-wrap gap-2">
+          {isAdvanced && (
+            <div className="inline-flex rounded-md border bg-background p-1">
+              {(["chat", "assistant"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  type="button"
+                  className={cn(
+                    "h-8 rounded px-3 text-sm transition-colors",
+                    activeRunMode === mode ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                  )}
+                  onClick={() => setSessionRunMode(mode)}
+                  disabled={isSending}
+                >
+                  {mode === "assistant" ? copy.assistantMode : copy.chatMode}
+                </button>
+              ))}
+            </div>
+          )}
           <Button
             variant="outline"
             className="gap-2 xl:hidden"
@@ -917,7 +952,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
           <Card>
             <CardHeader>
-              <CardTitle>{copy.conversation}</CardTitle>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <CardTitle>{copy.conversation}</CardTitle>
+                {isAdvanced && (
+                  <div className="rounded-md border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
+                    {activeRunMode === "assistant" ? copy.assistantModeHelp : copy.chatModeHelp}
+                  </div>
+                )}
+              </div>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="min-h-[360px] space-y-3 rounded-md border p-3">
@@ -953,6 +995,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                         )}
                                         title={[toolCall.server, toolCall.tool].filter(Boolean).join(" / ") || toolCall.name}
                                       >
+                                        {typeof toolCall.round === "number" && (
+                                          <span className="shrink-0 rounded bg-background/70 px-1 text-[10px] opacity-80">R{toolCall.round}</span>
+                                        )}
                                         <Server size={11} className="shrink-0" />
                                         <span className="truncate">{toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}</span>
                                         <span className="shrink-0 opacity-70">{toolStatusLabel(toolCall.status, copy)}</span>
@@ -1034,7 +1079,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <textarea
                     className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                     value={prompt}
-                    placeholder={copy.promptPlaceholder}
+                    placeholder={isAdvanced && activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : copy.promptPlaceholder}
                     onChange={(event) => setPrompt(event.target.value)}
                     onKeyDown={(event) => {
                       if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
@@ -1074,7 +1119,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 ) : (
                   <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending} onClick={sendMessage}>
                     <Send size={16} />
-                    {isSending ? copy.sending : copy.send}
+                    {isAdvanced && activeRunMode === "assistant"
+                      ? isSending ? copy.runningAssistant : copy.runAssistant
+                      : isSending ? copy.sending : copy.send}
                   </Button>
                 )}
               </div>
@@ -1605,7 +1652,7 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
   const legacyMessages = includeLegacy ? readLegacyMessages() : []
   if (legacyMessages.length > 0) {
     const now = new Date().toISOString()
-    return [{ id: createID(), title: "", messages: legacyMessages, skill_ids: [], mcp_server_ids: [], created_at: now, updated_at: now }]
+    return [{ id: createID(), title: "", messages: legacyMessages, run_mode: "chat", skill_ids: [], mcp_server_ids: [], created_at: now, updated_at: now }]
   }
   return [createSession()]
 }
@@ -1738,6 +1785,9 @@ function streamStatusText(payload: any, copy: ChatCopy) {
   }
   if (message === "loading_tools") {
     return copy.streamLoadingTools
+  }
+  if (message === "assistant_started") {
+    return copy.assistantStarted
   }
   if (message === "model_round") {
     const round = typeof payload?.round === "number" ? String(payload.round) : ""
@@ -1911,6 +1961,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     id: typeof value.id === "string" && value.id ? value.id : createID(),
     title: typeof value.title === "string" ? value.title : "",
     messages,
+    run_mode: normalizeChatRunMode(value.run_mode),
     agent_id: stringFromUnknown(value.agent_id),
     skill_ids: stringArrayFromUnknown(value.skill_ids),
     mcp_server_ids: stringArrayFromUnknown(value.mcp_server_ids),
@@ -1918,6 +1969,10 @@ function normalizeSession(value: unknown): ChatSession | null {
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
+}
+
+function normalizeChatRunMode(value: unknown): ChatRunMode {
+  return value === "assistant" ? "assistant" : "chat"
 }
 
 function normalizeMessage(value: unknown): ChatMessage | null {
@@ -1955,8 +2010,10 @@ function normalizeToolCalls(value: unknown): ChatToolCall[] {
     if (!name && !tool) {
       return
     }
+    const round = typeof item.round === "number" && Number.isFinite(item.round) && item.round > 0 ? item.round : undefined
     calls.push({
-      id: `${name || tool}-${index}`,
+      id: `${round || 0}-${server}-${name || tool}-${index}`,
+      round,
       name: name || tool,
       server,
       tool,
@@ -1969,7 +2026,9 @@ function normalizeToolCalls(value: unknown): ChatToolCall[] {
 function mergeToolCalls(current: ChatToolCall[], incoming: ChatToolCall[]) {
   const merged = [...current]
   for (const next of incoming) {
-    const index = merged.findIndex((item) => item.name === next.name && item.server === next.server && item.tool === next.tool)
+    const index = merged.findIndex(
+      (item) => item.round === next.round && item.name === next.name && item.server === next.server && item.tool === next.tool
+    )
     if (index >= 0) {
       merged[index] = { ...merged[index], ...next }
     } else {
@@ -2022,6 +2081,7 @@ function createSession(input: { agentID?: string; modelName?: string } = {}): Ch
     id: createID(),
     title: "",
     messages: [],
+    run_mode: "chat",
     agent_id: input.agentID || undefined,
     skill_ids: [],
     mcp_server_ids: [],
@@ -2207,7 +2267,12 @@ const chatCopyKeys = {
   selectModel: "chat.selectModel",
   conversation: "chat.conversation",
   noMessages: "chat.noMessages",
+  chatMode: "chat.chatMode",
+  assistantMode: "chat.assistantMode",
+  chatModeHelp: "chat.chatModeHelp",
+  assistantModeHelp: "chat.assistantModeHelp",
   promptPlaceholder: "chat.promptPlaceholder",
+  assistantPromptPlaceholder: "chat.assistantPromptPlaceholder",
   attachmentMessageTitle: "chat.attachmentMessageTitle",
   addAttachment: "chat.addAttachment",
   removeAttachment: "chat.removeAttachment",
@@ -2216,6 +2281,8 @@ const chatCopyKeys = {
   attachmentTypeBlocked: "chat.attachmentTypeBlocked",
   send: "chat.send",
   sending: "chat.sending",
+  runAssistant: "chat.runAssistant",
+  runningAssistant: "chat.runningAssistant",
   editMessage: "chat.editMessage",
   deleteMessage: "chat.deleteMessage",
   saveMessage: "chat.saveMessage",
@@ -2229,6 +2296,7 @@ const chatCopyKeys = {
   stop: "chat.stop",
   streamStarted: "chat.streamStarted",
   streamLoadingTools: "chat.streamLoadingTools",
+  assistantStarted: "chat.assistantStarted",
   streamModelRound: "chat.streamModelRound",
   streamThinking: "chat.streamThinking",
   usedTools: "chat.usedTools",
