@@ -39,10 +39,16 @@ interface ChatToolCall {
   result?: string
 }
 
+interface ChatContentPart {
+  round?: number
+  content: string
+}
+
 interface ChatMessage {
   id: string
   role: "user" | "assistant"
   content: string
+  content_parts?: ChatContentPart[]
   created_at: string
   updated_at?: string
   tool_calls?: ChatToolCall[]
@@ -353,12 +359,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const activeRun = isAdvanced ? currentSession?.latest_run : undefined
   const isActiveRunRunning = isRunActive(activeRun)
   const activeRunID = activeRun?.id || ""
+  const hasApprovalRequiredToolCall = useMemo(
+    () => Boolean(currentSession?.messages.some((message) => message.tool_calls?.some((toolCall) => toolCall.status === "approval_required"))),
+    [currentSession?.messages]
+  )
   const {
     data: pendingConnectorApprovals = [],
     refetch: refetchConnectorApprovals,
   } = useQuery<ConnectorApprovalTask[]>({
     queryKey: connectorApprovalsQueryKey(activeRunID),
-    enabled: isAdvanced && Boolean(activeRunID) && isActiveRunRunning,
+    enabled: isAdvanced && Boolean(activeRunID) && (isActiveRunRunning || hasApprovalRequiredToolCall),
     refetchInterval: 1000,
     queryFn: async () => {
       const res = await api.get(`/user/advanced-chat/runs/${encodeURIComponent(activeRunID)}/connector-tasks/pending`)
@@ -795,6 +805,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setDecidingConnectorTaskID(taskID)
     try {
       await api.post(`/user/advanced-chat/connector-tasks/${encodeURIComponent(taskID)}/decision`, { approved })
+      if (activeSessionID) {
+        updateSession(activeSessionID, (session) => ({
+          ...session,
+          messages: session.messages.map((message) => ({
+            ...message,
+            tool_calls: (message.tool_calls || []).map((toolCall) =>
+              stringArgument(toolCall.arguments, "connector_task_id") === taskID
+                ? { ...toolCall, status: approved ? "running" : "error" }
+                : toolCall
+            ),
+          })),
+        }))
+      }
       await refetchConnectorApprovals()
       void refetchAdvancedSessions()
     } catch (err) {
@@ -979,11 +1002,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               if (!delta) {
                 return
               }
+              const round = typeof event.payload.round === "number" && Number.isFinite(event.payload.round) ? event.payload.round : 1
               accumulatedText += delta
               updateSession(session.id, (current) => ({
                 ...current,
                 messages: current.messages.map((message) =>
-                  message.id === assistantMessageID ? { ...message, content: accumulatedText } : message
+                  message.id === assistantMessageID
+                    ? { ...message, content: accumulatedText, content_parts: appendContentPart(message.content_parts || [], round, delta) }
+                    : message
                 ),
               }))
             } else if (event.type === "status") {
@@ -1012,12 +1038,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               }))
             } else if (event.type === "done") {
               const finalContent = typeof event.payload.message?.content === "string" ? event.payload.message.content : accumulatedText
+              const finalParts = normalizeContentParts(event.payload.message?.content_parts, finalContent)
               const finalToolCalls = normalizeToolCalls(event.payload.tool_call_details)
               updateSession(session.id, (current) => ({
                 ...current,
                 messages: current.messages.map((message) =>
                   message.id === assistantMessageID
-                    ? { ...message, content: finalContent, tool_calls: finalToolCalls }
+                    ? { ...message, content: finalContent, content_parts: finalParts, tool_calls: finalToolCalls }
                     : message
                 ),
               }))
@@ -1384,18 +1411,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                   onChange={(event) => setEditingContent(event.target.value)}
                                 />
                               ) : (
-                                <>
-                                  {message.tool_calls && message.tool_calls.length > 0 && (
-                                    <ToolCallRounds
-                                      toolCalls={message.tool_calls}
-                                      copy={copy}
-                                      approvalTasks={isAdvanced && message.id === activeRun?.assistant_message_id ? pendingConnectorApprovals : []}
-                                      decidingTaskID={decidingConnectorTaskID}
-                                      onDecide={decideConnectorApproval}
-                                    />
-                                  )}
-                                  <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
-                                </>
+                                <MessageContent
+                                  message={message}
+                                  activeRun={activeRun}
+                                  isAdvanced={isAdvanced}
+                                  copy={copy}
+                                  approvalTasks={pendingConnectorApprovals}
+                                  decidingTaskID={decidingConnectorTaskID}
+                                  onDecide={decideConnectorApproval}
+                                />
                               )}
                             </div>
                           </div>
@@ -1876,18 +1900,77 @@ function MarkdownContent({ content }: { content: string }) {
   )
 }
 
+function MessageContent({
+  message,
+  activeRun,
+  isAdvanced,
+  copy,
+  approvalTasks,
+  decidingTaskID,
+  onDecide,
+}: {
+  message: ChatMessage
+  activeRun?: ChatRun
+  isAdvanced: boolean
+  copy: ChatCopy
+  approvalTasks: ConnectorApprovalTask[]
+  decidingTaskID: string
+  onDecide: (taskID: string, approved: boolean) => void
+}) {
+  if (message.role !== "assistant") {
+    return <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
+  }
+
+  const parts = messageContentParts(message, activeRun, copy)
+  const toolCallsByRound = groupToolCallsByRound(message.tool_calls || [])
+  const rounds = orderedMessageRounds(parts, toolCallsByRound)
+  if (rounds.length === 0) {
+    return <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
+  }
+
+  return (
+    <div className="space-y-3">
+      {rounds.map((round) => {
+        const roundParts = parts.filter((part) => normalizedRound(part.round) === round)
+        const roundToolCalls = toolCallsByRound.get(round) || []
+        const roundApprovalTasks =
+          isAdvanced && roundToolCalls.some((toolCall) => toolCall.status === "approval_required") ? approvalTasks : []
+        return (
+          <div key={round} className="space-y-2">
+            {roundParts.map((part, index) => (
+              <MarkdownContent key={`${round}-text-${index}`} content={part.content} />
+            ))}
+            {roundToolCalls.length > 0 && (
+              <ToolCallRounds
+                toolCalls={roundToolCalls}
+                copy={copy}
+                approvalTasks={roundApprovalTasks}
+                decidingTaskID={decidingTaskID}
+                onDecide={onDecide}
+                collapseCompleted
+              />
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function ToolCallRounds({
   toolCalls,
   copy,
   approvalTasks = [],
   decidingTaskID = "",
   onDecide,
+  collapseCompleted = false,
 }: {
   toolCalls: ChatToolCall[]
   copy: ChatCopy
   approvalTasks?: ConnectorApprovalTask[]
   decidingTaskID?: string
   onDecide?: (taskID: string, approved: boolean) => void
+  collapseCompleted?: boolean
 }) {
   if (toolCalls.length === 0) {
     return null
@@ -1902,6 +1985,7 @@ function ToolCallRounds({
           approvalTask={findConnectorApprovalTask(toolCall, approvalTasks)}
           decidingTaskID={decidingTaskID}
           onDecide={onDecide}
+          collapseCompleted={collapseCompleted}
         />
       ))}
     </div>
@@ -1914,15 +1998,17 @@ function ToolCallDetails({
   approvalTask,
   decidingTaskID = "",
   onDecide,
+  collapseCompleted = false,
 }: {
   toolCall: ChatToolCall
   copy: ChatCopy
   approvalTask?: ConnectorApprovalTask
   decidingTaskID?: string
   onDecide?: (taskID: string, approved: boolean) => void
+  collapseCompleted?: boolean
 }) {
   const shouldAutoOpen = toolCall.status === "running" || toolCall.status === "approval_required"
-  const [open, setOpen] = useState(shouldAutoOpen)
+  const [open, setOpen] = useState(collapseCompleted ? shouldAutoOpen : true)
   const builtinKind = builtinToolKind(toolCall)
   const path = stringArgument(toolCall.arguments, "path")
   const content = stringArgument(toolCall.arguments, "content")
@@ -1933,10 +2019,10 @@ function ToolCallDetails({
     : toolLabel(toolCall)
 
   useEffect(() => {
-    setOpen(shouldAutoOpen)
-  }, [shouldAutoOpen, toolCall.id])
+    setOpen(collapseCompleted ? shouldAutoOpen : true)
+  }, [collapseCompleted, shouldAutoOpen, toolCall.id])
 
-  if (builtinKind === "read" || builtinKind === "list" || builtinKind === "command") {
+  if (builtinKind === "read" || builtinKind === "list") {
     return (
       <div className="rounded-md border bg-background p-2">
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
@@ -1985,6 +2071,8 @@ function ToolCallDetails({
         </div>
       ) : builtinKind === "replace" ? (
         <ReplacementDiffList entries={replacements} copy={copy} />
+      ) : builtinKind === "command" ? (
+        <ToolResultBlock result={toolCall.result} copy={copy} />
       ) : (
         <>
           <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolArguments}</div>
@@ -1994,6 +2082,21 @@ function ToolCallDetails({
         </>
       )}
     </details>
+  )
+}
+
+function ToolResultBlock({ result, copy }: { result?: string; copy: ChatCopy }) {
+  const text = typeof result === "string" ? result.trim() : ""
+  if (!text) {
+    return <div className="mt-2 rounded bg-muted px-3 py-2 text-xs text-muted-foreground">{copy.emptyResponse}</div>
+  }
+  return (
+    <div className="mt-2">
+      <div className="mb-1 text-[11px] font-medium text-muted-foreground">{copy.toolResult}</div>
+      <pre className="max-h-72 overflow-auto whitespace-pre-wrap rounded bg-muted p-2 font-mono text-xs leading-relaxed">
+        {text}
+      </pre>
+    </div>
   )
 }
 
@@ -2491,6 +2594,7 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
       id: message.id,
       role: message.role,
       content: message.content,
+      content_parts: message.content_parts || [],
       tool_calls: message.tool_calls || [],
     })),
   })
@@ -2502,6 +2606,7 @@ function advancedMessagePayload(messages: ChatMessage[]) {
     id: message.id,
     role: message.role,
     content: message.content,
+    content_parts: message.content_parts || [],
     tool_calls: message.tool_calls || [],
   }))
 }
@@ -2820,10 +2925,48 @@ function normalizeMessage(value: unknown): ChatMessage | null {
     id: typeof value.id === "string" && value.id ? value.id : createID(),
     role: value.role,
     content: value.content,
+    content_parts: normalizeContentParts(value.content_parts, value.content),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : undefined,
     tool_calls: normalizeToolCalls(value.tool_calls),
   }
+}
+
+function normalizeContentParts(value: unknown, fallback = ""): ChatContentPart[] {
+  if (!Array.isArray(value)) {
+    return fallback.trim() ? [{ round: 1, content: fallback }] : []
+  }
+  const parts: ChatContentPart[] = []
+  value.forEach((item, index) => {
+    if (!isRecord(item)) {
+      return
+    }
+    const content = typeof item.content === "string" ? item.content : ""
+    if (!content.trim()) {
+      return
+    }
+    const round = typeof item.round === "number" && Number.isFinite(item.round) && item.round > 0 ? item.round : index + 1
+    parts.push({ round, content })
+  })
+  if (parts.length === 0 && fallback.trim()) {
+    return [{ round: 1, content: fallback }]
+  }
+  return parts
+}
+
+function appendContentPart(parts: ChatContentPart[], round: number, delta: string): ChatContentPart[] {
+  if (!delta.trim()) {
+    return parts
+  }
+  const nextRound = round > 0 ? round : 1
+  const next = [...parts]
+  const last = next[next.length - 1]
+  if (last && normalizedRound(last.round) === nextRound) {
+    next[next.length - 1] = { ...last, content: last.content + delta }
+    return next
+  }
+  next.push({ round: nextRound, content: delta })
+  return next
 }
 
 function normalizeToolCalls(value: unknown): ChatToolCall[] {
@@ -2930,7 +3073,14 @@ function createSession(input: { agentID?: string; modelName?: string } = {}): Ch
 }
 
 function createMessage(role: ChatMessage["role"], content: string, toolCalls: ChatToolCall[] = []): ChatMessage {
-  return { id: createID(), role, content, created_at: new Date().toISOString(), tool_calls: toolCalls }
+  return {
+    id: createID(),
+    role,
+    content,
+    content_parts: content.trim() ? [{ round: 1, content }] : [],
+    created_at: new Date().toISOString(),
+    tool_calls: toolCalls,
+  }
 }
 
 function createID() {
@@ -2974,6 +3124,35 @@ function messageDisplayContent(message: ChatMessage, run: ChatRun | undefined, c
     return copy.emptyResponse
   }
   return message.content
+}
+
+function messageContentParts(message: ChatMessage, run: ChatRun | undefined, copy: ChatCopy) {
+  const parts = normalizeContentParts(message.content_parts, "")
+  if (parts.length > 0) {
+    return parts
+  }
+  const content = messageDisplayContent(message, run, copy)
+  return content.trim() ? [{ round: 1, content }] : []
+}
+
+function groupToolCallsByRound(toolCalls: ChatToolCall[]) {
+  const groups = new Map<number, ChatToolCall[]>()
+  for (const toolCall of toolCalls) {
+    const round = normalizedRound(toolCall.round)
+    groups.set(round, [...(groups.get(round) || []), toolCall])
+  }
+  return groups
+}
+
+function orderedMessageRounds(parts: ChatContentPart[], toolCallsByRound: Map<number, ChatToolCall[]>) {
+  const rounds = new Set<number>()
+  parts.forEach((part) => rounds.add(normalizedRound(part.round)))
+  toolCallsByRound.forEach((_items, round) => rounds.add(round))
+  return Array.from(rounds).sort((a, b) => a - b)
+}
+
+function normalizedRound(round?: number) {
+  return typeof round === "number" && Number.isFinite(round) && round > 0 ? round : 1
 }
 
 function upsertSession(current: ChatSession[], next: ChatSession) {
@@ -3178,6 +3357,10 @@ function toolLabel(toolCall: ChatToolCall) {
 function findConnectorApprovalTask(toolCall: ChatToolCall, tasks: ConnectorApprovalTask[]) {
   if (toolCall.status !== "approval_required" || tasks.length === 0) {
     return undefined
+  }
+  const byTaskID = tasks.find((task) => task.id === stringArgument(toolCall.arguments, "connector_task_id"))
+  if (byTaskID) {
+    return byTaskID
   }
   const byPreviewID = tasks.find((task) => stringArgument(task.payload, "preview_tool_call_id") === toolCall.id)
   if (byPreviewID) {

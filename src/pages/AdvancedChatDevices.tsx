@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Copy, Laptop, Plus, RefreshCcw, Save, Settings, Terminal } from "lucide-react"
+import { Copy, KeyRound, Laptop, Plus, RefreshCcw, Save, Settings, Terminal, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -34,6 +34,8 @@ export default function AdvancedChatDevices() {
   const [deviceName, setDeviceName] = useState(copy.defaultDeviceName)
   const [token, setToken] = useState("")
   const [isCreating, setIsCreating] = useState(false)
+  const [generatingDeviceID, setGeneratingDeviceID] = useState("")
+  const [deletingDeviceID, setDeletingDeviceID] = useState("")
   const [editingDeviceID, setEditingDeviceID] = useState("")
   const [editingDeviceName, setEditingDeviceName] = useState("")
 
@@ -102,6 +104,44 @@ export default function AdvancedChatDevices() {
     }
     await navigator.clipboard.writeText(value)
     success(copy.copied)
+  }
+
+  const regenerateDeviceCommand = async (device: ConnectorDevice) => {
+    setGeneratingDeviceID(device.id)
+    try {
+      const res = await api.post(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}/token`)
+      const nextToken = typeof res.data?.token === "string" ? res.data.token : ""
+      if (!nextToken) {
+        throw new Error(copy.regenerateFailed)
+      }
+      setDeviceName(device.name)
+      setToken(nextToken)
+      success(copy.commandRegenerated)
+      await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
+    } catch (err) {
+      error(apiErrorMessage(err, copy.regenerateFailed))
+    } finally {
+      setGeneratingDeviceID("")
+    }
+  }
+
+  const deleteDevice = async (device: ConnectorDevice) => {
+    if (!window.confirm(copy.deleteConfirm.replace("{name}", device.name))) {
+      return
+    }
+    setDeletingDeviceID(device.id)
+    try {
+      await api.delete(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}`)
+      if (generatingDeviceID === device.id) {
+        setGeneratingDeviceID("")
+      }
+      success(copy.deleted)
+      await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
+    } catch (err) {
+      error(apiErrorMessage(err, copy.deleteFailed))
+    } finally {
+      setDeletingDeviceID("")
+    }
   }
 
   const openDeviceEditor = (device: ConnectorDevice) => {
@@ -210,16 +250,40 @@ export default function AdvancedChatDevices() {
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">{copy.lastSeen}: {formatDateTime(device.last_seen_at) || "-"}</div>
                     </div>
-                    <div className="flex lg:justify-end">
+                    <div className="flex flex-wrap gap-2 lg:justify-end">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        className="h-8 gap-2"
+                        onClick={() => regenerateDeviceCommand(device)}
+                        disabled={Boolean(generatingDeviceID) || deletingDeviceID === device.id}
+                        aria-label={copy.regenerateCommand}
+                        title={copy.regenerateCommand}
+                      >
+                        <KeyRound size={15} />
+                        {generatingDeviceID === device.id ? copy.regeneratingCommand : copy.regenerateCommand}
+                      </Button>
                       <Button
                         variant="outline"
                         size="icon"
                         className="h-8 w-8"
                         onClick={() => openDeviceEditor(device)}
+                        disabled={deletingDeviceID === device.id}
                         aria-label={copy.editDevice}
                         title={copy.editDevice}
                       >
                         <Settings size={15} />
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="h-8 w-8 text-destructive hover:text-destructive"
+                        onClick={() => deleteDevice(device)}
+                        disabled={Boolean(deletingDeviceID)}
+                        aria-label={copy.deleteDevice}
+                        title={copy.deleteDevice}
+                      >
+                        <Trash2 size={15} />
                       </Button>
                     </div>
                   </div>
@@ -344,6 +408,14 @@ const zhCopy = {
   copied: "已复制",
   created: "连接命令已生成",
   createFailed: "生成连接命令失败",
+  regenerateCommand: "重新生成连接命令",
+  regeneratingCommand: "生成中...",
+  commandRegenerated: "连接命令已重新生成",
+  regenerateFailed: "重新生成连接命令失败",
+  deleteDevice: "删除设备",
+  deleteConfirm: "确定删除设备“{name}”吗？",
+  deleted: "设备已删除",
+  deleteFailed: "删除设备失败",
   deviceList: "设备列表",
   empty: "暂无设备，先生成命令并启动 app 连接器。",
   refresh: "刷新",
@@ -373,6 +445,14 @@ const enCopy: typeof zhCopy = {
   copied: "Copied",
   created: "Connector command generated",
   createFailed: "Failed to generate connector command",
+  regenerateCommand: "Regenerate command",
+  regeneratingCommand: "Generating...",
+  commandRegenerated: "Connector command regenerated",
+  regenerateFailed: "Failed to regenerate connector command",
+  deleteDevice: "Delete device",
+  deleteConfirm: 'Delete device "{name}"?',
+  deleted: "Device deleted",
+  deleteFailed: "Failed to delete device",
   deviceList: "Device list",
   empty: "No devices yet. Generate a command and start the app connector first.",
   refresh: "Refresh",

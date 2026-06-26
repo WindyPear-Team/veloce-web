@@ -282,7 +282,7 @@ const baseTranslations = {
     "chat.jumpToLatest": "跳到最新",
     "chat.expandToolCall": "点击展开",
     "chat.toolStatusOk": "成功",
-    "chat.toolStatusRunning": "调用中",
+    "chat.toolStatusRunning": "正在运行",
     "chat.toolStatusApprovalRequired": "等待确认",
     "chat.toolStatusError": "失败",
     "chat.toolStatusMissing": "未找到",
