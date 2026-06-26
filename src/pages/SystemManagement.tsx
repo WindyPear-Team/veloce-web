@@ -255,6 +255,7 @@ type SystemTab =
   | "statusMonitor"
   | "groups"
   | "metaModels"
+  | "advancedChatAssistant"
   | "advancedChatAttachments"
   | "advancedChatMCP"
   | "subscriptionPlans"
@@ -268,12 +269,12 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
   operations: ["statusMonitor", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
-  advancedChat: ["advancedChatAttachments", "advancedChatMCP"],
+  advancedChat: ["advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP"],
   subscriptions: ["subscriptionPlans"],
   redeemCodes: ["redeemCodes"],
 }
 
-const premiumOnlySystemTabs: SystemTab[] = ["metaModels", "advancedChatAttachments", "advancedChatMCP", "subscriptionPlans", "redeemCodes"]
+const premiumOnlySystemTabs: SystemTab[] = ["metaModels", "advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP", "subscriptionPlans", "redeemCodes"]
 
 interface NavRow {
   id: string
@@ -752,7 +753,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     })
   }
 
-  const shouldShowSave = !["groups", "metaModels", "advancedChatAttachments", "advancedChatMCP", "subscriptionPlans", "redeemCodes"].includes(activeTab)
+  const shouldShowSave = !["groups", "metaModels", "advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP", "subscriptionPlans", "redeemCodes"].includes(activeTab)
   const visibleTabs = systemTabs(copy).filter((tab) => allowedTabs.includes(tab.id))
   const canCreateRedeemCode = Number(redeemDraft.amount || 0) > 0 || Boolean(redeemDraft.group_id) || Boolean(redeemDraft.subscription_plan_id)
   const canSaveSubscriptionPlan = Boolean(subscriptionPlanDraft.name.trim()) && Number(subscriptionPlanDraft.reset_amount || 0) > 0 && Number(subscriptionPlanDraft.reset_interval_days || 0) > 0
@@ -1398,6 +1399,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
+      {isPremium && activeTab === "advancedChatAssistant" && (
+        <AdvancedChatManagement mode="assistant" />
+      )}
+
       {isPremium && activeTab === "advancedChatAttachments" && (
         <AdvancedChatManagement mode="attachments" />
       )}
@@ -1739,6 +1744,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "statusMonitor", label: copy.statusMonitor, icon: Activity },
     { id: "groups", label: copy.groups, icon: Layers },
     { id: "metaModels", label: copy.metaModels, icon: Layers },
+    { id: "advancedChatAssistant", label: copy.advancedChatAssistant, icon: Bot },
     { id: "advancedChatAttachments", label: copy.advancedChatAttachments, icon: Bot },
     { id: "advancedChatMCP", label: copy.advancedChatMCP, icon: Bot },
     { id: "subscriptionPlans", label: copy.subscriptionPlans, icon: HandCoins },
@@ -3123,6 +3129,7 @@ const zhCopy = {
   statusMonitor: "状态监测",
   groups: "用户分组",
   advancedChat: "高级聊天",
+  advancedChatAssistant: "助理设置",
   advancedChatAttachments: "附件设置",
   advancedChatMCP: "MCP 服务器",
   siteName: "站点名称",
@@ -3472,6 +3479,7 @@ const enCopy: SystemCopy = {
   statusMonitor: "Status Monitor",
   groups: "User Groups",
   advancedChat: "Advanced Chat",
+  advancedChatAssistant: "Assistant",
   advancedChatAttachments: "Attachments",
   advancedChatMCP: "MCP Servers",
   siteName: "Site name",

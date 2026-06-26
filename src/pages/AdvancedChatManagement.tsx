@@ -32,12 +32,26 @@ interface AdvancedChatSettings {
   attachment_max_mb: number
   attachment_allowed_types: string[]
   builtin_mcp_servers: MCPServer[]
+  assistant_mode_enabled: boolean
+  assistant_mcp_tools_enabled: boolean
+  assistant_connector_list_files_enabled: boolean
+  assistant_connector_read_file_enabled: boolean
+  assistant_connector_write_file_enabled: boolean
+  assistant_connector_replace_text_enabled: boolean
+  assistant_connector_run_command_enabled: boolean
 }
 
 const defaultAdvancedChatSettings: AdvancedChatSettings = {
   attachment_max_mb: 10,
   attachment_allowed_types: ["text/plain", "text/markdown", "application/json", "text/csv", "image/png", "image/jpeg", "application/pdf"],
   builtin_mcp_servers: [],
+  assistant_mode_enabled: true,
+  assistant_mcp_tools_enabled: true,
+  assistant_connector_list_files_enabled: true,
+  assistant_connector_read_file_enabled: true,
+  assistant_connector_write_file_enabled: true,
+  assistant_connector_replace_text_enabled: true,
+  assistant_connector_run_command_enabled: true,
 }
 
 const emptyDraft: MCPDraft = {
@@ -47,7 +61,7 @@ const emptyDraft: MCPDraft = {
   enabled: true,
 }
 
-export default function AdvancedChatManagement({ mode = "attachments" }: { mode?: "attachments" | "mcp" }) {
+export default function AdvancedChatManagement({ mode = "attachments" }: { mode?: "attachments" | "assistant" | "mcp" }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error } = useToast()
@@ -111,6 +125,32 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
     },
     onError: (err) => error(err instanceof Error ? err.message : "保存附件设置失败"),
+  })
+
+  const saveAssistantSettings = useMutation({
+    mutationFn: async () => {
+      if (!isPremium) {
+        throw new Error("Advanced chat requires premium edition")
+      }
+      const res = await api.put("/advanced-chat/settings", {
+        assistant_mode_enabled: form.assistant_mode_enabled,
+        assistant_mcp_tools_enabled: form.assistant_mcp_tools_enabled,
+        assistant_connector_list_files_enabled: form.assistant_connector_list_files_enabled,
+        assistant_connector_read_file_enabled: form.assistant_connector_read_file_enabled,
+        assistant_connector_write_file_enabled: form.assistant_connector_write_file_enabled,
+        assistant_connector_replace_text_enabled: form.assistant_connector_replace_text_enabled,
+        assistant_connector_run_command_enabled: form.assistant_connector_run_command_enabled,
+      })
+      return normalizeAdvancedChatSettings(res.data)
+    },
+    onSuccess: (saved) => {
+      setForm(saved)
+      setTypesText(saved.attachment_allowed_types.join("\n"))
+      success("助理设置已保存")
+      queryClient.invalidateQueries({ queryKey: ["advanced-chat-admin-settings"] })
+      queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
+    },
+    onError: (err) => error(err instanceof Error ? err.message : "保存助理设置失败"),
   })
 
   const saveMCPServers = useMutation({
@@ -192,7 +232,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">高级聊天管理</h1>
-          <div className="mt-2 text-sm text-muted-foreground">管理独立聊天的附件限制和内置 MCP 服务器。</div>
+          <div className="mt-2 text-sm text-muted-foreground">管理独立聊天的助理模式、可用工具、附件限制和内置 MCP 服务器。</div>
         </div>
       </div>
 
@@ -230,6 +270,70 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                   />
                   <span className="block text-xs text-muted-foreground">每行一个 MIME 类型，支持 `text/*` 这样的通配。</span>
                 </label>
+              </CardContent>
+            </Card>
+          )}
+
+          {mode === "assistant" && (
+            <Card>
+              <CardHeader>
+                <div className="flex items-center justify-between gap-3">
+                  <CardTitle>助理设置</CardTitle>
+                  <Button className="gap-2" disabled={saveAssistantSettings.isPending} onClick={() => saveAssistantSettings.mutate()}>
+                    <Save size={16} />
+                    {saveAssistantSettings.isPending ? "保存中" : "保存"}
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <ToggleRow
+                  title="启用助理模式"
+                  description="关闭后，独立聊天页面不能切换到助理模式，后端也会拒绝助理运行请求。"
+                  checked={form.assistant_mode_enabled}
+                  onChange={(checked) => setForm((current) => ({ ...current, assistant_mode_enabled: checked }))}
+                />
+                <div className="rounded-md border p-3">
+                  <div className="text-sm font-medium">助理工具</div>
+                  <div className="mt-1 text-xs text-muted-foreground">控制助理模式下模型可以调用的工具类型。关闭的工具不会出现在可用工具列表中。</div>
+                  <div className="mt-4 grid gap-3 lg:grid-cols-2">
+                    <ToggleRow
+                      title="MCP 工具"
+                      description="允许助理调用用户选择的 MCP 服务工具。"
+                      checked={form.assistant_mcp_tools_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_mcp_tools_enabled: checked }))}
+                    />
+                    <ToggleRow
+                      title="列出文件"
+                      description="允许查看本地工作区目录列表。"
+                      checked={form.assistant_connector_list_files_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_list_files_enabled: checked }))}
+                    />
+                    <ToggleRow
+                      title="读取文件"
+                      description="允许读取本地工作区文件内容。"
+                      checked={form.assistant_connector_read_file_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_read_file_enabled: checked }))}
+                    />
+                    <ToggleRow
+                      title="写入文件"
+                      description="允许创建或覆盖本地工作区文件，仍会走用户确认流程。"
+                      checked={form.assistant_connector_write_file_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_write_file_enabled: checked }))}
+                    />
+                    <ToggleRow
+                      title="替换文本"
+                      description="允许对本地工作区文件执行文本替换，仍会走用户确认流程。"
+                      checked={form.assistant_connector_replace_text_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_replace_text_enabled: checked }))}
+                    />
+                    <ToggleRow
+                      title="运行命令"
+                      description="允许在本地工作区运行命令，仍受命令前缀和确认流程限制。"
+                      checked={form.assistant_connector_run_command_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_run_command_enabled: checked }))}
+                    />
+                  </div>
+                </div>
               </CardContent>
             </Card>
           )}
@@ -332,6 +436,33 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
   )
 }
 
+function ToggleRow({
+  title,
+  description,
+  checked,
+  onChange,
+}: {
+  title: string
+  description: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+}) {
+  return (
+    <label className="flex items-start gap-3 rounded-md border bg-background p-3 text-sm">
+      <input
+        type="checkbox"
+        className="mt-1"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+      <span>
+        <span className="block font-medium">{title}</span>
+        <span className="mt-1 block text-xs leading-5 text-muted-foreground">{description}</span>
+      </span>
+    </label>
+  )
+}
+
 function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
   const item = isRecord(value) ? value : {}
   return {
@@ -340,6 +471,13 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
       ? item.attachment_allowed_types.filter((value): value is string => typeof value === "string")
       : defaultAdvancedChatSettings.attachment_allowed_types,
     builtin_mcp_servers: Array.isArray(item.builtin_mcp_servers) ? item.builtin_mcp_servers.map(normalizeMCPServer) : [],
+    assistant_mode_enabled: item.assistant_mode_enabled !== false,
+    assistant_mcp_tools_enabled: item.assistant_mcp_tools_enabled !== false,
+    assistant_connector_list_files_enabled: item.assistant_connector_list_files_enabled !== false,
+    assistant_connector_read_file_enabled: item.assistant_connector_read_file_enabled !== false,
+    assistant_connector_write_file_enabled: item.assistant_connector_write_file_enabled !== false,
+    assistant_connector_replace_text_enabled: item.assistant_connector_replace_text_enabled !== false,
+    assistant_connector_run_command_enabled: item.assistant_connector_run_command_enabled !== false,
   }
 }
 

@@ -147,6 +147,13 @@ interface AdvancedChatSettings {
   mcp_servers: MCPServer[]
   builtin_mcp_servers: MCPServer[]
   custom_mcp_servers: MCPServer[]
+  assistant_mode_enabled: boolean
+  assistant_mcp_tools_enabled: boolean
+  assistant_connector_list_files_enabled: boolean
+  assistant_connector_read_file_enabled: boolean
+  assistant_connector_write_file_enabled: boolean
+  assistant_connector_replace_text_enabled: boolean
+  assistant_connector_run_command_enabled: boolean
 }
 
 interface ChatAttachment {
@@ -198,6 +205,13 @@ const defaultAdvancedChatSettings: AdvancedChatSettings = {
   mcp_servers: [],
   builtin_mcp_servers: [],
   custom_mcp_servers: [],
+  assistant_mode_enabled: true,
+  assistant_mcp_tools_enabled: true,
+  assistant_connector_list_files_enabled: true,
+  assistant_connector_read_file_enabled: true,
+  assistant_connector_write_file_enabled: true,
+  assistant_connector_replace_text_enabled: true,
+  assistant_connector_run_command_enabled: true,
 }
 
 const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
@@ -349,13 +363,24 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     ].join("|"),
     [currentSession?.id, currentSession?.messages.length, latestMessage?.id, latestMessage?.content, latestMessage?.tool_calls]
   )
+  const currentAdvancedSettings = useMemo<AdvancedChatSettings>(
+    () => ({ ...defaultAdvancedChatSettings, ...(advancedSettings ?? {}) }),
+    [advancedSettings]
+  )
+  const assistantModeEnabled = !isAdvanced || currentAdvancedSettings.assistant_mode_enabled
+  const assistantConnectorToolsEnabled =
+    currentAdvancedSettings.assistant_connector_list_files_enabled ||
+    currentAdvancedSettings.assistant_connector_read_file_enabled ||
+    currentAdvancedSettings.assistant_connector_write_file_enabled ||
+    currentAdvancedSettings.assistant_connector_replace_text_enabled ||
+    currentAdvancedSettings.assistant_connector_run_command_enabled
   const selectedAgent = useMemo(() => {
     if (!isAdvanced) {
       return undefined
     }
     return agents.find((agent) => agent.id === currentSession?.agent_id)
   }, [currentSession?.agent_id, agents, isAdvanced])
-  const activeRunMode: ChatRunMode = isAdvanced ? currentSession?.run_mode || "chat" : "chat"
+  const activeRunMode: ChatRunMode = isAdvanced && assistantModeEnabled ? currentSession?.run_mode || "chat" : "chat"
   const activeRun = isAdvanced ? currentSession?.latest_run : undefined
   const isActiveRunRunning = isRunActive(activeRun)
   const activeRunID = activeRun?.id || ""
@@ -386,17 +411,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => selectableUserChannels.find((channel) => channel.id === selectedUserChannelID) || selectableUserChannels[0],
     [selectableUserChannels, selectedUserChannelID]
   )
-  const currentAdvancedSettings = useMemo<AdvancedChatSettings>(
-    () => ({ ...defaultAdvancedChatSettings, ...(advancedSettings ?? {}) }),
-    [advancedSettings]
-  )
   const mcpServers = useMemo(() => {
     if (currentAdvancedSettings.mcp_servers.length > 0) {
       return currentAdvancedSettings.mcp_servers
     }
     return mergeMCPServers(currentAdvancedSettings.builtin_mcp_servers, currentAdvancedSettings.custom_mcp_servers)
   }, [currentAdvancedSettings])
-  const enabledMCPServers = useMemo(() => mcpServers.filter((server) => server.enabled), [mcpServers])
+  const enabledMCPServers = useMemo(
+    () => currentAdvancedSettings.assistant_mcp_tools_enabled ? mcpServers.filter((server) => server.enabled) : [],
+    [currentAdvancedSettings.assistant_mcp_tools_enabled, mcpServers]
+  )
   const selectedSkills = useMemo(() => {
     const selectedIDs = currentSession?.skill_ids || []
     return skills.filter((skill) => selectedIDs.includes(skill.id))
@@ -419,7 +443,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => connectorDevices.find((device) => device.id === currentSession?.connector_device_id),
     [currentSession?.connector_device_id, connectorDevices]
   )
-  const selectableConnectorDevices = connectorDevices
+  const selectableConnectorDevices = assistantConnectorToolsEnabled ? connectorDevices : []
 
   useEffect(() => {
     if (isAdvanced) {
@@ -723,6 +747,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || !currentSession) {
       return
     }
+    if (mode === "assistant" && !assistantModeEnabled) {
+      error(copy.assistantModeDisabled)
+      return
+    }
     updateSession(currentSession.id, (session) => ({ ...session, run_mode: mode }), { persist: true })
   }
 
@@ -753,6 +781,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!currentSession) {
       return
     }
+    if (!currentAdvancedSettings.assistant_mcp_tools_enabled) {
+      error(copy.assistantMCPToolsDisabled)
+      return
+    }
     if (currentSession.mcp_server_ids.includes(serverID)) {
       return
     }
@@ -774,6 +806,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const setSessionConnector = (deviceID: string, workspacePath: string, autoApprove: boolean, commandPrefixes: string[]) => {
     if (!currentSession) {
+      return
+    }
+    if (!assistantConnectorToolsEnabled) {
+      error(copy.assistantWorkspaceToolsDisabled)
       return
     }
     updateSession(currentSession.id, (session) => ({
@@ -829,6 +865,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const openAdvancedConfig = (tab: SessionConfigTab = configTab) => {
+    if (tab === "mcp" && !currentAdvancedSettings.assistant_mcp_tools_enabled) {
+      tab = "basic"
+    }
+    if (tab === "device" && !assistantConnectorToolsEnabled) {
+      tab = "basic"
+    }
     if (tab === "device") {
       setPendingConnectorDeviceID(currentSession?.connector_device_id || connectorDevices[0]?.id || "")
       setPendingConnectorWorkspace(currentSession?.connector_workspace_path || "")
@@ -879,6 +921,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (isAdvanced && !selectedUserChannel) {
       error(copy.channelRequired)
       return
+    }
+    if (isAdvanced && activeRunMode === "assistant") {
+      if (!assistantModeEnabled) {
+        error(copy.assistantModeDisabled)
+        return
+      }
+      if (!currentAdvancedSettings.assistant_mcp_tools_enabled && (session.mcp_server_ids.length > 0 || selectedSkills.some((skill) => skill.mcp_server_ids.length > 0))) {
+        error(copy.assistantMCPToolsDisabled)
+        return
+      }
+      if (!assistantConnectorToolsEnabled && (session.connector_device_id || session.connector_workspace_path)) {
+        error(copy.assistantWorkspaceToolsDisabled)
+        return
+      }
     }
     if (!isAdvanced && !rawKey) {
       error(copy.keyRequired)
@@ -1328,7 +1384,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <div className="sticky top-0 z-10 -mx-4 flex flex-col gap-4 border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:-mx-8 lg:px-8">
         <h1 className="text-3xl font-bold">{copy.title}</h1>
         <div className="flex flex-wrap gap-2">
-          {isAdvanced && (
+          {isAdvanced && assistantModeEnabled && (
             <div className="inline-flex rounded-md border bg-background p-1">
               {(["chat", "assistant"] as const).map((mode) => (
                 <button
@@ -1558,8 +1614,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   ["basic", copy.basicSettings],
                   ["agent", copy.agent],
                   ["skills", copy.skills],
-                  ["mcp", copy.mcpServers],
-                  ["device", copy.devices],
+                  ...(currentAdvancedSettings.assistant_mcp_tools_enabled ? ([["mcp", copy.mcpServers]] as const) : []),
+                  ...(assistantConnectorToolsEnabled ? ([["device", copy.devices]] as const) : []),
                 ] as const).map(([tab, label]) => (
                   <button
                     key={tab}
@@ -2728,6 +2784,13 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     mcp_servers: Array.isArray(item.mcp_servers) ? item.mcp_servers.map(normalizeMCPServer) : mergeMCPServers(builtin, custom),
     builtin_mcp_servers: builtin,
     custom_mcp_servers: custom,
+    assistant_mode_enabled: item.assistant_mode_enabled !== false,
+    assistant_mcp_tools_enabled: item.assistant_mcp_tools_enabled !== false,
+    assistant_connector_list_files_enabled: item.assistant_connector_list_files_enabled !== false,
+    assistant_connector_read_file_enabled: item.assistant_connector_read_file_enabled !== false,
+    assistant_connector_write_file_enabled: item.assistant_connector_write_file_enabled !== false,
+    assistant_connector_replace_text_enabled: item.assistant_connector_replace_text_enabled !== false,
+    assistant_connector_run_command_enabled: item.assistant_connector_run_command_enabled !== false,
   }
 }
 
@@ -3612,6 +3675,9 @@ const chatCopyKeys = {
   noMessages: "chat.noMessages",
   chatMode: "chat.chatMode",
   assistantMode: "chat.assistantMode",
+  assistantModeDisabled: "chat.assistantModeDisabled",
+  assistantMCPToolsDisabled: "chat.assistantMCPToolsDisabled",
+  assistantWorkspaceToolsDisabled: "chat.assistantWorkspaceToolsDisabled",
   promptPlaceholder: "chat.promptPlaceholder",
   assistantPromptPlaceholder: "chat.assistantPromptPlaceholder",
   attachmentMessageTitle: "chat.attachmentMessageTitle",
