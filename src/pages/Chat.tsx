@@ -244,7 +244,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
-  const messagesContainerRef = useRef<HTMLDivElement | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
@@ -444,12 +443,28 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }, [activeSessionID, storeKeys.selectedSession])
 
+  const messagesScrollElement = () => {
+    const marker = messagesEndRef.current
+    if (marker) {
+      const main = marker.closest("main")
+      if (main instanceof HTMLElement) {
+        return main
+      }
+    }
+    return (document.scrollingElement as HTMLElement | null) || document.documentElement
+  }
+
   const messagesAtBottom = () => {
-    const element = messagesContainerRef.current
-    if (!element) {
+    const marker = messagesEndRef.current
+    if (!marker) {
       return true
     }
-    return element.scrollHeight - element.scrollTop - element.clientHeight < 80
+    const container = messagesScrollElement()
+    const markerBottom = marker.getBoundingClientRect().bottom
+    const containerBottom = container === document.scrollingElement || container === document.documentElement
+      ? window.innerHeight
+      : container.getBoundingClientRect().bottom
+    return markerBottom - containerBottom < 120
   }
 
   const scrollMessagesToLatest = (behavior: ScrollBehavior = "smooth") => {
@@ -457,13 +472,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setShowJumpToLatest(false)
   }
 
-  const handleMessagesScroll = () => {
-    setShowJumpToLatest(!messagesAtBottom())
-  }
-
   useEffect(() => {
     setShowJumpToLatest(false)
     requestAnimationFrame(() => scrollMessagesToLatest("auto"))
+  }, [currentSession?.id])
+
+  useEffect(() => {
+    const container = messagesScrollElement()
+    const target: HTMLElement | Window = container === document.scrollingElement || container === document.documentElement
+      ? window
+      : container
+    const handleScroll = () => setShowJumpToLatest(!messagesAtBottom())
+    target.addEventListener("scroll", handleScroll, { passive: true })
+    requestAnimationFrame(handleScroll)
+    return () => target.removeEventListener("scroll", handleScroll)
   }, [currentSession?.id])
 
   useEffect(() => {
@@ -1340,11 +1362,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div
-                ref={messagesContainerRef}
-                className="relative max-h-[64vh] min-h-[360px] space-y-3 overflow-y-auto rounded-md border p-3"
-                onScroll={handleMessagesScroll}
-              >
+              <div className="min-h-[360px] space-y-3 rounded-md border p-3">
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
                 ) : (
@@ -1368,17 +1386,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                               ) : (
                                 <>
                                   {message.tool_calls && message.tool_calls.length > 0 && (
-                                    <ToolCallRounds toolCalls={message.tool_calls} copy={copy} />
-                                  )}
-                                  <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
-                                  {isAdvanced && message.id === activeRun?.assistant_message_id && pendingConnectorApprovals.length > 0 && (
-                                    <ConnectorApprovalPanel
-                                      tasks={pendingConnectorApprovals}
+                                    <ToolCallRounds
+                                      toolCalls={message.tool_calls}
                                       copy={copy}
+                                      approvalTasks={isAdvanced && message.id === activeRun?.assistant_message_id ? pendingConnectorApprovals : []}
                                       decidingTaskID={decidingConnectorTaskID}
                                       onDecide={decideConnectorApproval}
                                     />
                                   )}
+                                  <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
                                 </>
                               )}
                             </div>
@@ -1420,7 +1436,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <Button
                     size="sm"
                     variant="outline"
-                    className="sticky bottom-2 z-10 ml-auto flex gap-1 shadow-sm"
+                    className="sticky bottom-4 z-10 ml-auto flex gap-1 shadow-sm"
                     onClick={() => scrollMessagesToLatest()}
                   >
                     <ArrowDown size={14} />
@@ -1860,98 +1876,51 @@ function MarkdownContent({ content }: { content: string }) {
   )
 }
 
-function ConnectorApprovalPanel({
-  tasks,
+function ToolCallRounds({
+  toolCalls,
   copy,
-  decidingTaskID,
+  approvalTasks = [],
+  decidingTaskID = "",
   onDecide,
 }: {
-  tasks: ConnectorApprovalTask[]
+  toolCalls: ChatToolCall[]
   copy: ChatCopy
-  decidingTaskID: string
-  onDecide: (taskID: string, approved: boolean) => void
+  approvalTasks?: ConnectorApprovalTask[]
+  decidingTaskID?: string
+  onDecide?: (taskID: string, approved: boolean) => void
 }) {
-  return (
-    <div className="mb-2 space-y-3 rounded-md border border-amber-200 bg-amber-50/70 p-3">
-      <div>
-        <div className="text-sm font-medium text-amber-900">{copy.connectorApprovalTitle}</div>
-        <div className="mt-1 text-xs text-amber-800">{copy.connectorApprovalDescription}</div>
-      </div>
-      {tasks.map((task) => (
-        <div key={task.id} className="rounded-md border bg-background p-3">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-            <div className="min-w-0 space-y-1">
-              <div className="flex flex-wrap items-center gap-2 text-sm font-medium">
-                <Server size={14} />
-                <span>{task.device_name || task.device_id}</span>
-                <span className="rounded bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{task.action}</span>
-              </div>
-              <div className="break-all text-xs text-muted-foreground">{task.workspace_path}</div>
-            </div>
-            <div className="flex shrink-0 gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={Boolean(decidingTaskID)}
-                onClick={() => onDecide(task.id, false)}
-              >
-                <X size={14} />
-                {copy.rejectConnectorTask}
-              </Button>
-              <Button
-                size="sm"
-                disabled={Boolean(decidingTaskID)}
-                onClick={() => onDecide(task.id, true)}
-              >
-                <Check size={14} />
-                {copy.approveConnectorTask}
-              </Button>
-            </div>
-          </div>
-          <ConnectorApprovalTaskPreview task={task} copy={copy} />
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function ConnectorApprovalTaskPreview({ task, copy }: { task: ConnectorApprovalTask; copy: ChatCopy }) {
-  const action = task.action.toLowerCase()
-  const path = stringArgument(task.payload, "path")
-  if (action === "run_command") {
-    return <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-muted p-2 text-xs">{stringArgument(task.payload, "command")}</pre>
-  }
-  if (action === "list_files" || action === "read_file") {
-    return <div className="mt-3 break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{path || "."}</div>
-  }
-  if (action === "write_file") {
-    return (
-      <div className="mt-3 overflow-hidden rounded-md border">
-        <div className="border-b bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">{path}</div>
-        <LineDiff oldText={stringArgument(task.payload, "preview_old_content")} newText={stringArgument(task.payload, "content")} />
-      </div>
-    )
-  }
-  if (action === "replace_text") {
-    return <ReplacementDiffList entries={replacementEntriesFromArguments(task.payload)} copy={copy} />
-  }
-  return <div className="mt-3 break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{path || task.action}</div>
-}
-
-function ToolCallRounds({ toolCalls, copy }: { toolCalls: ChatToolCall[]; copy: ChatCopy }) {
   if (toolCalls.length === 0) {
     return null
   }
   return (
     <div className="mb-2 space-y-2">
       {toolCalls.map((toolCall) => (
-        <ToolCallDetails key={toolCall.id} toolCall={toolCall} copy={copy} />
+        <ToolCallDetails
+          key={toolCall.id}
+          toolCall={toolCall}
+          copy={copy}
+          approvalTask={findConnectorApprovalTask(toolCall, approvalTasks)}
+          decidingTaskID={decidingTaskID}
+          onDecide={onDecide}
+        />
       ))}
     </div>
   )
 }
 
-function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: ChatCopy }) {
+function ToolCallDetails({
+  toolCall,
+  copy,
+  approvalTask,
+  decidingTaskID = "",
+  onDecide,
+}: {
+  toolCall: ChatToolCall
+  copy: ChatCopy
+  approvalTask?: ConnectorApprovalTask
+  decidingTaskID?: string
+  onDecide?: (taskID: string, approved: boolean) => void
+}) {
   const shouldAutoOpen = toolCall.status === "running" || toolCall.status === "approval_required"
   const [open, setOpen] = useState(shouldAutoOpen)
   const builtinKind = builtinToolKind(toolCall)
@@ -1970,12 +1939,20 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
   if (builtinKind === "read" || builtinKind === "list" || builtinKind === "command") {
     return (
       <div className="rounded-md border bg-background p-2">
-        <div className="flex flex-wrap items-center gap-2 text-xs">
-          <Server size={13} className="shrink-0" />
-          <span className="min-w-0 truncate font-medium">{title}</span>
-          <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
-            {toolStatusLabel(toolCall.status, copy)}
-          </span>
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
+            <Server size={13} className="shrink-0" />
+            <span className="min-w-0 truncate font-medium">{title}</span>
+            <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
+              {toolStatusLabel(toolCall.status, copy)}
+            </span>
+          </div>
+          <ConnectorApprovalControls
+            task={approvalTask}
+            copy={copy}
+            decidingTaskID={decidingTaskID}
+            onDecide={onDecide}
+          />
         </div>
       </div>
     )
@@ -1995,6 +1972,13 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
         </span>
         {!open && <span className="ml-auto text-[11px] text-muted-foreground">{copy.expandToolCall}</span>}
       </summary>
+      <ConnectorApprovalControls
+        task={approvalTask}
+        copy={copy}
+        decidingTaskID={decidingTaskID}
+        onDecide={onDecide}
+        className="mt-2 border-t pt-2"
+      />
       {builtinKind === "write" ? (
         <div className="mt-2 overflow-hidden rounded-md border">
           <LineDiff oldText={stringArgument(toolCall.arguments, "preview_old_content")} newText={content} />
@@ -2010,6 +1994,45 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
         </>
       )}
     </details>
+  )
+}
+
+function ConnectorApprovalControls({
+  task,
+  copy,
+  decidingTaskID,
+  onDecide,
+  className,
+}: {
+  task?: ConnectorApprovalTask
+  copy: ChatCopy
+  decidingTaskID: string
+  onDecide?: (taskID: string, approved: boolean) => void
+  className?: string
+}) {
+  if (!task || !onDecide) {
+    return null
+  }
+  return (
+    <div className={cn("flex shrink-0 flex-wrap justify-end gap-2", className)}>
+      <Button
+        variant="outline"
+        size="sm"
+        disabled={Boolean(decidingTaskID)}
+        onClick={() => onDecide(task.id, false)}
+      >
+        <X size={14} />
+        {copy.rejectConnectorTask}
+      </Button>
+      <Button
+        size="sm"
+        disabled={Boolean(decidingTaskID)}
+        onClick={() => onDecide(task.id, true)}
+      >
+        <Check size={14} />
+        {copy.approveConnectorTask}
+      </Button>
+    </div>
   )
 }
 
@@ -3142,6 +3165,51 @@ function splitDiffLines(value: string) {
 
 function toolLabel(toolCall: ChatToolCall) {
   return `${toolCall.server ? `${toolCall.server}: ` : ""}${toolCall.tool || toolCall.name}`
+}
+
+function findConnectorApprovalTask(toolCall: ChatToolCall, tasks: ConnectorApprovalTask[]) {
+  if (toolCall.status !== "approval_required" || tasks.length === 0) {
+    return undefined
+  }
+  const byPreviewID = tasks.find((task) => stringArgument(task.payload, "preview_tool_call_id") === toolCall.id)
+  if (byPreviewID) {
+    return byPreviewID
+  }
+  const action = connectorActionForToolCall(toolCall)
+  if (!action) {
+    return undefined
+  }
+  const path = stringArgument(toolCall.arguments, "path")
+  const command = stringArgument(toolCall.arguments, "command")
+  return tasks.find((task) => {
+    if (task.action !== action) {
+      return false
+    }
+    if (action === "run_command") {
+      return stringArgument(task.payload, "command") === command
+    }
+    return stringArgument(task.payload, "path") === path
+  })
+}
+
+function connectorActionForToolCall(toolCall: ChatToolCall) {
+  if (toolCall.tool) {
+    return toolCall.tool
+  }
+  switch (builtinToolKind(toolCall)) {
+    case "list":
+      return "list_files"
+    case "read":
+      return "read_file"
+    case "write":
+      return "write_file"
+    case "replace":
+      return "replace_text"
+    case "command":
+      return "run_command"
+    default:
+      return ""
+  }
 }
 
 function builtinToolKind(toolCall: ChatToolCall): "list" | "read" | "write" | "replace" | "command" | "" {
