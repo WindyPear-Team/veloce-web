@@ -9,6 +9,7 @@ import AdvancedChatMCP from "./AdvancedChatMCP"
 import Images from "./Images"
 import AdvancedChatDevices from "./AdvancedChatDevices"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
+import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { Button } from "@/components/ui/button"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
@@ -96,6 +97,7 @@ export default function AdvancedChat() {
               <SlidersHorizontal size={18} />
             </Button>
           )}
+          <ThemeSwitcher />
           <UserAvatar user={user} />
         </div>
       </header>

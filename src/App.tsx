@@ -28,6 +28,7 @@ import { I18nProvider, useI18n } from "./lib/i18n"
 import { ToastProvider } from "./components/ui/toast"
 import { Button } from "./components/ui/button"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "./components/ui/dialog"
+import { ThemeProvider } from "./lib/theme"
 import type { TranslationKey } from "./lib/i18n"
 import type { PublicSettings } from "./lib/public-settings"
 import { isAdvancedChatEnabled, withPublicSettingsDefaults } from "./lib/public-settings"
@@ -315,11 +316,12 @@ function App() {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <I18nProvider>
-        <ToastProvider>
-          <BrowserRouter>
-            <DocumentTitle />
-            <SetupGate>
+      <ThemeProvider>
+        <I18nProvider>
+          <ToastProvider>
+            <BrowserRouter>
+              <DocumentTitle />
+              <SetupGate>
             <Routes>
               <Route path="/" element={<PageTransition><Home /></PageTransition>} />
               <Route path="/setup" element={<PageTransition><Setup /></PageTransition>} />
@@ -365,6 +367,14 @@ function App() {
                   element={
                     <AdminRoute>
                       <SystemManagement section="general" />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="admin/theme"
+                  element={
+                    <AdminRoute>
+                      <SystemManagement section="theme" />
                     </AdminRoute>
                   }
                 />
@@ -449,10 +459,11 @@ function App() {
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
-          </SetupGate>
-          </BrowserRouter>
-        </ToastProvider>
-      </I18nProvider>
+              </SetupGate>
+            </BrowserRouter>
+          </ToastProvider>
+        </I18nProvider>
+      </ThemeProvider>
     </QueryClientProvider>
   )
 }

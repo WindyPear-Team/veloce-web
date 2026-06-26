@@ -16,6 +16,32 @@ export interface PublicSettings {
   top_nav_enabled: boolean
   top_nav_items: string
   page_layouts: string
+  theme_light_background: string
+  theme_light_foreground: string
+  theme_light_card: string
+  theme_light_card_foreground: string
+  theme_light_primary: string
+  theme_light_primary_foreground: string
+  theme_light_secondary: string
+  theme_light_secondary_foreground: string
+  theme_light_accent: string
+  theme_light_accent_foreground: string
+  theme_light_muted: string
+  theme_light_muted_foreground: string
+  theme_light_border: string
+  theme_dark_background: string
+  theme_dark_foreground: string
+  theme_dark_card: string
+  theme_dark_card_foreground: string
+  theme_dark_primary: string
+  theme_dark_primary_foreground: string
+  theme_dark_secondary: string
+  theme_dark_secondary_foreground: string
+  theme_dark_accent: string
+  theme_dark_accent_foreground: string
+  theme_dark_muted: string
+  theme_dark_muted_foreground: string
+  theme_dark_border: string
   sidebar_dashboard_enabled: boolean
   sidebar_usage_enabled: boolean
   sidebar_wallet_enabled: boolean
@@ -72,6 +98,32 @@ export const defaultPublicSettings: PublicSettings = {
   top_nav_enabled: false,
   top_nav_items: "",
   page_layouts: "{}",
+  theme_light_background: "#ffffff",
+  theme_light_foreground: "#020817",
+  theme_light_card: "#ffffff",
+  theme_light_card_foreground: "#020817",
+  theme_light_primary: "#0f172a",
+  theme_light_primary_foreground: "#f8fafc",
+  theme_light_secondary: "#f1f5f9",
+  theme_light_secondary_foreground: "#0f172a",
+  theme_light_accent: "#f1f5f9",
+  theme_light_accent_foreground: "#0f172a",
+  theme_light_muted: "#f1f5f9",
+  theme_light_muted_foreground: "#64748b",
+  theme_light_border: "#e2e8f0",
+  theme_dark_background: "#020817",
+  theme_dark_foreground: "#f8fafc",
+  theme_dark_card: "#020817",
+  theme_dark_card_foreground: "#f8fafc",
+  theme_dark_primary: "#f8fafc",
+  theme_dark_primary_foreground: "#0f172a",
+  theme_dark_secondary: "#1e293b",
+  theme_dark_secondary_foreground: "#f8fafc",
+  theme_dark_accent: "#1e293b",
+  theme_dark_accent_foreground: "#f8fafc",
+  theme_dark_muted: "#1e293b",
+  theme_dark_muted_foreground: "#94a3b8",
+  theme_dark_border: "#1e293b",
   sidebar_dashboard_enabled: true,
   sidebar_usage_enabled: true,
   sidebar_wallet_enabled: true,

@@ -13,6 +13,7 @@ import {
   KeyRound,
   Layers,
   Mail,
+  Palette,
   Pencil,
   Plus,
   RefreshCw,
@@ -43,6 +44,7 @@ import AdvancedChatManagement from "./AdvancedChatManagement"
 import { useI18n } from "@/lib/i18n"
 import { defaultPublicSettings, isPremiumEdition, parseTopNavItems } from "@/lib/public-settings"
 import type { PublicSettings } from "@/lib/public-settings"
+import { normalizeHexColor } from "@/lib/theme"
 
 interface Group {
   id: number
@@ -240,6 +242,7 @@ interface SystemSettings extends PublicSettings {
 
 type SystemTab =
   | "basic"
+  | "theme"
   | "billing"
   | "payment"
   | "checkIn"
@@ -257,10 +260,11 @@ type SystemTab =
   | "subscriptionPlans"
   | "redeemCodes"
 
-type SystemSection = "general" | "auth" | "content" | "operations" | "advancedChat" | "subscriptions" | "redeemCodes"
+type SystemSection = "general" | "theme" | "auth" | "content" | "operations" | "advancedChat" | "subscriptions" | "redeemCodes"
 
 const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   general: ["basic", "billing", "checkIn", "security"],
+  theme: ["theme"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
   operations: ["statusMonitor", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
@@ -275,6 +279,13 @@ interface NavRow {
   id: string
   label: string
   href: string
+}
+
+type ThemeColorFieldKey = Extract<keyof SystemSettings, `theme_${string}`>
+
+interface ThemeColorField {
+  key: ThemeColorFieldKey
+  label: string
 }
 
 const defaultSystemSettings: SystemSettings = {
@@ -817,6 +828,29 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <TextField label={copy.iconURL} value={form.icon_url} placeholder={copy.iconURLPlaceholder} onChange={(value) => updateField("icon_url", value)} />
             <TextField label={copy.homeIframeURL} value={form.home_iframe_url} placeholder={copy.homeIframeURLPlaceholder} onChange={(value) => updateField("home_iframe_url", value)} />
             <TextField label={copy.footerText} value={form.footer_text} placeholder={copy.footerTextPlaceholder} onChange={(value) => updateField("footer_text", value)} />
+          </div>
+        </SettingsPanel>
+      )}
+
+      {activeTab === "theme" && (
+        <SettingsPanel title={copy.theme}>
+          <div className="space-y-8">
+            <SectionTitle title={copy.themeSettings} description={copy.themeSettingsDescription} />
+            <div className="grid gap-6 xl:grid-cols-2">
+              <ThemeColorGroup
+                title={copy.themeLightMode}
+                fields={themeColorFields("light", copy)}
+                form={form}
+                onChange={(key, value) => updateField(key, value)}
+              />
+              <ThemeColorGroup
+                title={copy.themeDarkMode}
+                fields={themeColorFields("dark", copy)}
+                form={form}
+                onChange={(key, value) => updateField(key, value)}
+              />
+            </div>
+            <ThemePreview form={form} copy={copy} />
           </div>
         </SettingsPanel>
       )}
@@ -1692,6 +1726,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
 function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; icon: LucideIcon }> {
   return [
     { id: "basic", label: copy.basic, icon: Globe2 },
+    { id: "theme", label: copy.theme, icon: Palette },
     { id: "billing", label: copy.billing, icon: HandCoins },
     { id: "payment", label: copy.paymentInterface, icon: CreditCard },
     { id: "checkIn", label: copy.checkInSettings, icon: CalendarCheck },
@@ -1729,6 +1764,208 @@ function SectionTitle({ title, description }: { title: string; description: stri
       <p className="mt-1 text-sm text-muted-foreground">{description}</p>
     </div>
   )
+}
+
+function ThemeColorGroup({
+  title,
+  fields,
+  form,
+  onChange,
+}: {
+  title: string
+  fields: ThemeColorField[]
+  form: SystemSettings
+  onChange: (key: ThemeColorFieldKey, value: string) => void
+}) {
+  return (
+    <div className="rounded-md border p-4">
+      <h3 className="text-base font-semibold">{title}</h3>
+      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+        {fields.map((field) => (
+          <ColorField
+            key={field.key}
+            label={field.label}
+            value={form[field.key]}
+            onChange={(value) => onChange(field.key, value)}
+          />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function ColorField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: string
+  onChange: (value: string) => void
+}) {
+  const normalized = normalizeHexColor(value) || "#000000"
+  return (
+    <label className="block space-y-2 text-sm">
+      <span className="font-medium">{label}</span>
+      <div className="flex gap-2">
+        <Input
+          type="color"
+          value={normalized}
+          className="h-10 w-12 shrink-0 p-1"
+          onChange={(event) => onChange(event.target.value)}
+        />
+        <Input
+          value={value}
+          placeholder="#000000"
+          onChange={(event) => onChange(event.target.value)}
+          onBlur={(event) => {
+            const nextValue = normalizeHexColor(event.target.value)
+            if (nextValue) {
+              onChange(nextValue)
+            }
+          }}
+        />
+      </div>
+    </label>
+  )
+}
+
+function ThemePreview({ form, copy }: { form: SystemSettings; copy: SystemCopy }) {
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <ThemePreviewCard
+        title={copy.themeLightMode}
+        background={form.theme_light_background}
+        foreground={form.theme_light_foreground}
+        card={form.theme_light_card}
+        cardForeground={form.theme_light_card_foreground}
+        primary={form.theme_light_primary}
+        primaryForeground={form.theme_light_primary_foreground}
+        secondary={form.theme_light_secondary}
+        secondaryForeground={form.theme_light_secondary_foreground}
+        accent={form.theme_light_accent}
+        accentForeground={form.theme_light_accent_foreground}
+        muted={form.theme_light_muted}
+        mutedForeground={form.theme_light_muted_foreground}
+        border={form.theme_light_border}
+        copy={copy}
+      />
+      <ThemePreviewCard
+        title={copy.themeDarkMode}
+        background={form.theme_dark_background}
+        foreground={form.theme_dark_foreground}
+        card={form.theme_dark_card}
+        cardForeground={form.theme_dark_card_foreground}
+        primary={form.theme_dark_primary}
+        primaryForeground={form.theme_dark_primary_foreground}
+        secondary={form.theme_dark_secondary}
+        secondaryForeground={form.theme_dark_secondary_foreground}
+        accent={form.theme_dark_accent}
+        accentForeground={form.theme_dark_accent_foreground}
+        muted={form.theme_dark_muted}
+        mutedForeground={form.theme_dark_muted_foreground}
+        border={form.theme_dark_border}
+        copy={copy}
+      />
+    </div>
+  )
+}
+
+function ThemePreviewCard({
+  title,
+  background,
+  foreground,
+  card,
+  cardForeground,
+  primary,
+  primaryForeground,
+  secondary,
+  secondaryForeground,
+  accent,
+  accentForeground,
+  muted,
+  mutedForeground,
+  border,
+  copy,
+}: {
+  title: string
+  background: string
+  foreground: string
+  card: string
+  cardForeground: string
+  primary: string
+  primaryForeground: string
+  secondary: string
+  secondaryForeground: string
+  accent: string
+  accentForeground: string
+  muted: string
+  mutedForeground: string
+  border: string
+  copy: SystemCopy
+}) {
+  const colors = {
+    background: previewColor(background, "#ffffff"),
+    foreground: previewColor(foreground, "#020817"),
+    card: previewColor(card, "#ffffff"),
+    cardForeground: previewColor(cardForeground, "#020817"),
+    primary: previewColor(primary, "#0f172a"),
+    primaryForeground: previewColor(primaryForeground, "#f8fafc"),
+    secondary: previewColor(secondary, "#f1f5f9"),
+    secondaryForeground: previewColor(secondaryForeground, "#0f172a"),
+    accent: previewColor(accent, "#f1f5f9"),
+    accentForeground: previewColor(accentForeground, "#0f172a"),
+    muted: previewColor(muted, "#f1f5f9"),
+    mutedForeground: previewColor(mutedForeground, "#64748b"),
+    border: previewColor(border, "#e2e8f0"),
+  }
+
+  return (
+    <div className="rounded-md border p-4" style={{ background: colors.background, color: colors.foreground, borderColor: colors.border }}>
+      <div className="mb-3 text-sm font-semibold">{copy.themePreview}: {title}</div>
+      <div className="rounded-md border p-4" style={{ background: colors.card, color: colors.cardForeground, borderColor: colors.border }}>
+        <div className="text-base font-semibold">{copy.themePreviewTitle}</div>
+        <p className="mt-2 text-sm" style={{ color: colors.mutedForeground }}>{copy.themePreviewText}</p>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <span className="rounded-md px-3 py-2 text-sm font-medium" style={{ background: colors.primary, color: colors.primaryForeground }}>
+            {copy.themePreviewAction}
+          </span>
+          <span className="rounded-md px-3 py-2 text-sm font-medium" style={{ background: colors.secondary, color: colors.secondaryForeground }}>
+            {copy.themePreviewSecondaryAction}
+          </span>
+          <span className="rounded-md px-3 py-2 text-sm font-medium" style={{ background: colors.accent, color: colors.accentForeground }}>
+            {copy.themePreviewAccent}
+          </span>
+        </div>
+        <div className="mt-4 rounded-md px-3 py-2 text-sm" style={{ background: colors.muted, color: colors.mutedForeground }}>
+          {copy.themePreviewMuted}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function previewColor(value: string, fallback: string) {
+  return normalizeHexColor(value) || fallback
+}
+
+function themeColorFields(mode: "light" | "dark", copy: SystemCopy): ThemeColorField[] {
+  const prefix = mode === "light" ? "theme_light" : "theme_dark"
+  return [
+    { key: `${prefix}_background` as ThemeColorFieldKey, label: copy.themeBackground },
+    { key: `${prefix}_foreground` as ThemeColorFieldKey, label: copy.themeForeground },
+    { key: `${prefix}_card` as ThemeColorFieldKey, label: copy.themeCard },
+    { key: `${prefix}_card_foreground` as ThemeColorFieldKey, label: copy.themeCardForeground },
+    { key: `${prefix}_primary` as ThemeColorFieldKey, label: copy.themePrimary },
+    { key: `${prefix}_primary_foreground` as ThemeColorFieldKey, label: copy.themePrimaryForeground },
+    { key: `${prefix}_secondary` as ThemeColorFieldKey, label: copy.themeSecondary },
+    { key: `${prefix}_secondary_foreground` as ThemeColorFieldKey, label: copy.themeSecondaryForeground },
+    { key: `${prefix}_accent` as ThemeColorFieldKey, label: copy.themeAccent },
+    { key: `${prefix}_accent_foreground` as ThemeColorFieldKey, label: copy.themeAccentForeground },
+    { key: `${prefix}_muted` as ThemeColorFieldKey, label: copy.themeMuted },
+    { key: `${prefix}_muted_foreground` as ThemeColorFieldKey, label: copy.themeMutedForeground },
+    { key: `${prefix}_border` as ThemeColorFieldKey, label: copy.themeBorder },
+  ]
 }
 
 function TextField({
@@ -2788,6 +3025,31 @@ const zhCopy = {
   overview: "概览",
   systemSubtitle: "配置站点、认证、页面内容、导航、分组和兑换码",
   basic: "基础设置",
+  theme: "主题设置",
+  themeSettings: "网站主题",
+  themeSettingsDescription: "配置全站浅色和深色模式下的主题颜色、强调色、背景、文字和边框。",
+  themeLightMode: "浅色模式",
+  themeDarkMode: "深色模式",
+  themeBackground: "背景色",
+  themeForeground: "文字色",
+  themeCard: "卡片色",
+  themeCardForeground: "卡片文字色",
+  themePrimary: "主题色",
+  themePrimaryForeground: "主题文字色",
+  themeSecondary: "次级色",
+  themeSecondaryForeground: "次级文字色",
+  themeAccent: "强调色",
+  themeAccentForeground: "强调文字色",
+  themeMuted: "弱化背景色",
+  themeMutedForeground: "弱化文字色",
+  themeBorder: "边框色",
+  themePreview: "预览",
+  themePreviewTitle: "仪表盘模块",
+  themePreviewText: "这里展示主题色、强调色和弱化文本在界面中的组合效果。",
+  themePreviewAction: "主要操作",
+  themePreviewSecondaryAction: "次级操作",
+  themePreviewAccent: "强调状态",
+  themePreviewMuted: "弱化信息区域",
   billing: "计费与推广",
   pricingAndReferral: "价格与推广",
   pricingAndReferralDescription: "配置公开价格接口、推广返佣和多分组计价规则。",
@@ -3112,6 +3374,31 @@ const enCopy: SystemCopy = {
   overview: "Overview",
   systemSubtitle: "Configure site, auth, content, navigation, groups, and redeem codes",
   basic: "Basic",
+  theme: "Theme",
+  themeSettings: "Site theme",
+  themeSettingsDescription: "Configure site theme colors, accents, backgrounds, text, and borders for light and dark modes.",
+  themeLightMode: "Light mode",
+  themeDarkMode: "Dark mode",
+  themeBackground: "Background",
+  themeForeground: "Text",
+  themeCard: "Card",
+  themeCardForeground: "Card text",
+  themePrimary: "Theme color",
+  themePrimaryForeground: "Theme text",
+  themeSecondary: "Secondary",
+  themeSecondaryForeground: "Secondary text",
+  themeAccent: "Accent",
+  themeAccentForeground: "Accent text",
+  themeMuted: "Muted background",
+  themeMutedForeground: "Muted text",
+  themeBorder: "Border",
+  themePreview: "Preview",
+  themePreviewTitle: "Dashboard module",
+  themePreviewText: "This shows how theme, accent, and muted colors combine in the interface.",
+  themePreviewAction: "Primary action",
+  themePreviewSecondaryAction: "Secondary action",
+  themePreviewAccent: "Accent state",
+  themePreviewMuted: "Muted information area",
   billing: "Billing & Referral",
   pricingAndReferral: "Pricing & Referral",
   pricingAndReferralDescription: "Configure the public pricing endpoint, referral commission, and multi-group billing rule.",

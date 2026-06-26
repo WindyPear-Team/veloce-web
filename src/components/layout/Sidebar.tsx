@@ -29,6 +29,7 @@ interface SystemSubItem {
 
 const systemSubItems: SystemSubItem[] = [
   { path: "/dashboard/admin/general", labelKey: "nav.systemGeneral" },
+  { path: "/dashboard/admin/theme", labelKey: "nav.systemTheme" },
   { path: "/dashboard/admin/auth", labelKey: "nav.systemAuth" },
   { path: "/dashboard/admin/content", labelKey: "nav.systemContent" },
   { path: "/dashboard/admin/operations", labelKey: "nav.systemOperations" },

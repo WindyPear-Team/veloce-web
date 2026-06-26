@@ -5,6 +5,7 @@ import { Link, Outlet, useLocation } from "react-router-dom"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
+import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
 import api from "@/lib/api"
@@ -86,6 +87,7 @@ export function Layout() {
               <SlidersHorizontal size={18} />
             </Button>
           )}
+          <ThemeSwitcher />
           <UserAvatar user={user} />
         </div>
       </header>
