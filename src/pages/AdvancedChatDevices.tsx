@@ -1,17 +1,19 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Copy, Laptop, Plus, RefreshCcw, Save, Terminal, Trash2 } from "lucide-react"
+import { Copy, Laptop, Plus, RefreshCcw, Save, Settings, Terminal } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+import { withPublicSettingsDefaults, type PublicSettings } from "@/lib/public-settings"
 
 interface ConnectorDevice {
   id: string
   name: string
-  remark?: string
   hostname?: string
   os?: string
   arch?: string
@@ -30,13 +32,10 @@ export default function AdvancedChatDevices() {
   const queryClient = useQueryClient()
   const { success, error } = useToast()
   const [deviceName, setDeviceName] = useState(copy.defaultDeviceName)
-  const [deviceRemark, setDeviceRemark] = useState("")
-  const [baseURL, setBaseURL] = useState(() => (typeof window !== "undefined" ? window.location.origin : "http://localhost:8080"))
   const [token, setToken] = useState("")
   const [isCreating, setIsCreating] = useState(false)
-  const [remarkDrafts, setRemarkDrafts] = useState<Record<string, string>>({})
-  const [savingDeviceID, setSavingDeviceID] = useState("")
-  const [deletingDeviceID, setDeletingDeviceID] = useState("")
+  const [editingDeviceID, setEditingDeviceID] = useState("")
+  const [editingDeviceName, setEditingDeviceName] = useState("")
 
   const { data: devices = [], isFetching, refetch } = useQuery<ConnectorDevice[]>({
     queryKey: devicesQueryKey,
@@ -47,27 +46,28 @@ export default function AdvancedChatDevices() {
     },
   })
 
+  const { data: publicSettings } = useQuery<Partial<PublicSettings>>({
+    queryKey: ["public-settings"],
+    queryFn: async () => {
+      const res = await api.get("/public/settings")
+      return res.data
+    },
+  })
+
+  const baseURL = useMemo(() => {
+    const value = withPublicSettingsDefaults(publicSettings).base_url.trim()
+    return value || (typeof window !== "undefined" ? window.location.origin : "http://localhost:8080")
+  }, [publicSettings])
+
   useEffect(() => {
     setDeviceName(copy.defaultDeviceName)
   }, [copy.defaultDeviceName])
-
-  useEffect(() => {
-    setRemarkDrafts((current) => {
-      const next = { ...current }
-      for (const device of devices) {
-        if (!(device.id in next)) {
-          next[device.id] = device.remark || ""
-        }
-      }
-      return next
-    })
-  }, [devices])
 
   const commands = useMemo(() => {
     if (!token) {
       return { windows: "", unix: "" }
     }
-    const server = quoteArg(baseURL.trim() || "http://localhost:8080")
+    const server = quoteArg(baseURL)
     const rawToken = quoteArg(token)
     return {
       windows: `app.exe -server ${server} -token ${rawToken}`,
@@ -81,14 +81,12 @@ export default function AdvancedChatDevices() {
     try {
       const res = await api.post("/user/advanced-chat/devices/token", {
         name,
-        remark: deviceRemark.trim(),
       })
       const nextToken = typeof res.data?.token === "string" ? res.data.token : ""
       if (!nextToken) {
         throw new Error(copy.createFailed)
       }
       setToken(nextToken)
-      setDeviceRemark("")
       success(copy.created)
       await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
     } catch (err) {
@@ -106,34 +104,30 @@ export default function AdvancedChatDevices() {
     success(copy.copied)
   }
 
-  const saveRemark = async (device: ConnectorDevice) => {
-    setSavingDeviceID(device.id)
-    try {
-      await api.put(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}`, {
-        remark: remarkDrafts[device.id] || "",
-      })
-      success(copy.saved)
-      await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
-    } catch (err) {
-      error(apiErrorMessage(err, copy.saveFailed))
-    } finally {
-      setSavingDeviceID("")
-    }
+  const openDeviceEditor = (device: ConnectorDevice) => {
+    setEditingDeviceID(device.id)
+    setEditingDeviceName(device.name)
   }
 
-  const deleteDevice = async (device: ConnectorDevice) => {
-    if (!window.confirm(copy.deleteConfirm.replace("{name}", device.name))) {
+  const closeDeviceEditor = () => {
+    setEditingDeviceID("")
+    setEditingDeviceName("")
+  }
+
+  const saveDeviceName = async () => {
+    const device = devices.find((item) => item.id === editingDeviceID)
+    const name = editingDeviceName.trim()
+    if (!device || !name) {
+      error(copy.deviceNameRequired)
       return
     }
-    setDeletingDeviceID(device.id)
     try {
-      await api.delete(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}`)
-      success(copy.deleted)
+      await api.put(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}`, { name })
+      success(copy.savedName)
       await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
+      closeDeviceEditor()
     } catch (err) {
-      error(apiErrorMessage(err, copy.deleteFailed))
-    } finally {
-      setDeletingDeviceID("")
+      error(apiErrorMessage(err, copy.saveFailed))
     }
   }
 
@@ -168,21 +162,8 @@ export default function AdvancedChatDevices() {
               />
             </label>
             <label className="space-y-1 text-sm">
-              <span className="font-medium">{copy.remark}</span>
-              <input
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={deviceRemark}
-                placeholder={copy.remarkPlaceholder}
-                onChange={(event) => setDeviceRemark(event.target.value)}
-              />
-            </label>
-            <label className="space-y-1 text-sm">
               <span className="font-medium">Base URL</span>
-              <input
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={baseURL}
-                onChange={(event) => setBaseURL(event.target.value)}
-              />
+              <input className="h-10 w-full rounded-md border bg-muted px-3 text-sm text-muted-foreground" value={baseURL} readOnly />
             </label>
             <div className="flex items-end">
               <Button className="w-full gap-2" onClick={createToken} disabled={isCreating}>
@@ -216,7 +197,7 @@ export default function AdvancedChatDevices() {
             <div className="space-y-3">
               {devices.map((device) => (
                 <div key={device.id} className="rounded-md border p-4">
-                  <div className="grid gap-3 lg:grid-cols-[1fr_1.5fr_auto] lg:items-center">
+                  <div className="grid gap-3 lg:grid-cols-[1fr_auto] lg:items-center">
                     <div className="min-w-0">
                       <div className="flex min-w-0 items-center gap-2">
                         <div className="truncate text-sm font-medium">{device.name}</div>
@@ -229,35 +210,16 @@ export default function AdvancedChatDevices() {
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">{copy.lastSeen}: {formatDateTime(device.last_seen_at) || "-"}</div>
                     </div>
-                    <label className="space-y-1 text-sm">
-                      <span className="font-medium">{copy.remark}</span>
-                      <input
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        value={remarkDrafts[device.id] || ""}
-                        placeholder={copy.remarkPlaceholder}
-                        onChange={(event) => setRemarkDrafts((current) => ({ ...current, [device.id]: event.target.value }))}
-                      />
-                    </label>
-                    <div className="flex gap-2 lg:justify-end">
+                    <div className="flex lg:justify-end">
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="gap-2"
-                        onClick={() => saveRemark(device)}
-                        disabled={savingDeviceID === device.id}
+                        size="icon"
+                        className="h-8 w-8"
+                        onClick={() => openDeviceEditor(device)}
+                        aria-label={copy.editDevice}
+                        title={copy.editDevice}
                       >
-                        <Save size={15} />
-                        {copy.save}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-2 text-destructive hover:text-destructive"
-                        onClick={() => deleteDevice(device)}
-                        disabled={deletingDeviceID === device.id}
-                      >
-                        <Trash2 size={15} />
-                        {copy.delete}
+                        <Settings size={15} />
                       </Button>
                     </div>
                   </div>
@@ -267,6 +229,34 @@ export default function AdvancedChatDevices() {
           )}
         </CardContent>
       </Card>
+
+      <Dialog
+        open={Boolean(editingDeviceID)}
+        onOpenChange={(open) => {
+          if (!open) {
+            closeDeviceEditor()
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{copy.editDevice}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-2">
+            <div className="text-sm font-medium">{copy.deviceName}</div>
+            <Input value={editingDeviceName} onChange={(event) => setEditingDeviceName(event.target.value)} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={closeDeviceEditor}>
+              {copy.cancel}
+            </Button>
+            <Button className="gap-2" onClick={saveDeviceName}>
+              <Save size={15} />
+              {copy.save}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -295,7 +285,6 @@ function normalizeDevice(value: unknown): ConnectorDevice | null {
   return {
     id,
     name: stringFromUnknown(value.name) || "Local device",
-    remark: stringFromUnknown(value.remark) || undefined,
     hostname: stringFromUnknown(value.hostname) || undefined,
     os: stringFromUnknown(value.os) || undefined,
     arch: stringFromUnknown(value.arch) || undefined,
@@ -346,8 +335,6 @@ const zhCopy = {
   commandTitle: "添加设备",
   deviceName: "设备名称",
   defaultDeviceName: "本地设备",
-  remark: "备注",
-  remarkPlaceholder: "例如办公电脑、家里主机",
   generateCommand: "生成连接命令",
   creating: "生成中...",
   token: "令牌",
@@ -363,13 +350,12 @@ const zhCopy = {
   online: "在线",
   offline: "离线",
   lastSeen: "最后在线",
-  save: "保存备注",
-  saved: "备注已保存",
-  saveFailed: "保存备注失败",
-  delete: "删除",
-  deleted: "设备已删除",
-  deleteFailed: "删除设备失败",
-  deleteConfirm: "确定删除设备 {name}？",
+  editDevice: "设备设置",
+  save: "保存",
+  savedName: "设备名称已保存",
+  saveFailed: "保存设备名称失败",
+  deviceNameRequired: "设备名称不能为空",
+  cancel: "取消",
 }
 
 const enCopy: typeof zhCopy = {
@@ -378,8 +364,6 @@ const enCopy: typeof zhCopy = {
   commandTitle: "Add device",
   deviceName: "Device name",
   defaultDeviceName: "Local device",
-  remark: "Remark",
-  remarkPlaceholder: "For example work laptop or home PC",
   generateCommand: "Generate command",
   creating: "Generating...",
   token: "Token",
@@ -395,13 +379,12 @@ const enCopy: typeof zhCopy = {
   online: "Online",
   offline: "Offline",
   lastSeen: "Last seen",
-  save: "Save remark",
-  saved: "Remark saved",
-  saveFailed: "Failed to save remark",
-  delete: "Delete",
-  deleted: "Device deleted",
-  deleteFailed: "Failed to delete device",
-  deleteConfirm: "Delete device {name}?",
+  editDevice: "Device settings",
+  save: "Save",
+  savedName: "Device name saved",
+  saveFailed: "Failed to save device name",
+  deviceNameRequired: "Device name is required",
+  cancel: "Cancel",
 }
 
 const jaCopy: typeof zhCopy = {
@@ -411,7 +394,6 @@ const jaCopy: typeof zhCopy = {
   commandTitle: "デバイスを追加",
   deviceName: "デバイス名",
   defaultDeviceName: "ローカルデバイス",
-  remark: "メモ",
   generateCommand: "コマンドを生成",
   deviceList: "デバイス一覧",
   empty: "デバイスがありません。先にコマンドを生成して app コネクターを起動してください。",

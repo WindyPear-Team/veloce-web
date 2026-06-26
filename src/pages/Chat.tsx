@@ -36,6 +36,7 @@ interface ChatToolCall {
   tool?: string
   status: string
   arguments?: Record<string, unknown>
+  result?: string
 }
 
 interface ChatMessage {
@@ -241,6 +242,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isSending, setIsSending] = useState(false)
   const [isStreamActive, setIsStreamActive] = useState(false)
+  const [isStopping, setIsStopping] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const [editingMessageID, setEditingMessageID] = useState("")
   const [editingContent, setEditingContent] = useState("")
@@ -330,13 +332,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const currentSession = activeSession || draftSession
   const activeToolCalls = useMemo(() => {
     const messages = currentSession?.messages || []
-    for (let index = messages.length - 1; index >= 0; index -= 1) {
-      const toolCalls = messages[index].tool_calls || []
-      if (toolCalls.length > 0) {
-        return toolCalls
-      }
-    }
-    return []
+    return messages.flatMap((message) => message.tool_calls || [])
   }, [currentSession?.messages])
   const selectedAgent = useMemo(() => {
     if (!isAdvanced) {
@@ -760,8 +756,29 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setIsConfigOpen(true)
   }
 
-  const stopStreaming = () => {
+  const stopActiveTask = async () => {
+    if (isStopping) {
+      return
+    }
+    setIsStopping(true)
     abortControllerRef.current?.abort()
+    if (isAdvanced && activeRunID) {
+      try {
+        const res = await api.post(`/user/advanced-chat/runs/${encodeURIComponent(activeRunID)}/stop`)
+        const stoppedRun = normalizeRun(res.data)
+        updateSession(currentSession.id, (current) => ({
+          ...current,
+          latest_run: stoppedRun || (current.latest_run ? { ...current.latest_run, status: "cancelled", status_message: "cancelled" } : current.latest_run),
+        }))
+        void refetchAdvancedSessions()
+      } catch (err) {
+        error(apiErrorMessage(err, copy.stopFailed))
+      } finally {
+        setIsStopping(false)
+      }
+    } else {
+      setIsStopping(false)
+    }
   }
 
   const sendMessage = async () => {
@@ -981,6 +998,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         } finally {
           abortControllerRef.current = null
           setIsStreamActive(false)
+          setIsStopping(false)
           setIsSending(false)
           void refetchAdvancedSessions()
         }
@@ -1279,9 +1297,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         {runStatusText(activeRun, copy)}
                       </div>
                     )}
-                    <div className="rounded-md border bg-muted/40 px-3 py-1 text-xs text-muted-foreground">
-                      {activeRunMode === "assistant" ? copy.assistantModeHelp : copy.chatModeHelp}
-                    </div>
                   </div>
                 )}
               </div>
@@ -1293,7 +1308,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 ) : (
                   currentSession.messages.map((message) => (
                     <div key={message.id} className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                      <div className="max-w-[92%] rounded-md border bg-background p-3 text-sm">
+                      <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
                         <div className="flex items-start gap-2">
                           {message.role === "user" ? (
                             <User className="mt-0.5 h-4 w-4 shrink-0" />
@@ -1324,27 +1339,33 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                               </>
                             )}
                           </div>
-                          <div className="flex shrink-0 gap-1">
-                            {editingMessageID === message.id ? (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
-                                  <Check size={15} />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
-                                  <X size={15} />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
-                                  <Pencil size={15} />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
-                                  <Trash2 size={15} />
-                                </Button>
-                              </>
-                            )}
-                          </div>
+                        </div>
+                        <div
+                          className={cn(
+                            "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                            editingMessageID === message.id && "opacity-100",
+                            message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
+                          )}
+                        >
+                          {editingMessageID === message.id ? (
+                            <>
+                              <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
+                                <Check size={15} />
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
+                                <X size={15} />
+                              </Button>
+                            </>
+                          ) : (
+                            <>
+                              <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
+                                <Pencil size={14} />
+                              </Button>
+                              <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                <Trash2 size={14} />
+                              </Button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1427,17 +1448,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </div>
                   )}
                 </div>
-                {isAdvanced && isStreamActive ? (
-                  <Button variant="outline" className="gap-2 self-end" onClick={stopStreaming}>
-                    <X size={16} />
-                    {copy.stop}
-                  </Button>
+                {isAdvanced && (isStreamActive || isActiveRunRunning || isSending) ? (
+                  <div className="flex items-center justify-end gap-2 self-end">
+                    <Button variant="outline" className="gap-2" disabled={isStopping} onClick={stopActiveTask}>
+                      <X size={16} />
+                      {copy.stopTask}
+                    </Button>
+                    <span className="text-xs text-muted-foreground">{copy.sending}</span>
+                  </div>
                 ) : (
                   <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isActiveRunRunning} onClick={sendMessage}>
                     <Send size={16} />
-                    {isAdvanced && activeRunMode === "assistant"
-                      ? isSending || isActiveRunRunning ? copy.runningAssistant : copy.runAssistant
-                      : isSending ? copy.sending : copy.send}
+                    {isSending || isActiveRunRunning
+                      ? copy.sending
+                      : isAdvanced && activeRunMode === "assistant" ? copy.runAssistant : copy.send}
                   </Button>
                 )}
               </div>
@@ -1756,7 +1780,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     />
                     <span>
                       <span className="block font-medium">{copy.connectorAutoApprove}</span>
-                      <span className="mt-1 block text-xs text-muted-foreground">{copy.connectorAutoApproveHint}</span>
                     </span>
                   </label>
                   <label className="space-y-1 text-sm">
@@ -1851,33 +1874,44 @@ function ConnectorApprovalPanel({
               </Button>
             </div>
           </div>
-          <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-muted p-2 text-xs">
-            {formatToolArguments(task.payload)}
-          </pre>
+          <ConnectorApprovalTaskPreview task={task} copy={copy} />
         </div>
       ))}
     </div>
   )
 }
 
+function ConnectorApprovalTaskPreview({ task, copy }: { task: ConnectorApprovalTask; copy: ChatCopy }) {
+  const action = task.action.toLowerCase()
+  const path = stringArgument(task.payload, "path")
+  if (action === "run_command") {
+    return <pre className="mt-3 max-h-48 overflow-auto rounded-md bg-muted p-2 text-xs">{stringArgument(task.payload, "command")}</pre>
+  }
+  if (action === "list_files" || action === "read_file") {
+    return <div className="mt-3 break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{path || "."}</div>
+  }
+  if (action === "write_file") {
+    return (
+      <div className="mt-3">
+        <div className="mb-1 break-all text-[11px] font-medium text-muted-foreground">{path}</div>
+        <pre className="max-h-72 overflow-auto rounded-md bg-muted p-2 text-xs">{stringArgument(task.payload, "content")}</pre>
+      </div>
+    )
+  }
+  if (action === "replace_text") {
+    return <ReplacementDiffList entries={replacementEntriesFromArguments(task.payload)} copy={copy} />
+  }
+  return <div className="mt-3 break-all rounded-md bg-muted px-3 py-2 font-mono text-xs">{path || task.action}</div>
+}
+
 function ToolCallRounds({ toolCalls, copy }: { toolCalls: ChatToolCall[]; copy: ChatCopy }) {
-  const groups = groupToolCallsByRound(toolCalls)
-  if (groups.length === 0) {
+  if (toolCalls.length === 0) {
     return null
   }
   return (
     <div className="mb-2 space-y-2">
-      {groups.map((group) => (
-        <div key={group.key} className="rounded-md border bg-muted/30 p-2">
-          <div className="mb-2 text-xs font-medium text-muted-foreground">
-            {copy.toolRound.replace("{round}", group.label)}
-          </div>
-          <div className="space-y-2">
-            {group.calls.map((toolCall) => (
-              <ToolCallDetails key={toolCall.id} toolCall={toolCall} copy={copy} />
-            ))}
-          </div>
-        </div>
+      {toolCalls.map((toolCall) => (
+        <ToolCallDetails key={toolCall.id} toolCall={toolCall} copy={copy} />
       ))}
     </div>
   )
@@ -1886,10 +1920,28 @@ function ToolCallRounds({ toolCalls, copy }: { toolCalls: ChatToolCall[]; copy: 
 function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: ChatCopy }) {
   const shouldAutoOpen = toolCall.status === "running" || toolCall.status === "approval_required"
   const [open, setOpen] = useState(shouldAutoOpen)
+  const builtinKind = builtinToolKind(toolCall)
+  const path = stringArgument(toolCall.arguments, "path")
+  const content = stringArgument(toolCall.arguments, "content")
+  const replacements = replacementEntriesFromArguments(toolCall.arguments)
 
   useEffect(() => {
     setOpen(shouldAutoOpen)
   }, [shouldAutoOpen, toolCall.id])
+
+  if (builtinKind === "read") {
+    return (
+      <div className="rounded-md border bg-background p-2">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          <Server size={13} className="shrink-0" />
+          <span className="min-w-0 truncate font-medium">{path || toolLabel(toolCall)}</span>
+          <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
+            {toolStatusLabel(toolCall.status, copy)}
+          </span>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <details
@@ -1900,18 +1952,72 @@ function ToolCallDetails({ toolCall, copy }: { toolCall: ChatToolCall; copy: Cha
       <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
         <Server size={13} className="shrink-0" />
         <span className="min-w-0 truncate font-medium">
-          {toolCall.server ? `${toolCall.server}: ` : ""}{toolCall.tool || toolCall.name}
+          {builtinKind && path ? path : toolLabel(toolCall)}
         </span>
         <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
           {toolStatusLabel(toolCall.status, copy)}
         </span>
         {!open && <span className="ml-auto text-[11px] text-muted-foreground">{copy.expandToolCall}</span>}
       </summary>
-      <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolArguments}</div>
-      <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
-        {formatToolArguments(toolCall.arguments)}
-      </pre>
+      {builtinKind === "write" ? (
+        <>
+          <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolWriteContent}</div>
+          <pre className="mt-1 max-h-72 overflow-auto rounded bg-muted p-2 text-xs">{content}</pre>
+        </>
+      ) : builtinKind === "replace" ? (
+        <ReplacementDiffList entries={replacements} copy={copy} />
+      ) : (
+        <>
+          <div className="mt-2 text-[11px] font-medium text-muted-foreground">{copy.toolArguments}</div>
+          <pre className="mt-1 max-h-48 overflow-auto rounded bg-muted p-2 text-xs">
+            {formatToolArguments(toolCall.arguments)}
+          </pre>
+        </>
+      )}
     </details>
+  )
+}
+
+function ReplacementDiffList({ entries, copy }: { entries: ReplacementEntry[]; copy: ChatCopy }) {
+  if (entries.length === 0) {
+    return <div className="mt-2 rounded bg-muted px-3 py-2 text-xs text-muted-foreground">{copy.toolArguments}</div>
+  }
+  return (
+    <div className="mt-2 space-y-3">
+      {entries.map((entry, index) => (
+        <div key={`${entry.path}-${index}`} className="overflow-hidden rounded-md border">
+          {entry.path && <div className="border-b bg-muted/60 px-2 py-1 font-mono text-[11px] text-muted-foreground">{entry.path}</div>}
+          <LineDiff oldText={entry.oldText} newText={entry.newText} />
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function LineDiff({ oldText, newText }: { oldText: string; newText: string }) {
+  const hunks = diffHunks(oldText, newText, 2)
+  return (
+    <div className="max-h-96 overflow-auto bg-background py-1 font-mono text-xs">
+      {hunks.map((hunk, hunkIndex) => (
+        <div key={hunkIndex}>
+          {hunkIndex > 0 && <div className="px-2 py-1 text-muted-foreground">...</div>}
+          {hunk.map((line, lineIndex) => (
+            <div
+              key={`${hunkIndex}-${lineIndex}`}
+              className={cn(
+                "grid grid-cols-[1.5rem_1fr] gap-2 whitespace-pre-wrap break-words px-2 py-0.5",
+                line.type === "remove" && "bg-red-50 text-red-800",
+                line.type === "add" && "bg-emerald-50 text-emerald-800",
+                line.type === "context" && "text-muted-foreground"
+              )}
+            >
+              <span className="select-none text-right opacity-70">{line.type === "remove" ? "-" : line.type === "add" ? "+" : " "}</span>
+              <span>{line.text || " "}</span>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
   )
 }
 
@@ -2365,8 +2471,7 @@ function streamStatusText(payload: any, copy: ChatCopy) {
     return copy.assistantStarted
   }
   if (message === "model_round") {
-    const round = typeof payload?.round === "number" ? String(payload.round) : ""
-    return round ? copy.streamModelRound.replace("{round}", round) : copy.streamThinking
+    return copy.streamModelRound || copy.streamThinking
   }
   return ""
 }
@@ -2671,6 +2776,7 @@ function normalizeToolCalls(value: unknown): ChatToolCall[] {
       tool,
       status: typeof item.status === "string" && item.status ? item.status : "ok",
       arguments: isRecord(item.arguments) ? item.arguments : undefined,
+      result: typeof item.result === "string" ? item.result : undefined,
     })
   })
   return calls
@@ -2873,18 +2979,6 @@ function stringFromUnknown(value: unknown) {
   return undefined
 }
 
-function groupToolCallsByRound(toolCalls: ChatToolCall[]) {
-  const groups = new Map<string, { key: string; label: string; calls: ChatToolCall[] }>()
-  toolCalls.forEach((call, index) => {
-    const label = typeof call.round === "number" ? String(call.round) : String(index + 1)
-    const key = typeof call.round === "number" ? `round-${call.round}` : `tool-${index}`
-    const group = groups.get(key) || { key, label, calls: [] }
-    group.calls.push(call)
-    groups.set(key, group)
-  })
-  return Array.from(groups.values())
-}
-
 function formatToolArguments(value?: Record<string, unknown>) {
   if (!value || Object.keys(value).length === 0) {
     return "{}"
@@ -2894,6 +2988,141 @@ function formatToolArguments(value?: Record<string, unknown>) {
   } catch {
     return String(value)
   }
+}
+
+interface ReplacementEntry {
+  path: string
+  oldText: string
+  newText: string
+}
+
+interface DiffLine {
+  type: "context" | "remove" | "add"
+  text: string
+}
+
+function replacementEntriesFromArguments(value?: Record<string, unknown>): ReplacementEntry[] {
+  if (!value) {
+    return []
+  }
+  const defaultPath = stringArgument(value, "path")
+  const rawReplacements = Array.isArray(value.replacements) ? value.replacements : []
+  const entries = rawReplacements
+    .filter(isRecord)
+    .map((item) => ({
+      path: stringArgument(item, "path") || defaultPath,
+      oldText: stringArgument(item, "old_text"),
+      newText: stringArgument(item, "new_text"),
+    }))
+    .filter((item) => item.oldText || item.newText)
+  if (entries.length > 0) {
+    return entries
+  }
+  const oldText = stringArgument(value, "old_text")
+  const newText = stringArgument(value, "new_text")
+  return oldText || newText ? [{ path: defaultPath, oldText, newText }] : []
+}
+
+function diffHunks(oldText: string, newText: string, contextLines: number): DiffLine[][] {
+  const lines = lineDiff(oldText, newText)
+  const changed = lines
+    .map((line, index) => (line.type === "context" ? -1 : index))
+    .filter((index) => index >= 0)
+  if (changed.length === 0) {
+    return [lines.slice(0, Math.max(1, contextLines * 2 + 1))]
+  }
+
+  const ranges: Array<[number, number]> = []
+  for (const index of changed) {
+    const start = Math.max(0, index - contextLines)
+    const end = Math.min(lines.length, index + contextLines + 1)
+    const last = ranges[ranges.length - 1]
+    if (last && start <= last[1]) {
+      last[1] = Math.max(last[1], end)
+    } else {
+      ranges.push([start, end])
+    }
+  }
+  return ranges.map(([start, end]) => lines.slice(start, end))
+}
+
+function lineDiff(oldText: string, newText: string): DiffLine[] {
+  const oldLines = splitDiffLines(oldText)
+  const newLines = splitDiffLines(newText)
+  if (oldLines.length * newLines.length > 40000) {
+    return [
+      ...oldLines.map((text) => ({ type: "remove" as const, text })),
+      ...newLines.map((text) => ({ type: "add" as const, text })),
+    ]
+  }
+
+  const dp = Array.from({ length: oldLines.length + 1 }, () => Array(newLines.length + 1).fill(0) as number[])
+  for (let oldIndex = oldLines.length - 1; oldIndex >= 0; oldIndex -= 1) {
+    for (let newIndex = newLines.length - 1; newIndex >= 0; newIndex -= 1) {
+      dp[oldIndex][newIndex] = oldLines[oldIndex] === newLines[newIndex]
+        ? dp[oldIndex + 1][newIndex + 1] + 1
+        : Math.max(dp[oldIndex + 1][newIndex], dp[oldIndex][newIndex + 1])
+    }
+  }
+
+  const result: DiffLine[] = []
+  let oldIndex = 0
+  let newIndex = 0
+  while (oldIndex < oldLines.length && newIndex < newLines.length) {
+    if (oldLines[oldIndex] === newLines[newIndex]) {
+      result.push({ type: "context", text: oldLines[oldIndex] })
+      oldIndex += 1
+      newIndex += 1
+    } else if (dp[oldIndex + 1][newIndex] >= dp[oldIndex][newIndex + 1]) {
+      result.push({ type: "remove", text: oldLines[oldIndex] })
+      oldIndex += 1
+    } else {
+      result.push({ type: "add", text: newLines[newIndex] })
+      newIndex += 1
+    }
+  }
+  while (oldIndex < oldLines.length) {
+    result.push({ type: "remove", text: oldLines[oldIndex] })
+    oldIndex += 1
+  }
+  while (newIndex < newLines.length) {
+    result.push({ type: "add", text: newLines[newIndex] })
+    newIndex += 1
+  }
+  return result
+}
+
+function splitDiffLines(value: string) {
+  return value.replace(/\r\n/g, "\n").split("\n")
+}
+
+function toolLabel(toolCall: ChatToolCall) {
+  return `${toolCall.server ? `${toolCall.server}: ` : ""}${toolCall.tool || toolCall.name}`
+}
+
+function builtinToolKind(toolCall: ChatToolCall): "read" | "write" | "replace" | "" {
+  const value = `${toolCall.name} ${toolCall.tool}`.toLowerCase()
+  if (value.includes("workspace_read_file") || value.includes("read_file")) {
+    return "read"
+  }
+  if (value.includes("workspace_write_file") || value.includes("write_file")) {
+    return "write"
+  }
+  if (value.includes("workspace_replace_text") || value.includes("replace_text")) {
+    return "replace"
+  }
+  return ""
+}
+
+function stringArgument(value: Record<string, unknown> | undefined, key: string) {
+  const item = value?.[key]
+  if (typeof item === "string") {
+    return item
+  }
+  if (typeof item === "number" || typeof item === "boolean") {
+    return String(item)
+  }
+  return ""
 }
 
 function toolStatusClassName(status: string) {
@@ -3016,7 +3245,6 @@ const chatCopyKeys = {
   approveConnectorTask: "chat.approveConnectorTask",
   rejectConnectorTask: "chat.rejectConnectorTask",
   connectorAutoApprove: "chat.connectorAutoApprove",
-  connectorAutoApproveHint: "chat.connectorAutoApproveHint",
   connectorCommandPrefixes: "chat.connectorCommandPrefixes",
   connectorCommandPrefixesPlaceholder: "chat.connectorCommandPrefixesPlaceholder",
   connectorCommandPrefixesHint: "chat.connectorCommandPrefixesHint",
@@ -3048,8 +3276,6 @@ const chatCopyKeys = {
   noMessages: "chat.noMessages",
   chatMode: "chat.chatMode",
   assistantMode: "chat.assistantMode",
-  chatModeHelp: "chat.chatModeHelp",
-  assistantModeHelp: "chat.assistantModeHelp",
   promptPlaceholder: "chat.promptPlaceholder",
   assistantPromptPlaceholder: "chat.assistantPromptPlaceholder",
   attachmentMessageTitle: "chat.attachmentMessageTitle",
@@ -3073,6 +3299,8 @@ const chatCopyKeys = {
   emptyResponse: "chat.emptyResponse",
   stopped: "chat.stopped",
   stop: "chat.stop",
+  stopTask: "chat.stopTask",
+  stopFailed: "chat.stopFailed",
   streamStarted: "chat.streamStarted",
   streamLoadingTools: "chat.streamLoadingTools",
   assistantStarted: "chat.assistantStarted",
@@ -3081,6 +3309,10 @@ const chatCopyKeys = {
   usedTools: "chat.usedTools",
   toolRound: "chat.toolRound",
   toolArguments: "chat.toolArguments",
+  toolResult: "chat.toolResult",
+  toolWriteContent: "chat.toolWriteContent",
+  toolReplaceOld: "chat.toolReplaceOld",
+  toolReplaceNew: "chat.toolReplaceNew",
   expandToolCall: "chat.expandToolCall",
   toolStatusOk: "chat.toolStatusOk",
   toolStatusRunning: "chat.toolStatusRunning",
