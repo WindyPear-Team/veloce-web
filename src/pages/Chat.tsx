@@ -2528,6 +2528,14 @@ function parseSSEEvent(raw: string): ParsedSSEEvent | null {
 
 function streamStatusText(payload: any, copy: ChatCopy) {
   const message = typeof payload?.message === "string" ? payload.message : ""
+  const retryMatch = message.match(/^retrying:(\d+)\/(\d+)$/)
+  if (message === "retrying" || retryMatch) {
+    const attempt = Number(payload?.attempt || retryMatch?.[1] || 0)
+    const max = Number(payload?.max || retryMatch?.[2] || 0)
+    return copy.streamRetrying
+      .replace("{attempt}", String(attempt || 1))
+      .replace("{max}", String(max || 10))
+  }
   if (message === "stream_started") {
     return copy.streamStarted
   }
@@ -3450,6 +3458,7 @@ const chatCopyKeys = {
   streamLoadingTools: "chat.streamLoadingTools",
   assistantStarted: "chat.assistantStarted",
   streamModelRound: "chat.streamModelRound",
+  streamRetrying: "chat.streamRetrying",
   streamThinking: "chat.streamThinking",
   usedTools: "chat.usedTools",
   toolRound: "chat.toolRound",
