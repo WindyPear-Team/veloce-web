@@ -13,6 +13,22 @@ interface UserChannelCatalog {
   id: number
   name: string
   models: string[]
+  video_billing_configs: Record<string, VideoBillingConfig>
+}
+
+interface VideoBillingConfig {
+  resolutions: VideoResolutionPrice[]
+}
+
+interface VideoResolutionPrice {
+  resolution: string
+  duration_unit_price?: string | number
+  durations?: VideoDurationPrice[]
+}
+
+interface VideoDurationPrice {
+  seconds: number
+  price: string | number
 }
 
 interface VideoResult {
@@ -64,6 +80,9 @@ export default function Videos() {
   })
 
   const modelOptions = useMemo(() => uniqueModels(catalog), [catalog])
+  const selectedVideoBillingConfig = useMemo(() => videoBillingConfigForModel(catalog, modelName), [catalog, modelName])
+  const sizeOptions = useMemo(() => videoSizeOptions(selectedVideoBillingConfig), [selectedVideoBillingConfig])
+  const durationOptions = useMemo(() => videoDurationOptions(selectedVideoBillingConfig, size), [selectedVideoBillingConfig, size])
 
   useEffect(() => {
     if (!modelName && modelOptions.length > 0) {
@@ -76,6 +95,18 @@ export default function Videos() {
       localStorage.setItem(modelStoreKey, modelName)
     }
   }, [modelName])
+
+  useEffect(() => {
+    if (sizeOptions.length > 0 && !sizeOptions.includes(size)) {
+      setSize(sizeOptions[0])
+    }
+  }, [size, sizeOptions])
+
+  useEffect(() => {
+    if (durationOptions.length > 0 && !durationOptions.includes(duration)) {
+      setDuration(durationOptions[0])
+    }
+  }, [duration, durationOptions])
 
   useEffect(() => {
     localStorage.setItem(sizeStoreKey, size)
@@ -209,7 +240,7 @@ export default function Videos() {
                 ))}
               </select>
             </label>
-            <OptionField label={copy.size} value={size} options={videoSizes} autoLabel={copy.auto} onChange={setSize} />
+            <OptionField label={copy.size} value={size} options={sizeOptions.length > 0 ? sizeOptions : videoSizes} autoLabel={copy.auto} onChange={setSize} />
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2 text-sm">
                 <span className="font-medium">{copy.count}</span>
@@ -217,7 +248,15 @@ export default function Videos() {
               </label>
               <label className="block space-y-2 text-sm">
                 <span className="font-medium">{copy.duration}</span>
-                <Input min={1} max={60} type="number" value={duration} onChange={(event) => setDuration(normalizeDuration(event.target.value))} />
+                {durationOptions.length > 0 ? (
+                  <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={duration} onChange={(event) => setDuration(normalizeDuration(event.target.value))}>
+                    {durationOptions.map((option) => (
+                      <option key={option} value={option}>{option}s</option>
+                    ))}
+                  </select>
+                ) : (
+                  <Input min={1} max={60} type="number" value={duration} onChange={(event) => setDuration(normalizeDuration(event.target.value))} />
+                )}
               </label>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
@@ -385,11 +424,72 @@ function normalizeCatalogItem(value: unknown): UserChannelCatalog {
     id: Number(item.id || 0),
     name: typeof item.name === "string" ? item.name : "",
     models: Array.isArray(item.models) ? item.models.filter((model): model is string => typeof model === "string") : [],
+    video_billing_configs: normalizeVideoBillingConfigs(item.video_billing_configs),
   }
 }
 
 function uniqueModels(catalog: UserChannelCatalog[]) {
   return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
+}
+
+function videoBillingConfigForModel(catalog: UserChannelCatalog[], modelName: string) {
+  const cleanModelName = modelName.trim()
+  if (!cleanModelName) {
+    return null
+  }
+  for (const channel of catalog) {
+    const config = channel.video_billing_configs?.[cleanModelName]
+    if (config) {
+      return config
+    }
+  }
+  return null
+}
+
+function videoSizeOptions(config: VideoBillingConfig | null) {
+  const resolutions = config?.resolutions || []
+  return resolutions.map((item) => item.resolution).filter(Boolean)
+}
+
+function videoDurationOptions(config: VideoBillingConfig | null, resolution: string) {
+  const resolutionConfig = (config?.resolutions || []).find((item) => item.resolution === resolution)
+  const durations = resolutionConfig?.durations || []
+  return durations.map((item) => item.seconds).filter((value) => value > 0)
+}
+
+function normalizeVideoBillingConfigs(value: unknown): Record<string, VideoBillingConfig> {
+  if (!isRecord(value)) {
+    return {}
+  }
+  const configs: Record<string, VideoBillingConfig> = {}
+  for (const [modelName, rawConfig] of Object.entries(value)) {
+    const config = normalizeVideoBillingConfig(rawConfig)
+    if (config.resolutions.length > 0) {
+      configs[modelName] = config
+    }
+  }
+  return configs
+}
+
+function normalizeVideoBillingConfig(value: unknown): VideoBillingConfig {
+  const item = isRecord(value) ? value : {}
+  const resolutions = Array.isArray(item.resolutions)
+    ? item.resolutions.map((raw) => {
+      const resolution = isRecord(raw) && typeof raw.resolution === "string" ? raw.resolution : ""
+      const durations = isRecord(raw) && Array.isArray(raw.durations)
+        ? raw.durations.map((duration) => {
+          const seconds = isRecord(duration) ? Number(duration.seconds || 0) : 0
+          const price = isRecord(duration) ? duration.price : 0
+          return { seconds, price: Number(price || 0) }
+        }).filter((duration) => duration.seconds > 0)
+        : []
+      const durationUnitPrice = isRecord(raw) ? Number(raw.duration_unit_price || 0) : 0
+      return { resolution, durations, duration_unit_price: durationUnitPrice }
+    }).filter((raw) => raw.resolution)
+    : []
+  return {
+    resolutions,
+  }
 }
 
 function parseJSON(text: string): unknown {

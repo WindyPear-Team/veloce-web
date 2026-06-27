@@ -32,6 +32,21 @@ interface PriceTier {
   condition?: string
 }
 
+interface VideoResolutionPrice {
+  resolution: string
+  duration_unit_price?: string | number
+  durations?: VideoDurationPrice[]
+}
+
+interface VideoDurationPrice {
+  seconds: number
+  price: string | number
+}
+
+interface VideoBillingConfig {
+  resolutions: VideoResolutionPrice[]
+}
+
 interface ModelConfig {
   id: number
   model_name: string
@@ -56,6 +71,7 @@ interface ModelConfig {
   image_output_price_tiers: PriceTier[]
   audio_input_price_tiers: PriceTier[]
   audio_output_price_tiers: PriceTier[]
+  video_billing_config: VideoBillingConfig
   enabled: boolean
 }
 
@@ -507,8 +523,16 @@ function ModelDialog({
             >
               <option value="0">{copy.quotaToken}</option>
               <option value="1">{copy.quotaPerCall}</option>
+              <option value="100">{copy.quotaVideo}</option>
             </select>
           </FieldLabel>
+          {(draft.quota_type ?? 0) === 100 && (
+            <VideoBillingEditor
+              config={draft.video_billing_config}
+              copy={copy}
+              onChange={(config) => setDraft({ ...draft, video_billing_config: config })}
+            />
+          )}
           <PriceSection title={copy.textTokenPricing}>
             <PriceEditor
               label={t("admin.inputPrice")}
@@ -852,6 +876,92 @@ function PriceEditor({
   )
 }
 
+function VideoBillingEditor({
+  config,
+  copy,
+  onChange,
+}: {
+  config?: VideoBillingConfig
+  copy: typeof zhCopy
+  onChange: (config: VideoBillingConfig) => void
+}) {
+  const normalized = normalizeVideoBillingConfig(config)
+
+  const updateResolution = (index: number, patch: Partial<VideoResolutionPrice>) => {
+    const resolutions = normalized.resolutions.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item)
+    onChange({ ...normalized, resolutions })
+  }
+  const removeResolution = (index: number) => {
+    onChange({ ...normalized, resolutions: normalized.resolutions.filter((_, itemIndex) => itemIndex !== index) })
+  }
+  const addResolution = () => {
+    onChange({ ...normalized, resolutions: [...normalized.resolutions, { resolution: "720p", duration_unit_price: 0, durations: [] }] })
+  }
+  const updateResolutionDuration = (resolutionIndex: number, durationIndex: number, patch: Partial<VideoDurationPrice>) => {
+    const resolutions = normalized.resolutions.map((item, itemIndex) => {
+      if (itemIndex !== resolutionIndex) {
+        return item
+      }
+      const durations = (item.durations || []).map((duration, index) => index === durationIndex ? { ...duration, ...patch } : duration)
+      return { ...item, durations }
+    })
+    onChange({ ...normalized, resolutions })
+  }
+  const removeResolutionDuration = (resolutionIndex: number, durationIndex: number) => {
+    const resolutions = normalized.resolutions.map((item, itemIndex) => itemIndex === resolutionIndex ? { ...item, durations: (item.durations || []).filter((_, index) => index !== durationIndex) } : item)
+    onChange({ ...normalized, resolutions })
+  }
+  const addResolutionDuration = (resolutionIndex: number) => {
+    const resolutions = normalized.resolutions.map((item, itemIndex) => itemIndex === resolutionIndex ? { ...item, durations: [...(item.durations || []), { seconds: 5, price: 0 }], duration_unit_price: 0 } : item)
+    onChange({ ...normalized, resolutions })
+  }
+
+  return (
+    <div className="space-y-3 rounded-md border p-3">
+      <div className="text-sm font-semibold">{copy.videoBilling}</div>
+      <div className="space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <div className="text-sm font-medium">{copy.videoResolutions}</div>
+          <Button type="button" variant="outline" size="sm" onClick={addResolution}>{copy.addResolution}</Button>
+        </div>
+        {normalized.resolutions.map((item, index) => (
+          <div key={`${index}-${item.resolution}`} className="space-y-2 rounded-md border bg-muted/20 p-3">
+            <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
+              <Input value={item.resolution} onChange={(event) => updateResolution(index, { resolution: event.target.value })} placeholder="720p" />
+              <Button type="button" variant="outline" size="icon" onClick={() => removeResolution(index)} title={copy.deleteTier}>
+                <Trash size={14} />
+              </Button>
+            </div>
+            <div className="flex items-center justify-between gap-2">
+              <div className="text-xs font-medium text-muted-foreground">{copy.videoDurations}</div>
+              <Button type="button" variant="outline" size="sm" onClick={() => addResolutionDuration(index)}>{copy.addDuration}</Button>
+            </div>
+            {(item.durations || []).map((duration, durationIndex) => (
+              <div key={`${durationIndex}-${duration.seconds}`} className="grid gap-2 sm:grid-cols-[1fr_1fr_auto]">
+                <Input type="number" value={String(duration.seconds ?? 0)} onChange={(event) => updateResolutionDuration(index, durationIndex, { seconds: Number(event.target.value) })} placeholder="5" />
+                <Input type="number" value={String(duration.price ?? 0)} onChange={(event) => updateResolutionDuration(index, durationIndex, { price: Number(event.target.value) })} placeholder="0.2" />
+                <Button type="button" variant="outline" size="icon" onClick={() => removeResolutionDuration(index, durationIndex)} title={copy.deleteTier}>
+                  <Trash size={14} />
+                </Button>
+              </div>
+            ))}
+            {(item.durations || []).length === 0 && (
+              <FieldLabel label={copy.durationUnitPrice}>
+                <Input
+                  type="number"
+                  value={String(item.duration_unit_price ?? 0)}
+                  onChange={(event) => updateResolution(index, { duration_unit_price: Number(event.target.value) })}
+                  placeholder="0.02"
+                />
+              </FieldLabel>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function PriceWithTiers({ value, tiers }: { value: string | number; tiers?: PriceTier[] }) {
   return (
     <div>
@@ -980,6 +1090,7 @@ function emptyModel(): Partial<ModelConfig> {
     image_output_price_tiers: [],
     audio_input_price_tiers: [],
     audio_output_price_tiers: [],
+    video_billing_config: { resolutions: [] },
     enabled: true,
   }
 }
@@ -989,7 +1100,7 @@ function modelPayload(model: Partial<ModelConfig>) {
     model_name: model.model_name || "",
     provider: model.provider || "",
     provider_icon_url: model.provider_icon_url || "",
-    quota_type: Number(model.quota_type || 0) === 1 ? 1 : 0,
+    quota_type: normalizeQuotaType(model.quota_type),
     input_price: Number(model.input_price || 0),
     output_price: Number(model.output_price || 0),
     cached_input_price: Number(model.cached_input_price || 0),
@@ -1008,6 +1119,7 @@ function modelPayload(model: Partial<ModelConfig>) {
     image_output_price_tiers: normalizePriceTiers(model.image_output_price_tiers || []),
     audio_input_price_tiers: normalizePriceTiers(model.audio_input_price_tiers || []),
     audio_output_price_tiers: normalizePriceTiers(model.audio_output_price_tiers || []),
+    video_billing_config: normalizeVideoBillingConfig(model.video_billing_config),
     enabled: model.enabled ?? true,
   }
 }
@@ -1021,7 +1133,19 @@ function formatModelPrice(value: string | number) {
 }
 
 function quotaTypeLabel(value: number | undefined, copy: typeof zhCopy) {
-  return Number(value || 0) === 1 ? copy.quotaPerCall : copy.quotaToken
+  const quotaType = normalizeQuotaType(value)
+  if (quotaType === 100) {
+    return copy.quotaVideo
+  }
+  return quotaType === 1 ? copy.quotaPerCall : copy.quotaToken
+}
+
+function normalizeQuotaType(value: number | undefined) {
+  const quotaType = Number(value || 0)
+  if (quotaType === 1 || quotaType === 100) {
+    return quotaType
+  }
+  return 0
 }
 
 function formatTokenCount(value: number) {
@@ -1053,6 +1177,31 @@ function normalizePriceTiers(tiers: PriceTier[]) {
     const conditionSort = tierConditionSort(a.condition) - tierConditionSort(b.condition)
     return conditionSort || a.min_tokens - b.min_tokens
   })
+}
+
+function normalizeVideoBillingConfig(config?: VideoBillingConfig): VideoBillingConfig {
+  const resolutionMap = new Map<string, VideoResolutionPrice>()
+  for (const item of config?.resolutions || []) {
+    const resolution = String(item.resolution || "").trim().toLowerCase().replace(/\s+/g, "").replace("*", "x")
+    if (!resolution) {
+      continue
+    }
+    const durationMap = new Map<number, VideoDurationPrice>()
+    for (const duration of item.durations || []) {
+      const seconds = Math.max(0, Math.floor(Number(duration.seconds || 0)))
+      const price = Number(duration.price || 0)
+      if (seconds <= 0 || !Number.isFinite(price) || price < 0) {
+        continue
+      }
+      durationMap.set(seconds, { seconds, price })
+    }
+    const durations = Array.from(durationMap.values()).sort((a, b) => a.seconds - b.seconds)
+    const durationUnitPrice = durations.length > 0 ? 0 : Math.max(0, Number(item.duration_unit_price || 0))
+    resolutionMap.set(resolution, { resolution, durations, duration_unit_price: durationUnitPrice })
+  }
+  return {
+    resolutions: Array.from(resolutionMap.values()).sort((a, b) => a.resolution.localeCompare(b.resolution)),
+  }
 }
 
 function normalizeTierCondition(condition: string) {
@@ -1214,10 +1363,17 @@ const zhCopy = {
   quotaType: "计费类型",
   quotaToken: "按量计费",
   quotaPerCall: "按次计费",
+  quotaVideo: "视频分辨率和时长",
   perCallPrice: "每次价格",
   textTokenPricing: "文本 token 价格",
   cachePricing: "缓存价格",
   multimodalPricing: "多模态价格",
+  videoBilling: "视频计费",
+  videoResolutions: "分辨率价格",
+  videoDurations: "时长价格",
+  addResolution: "添加分辨率",
+  addDuration: "添加时长",
+  durationUnitPrice: "每秒单价",
   cacheReadInputPrice: "缓存读取价格",
   cacheWriteInputPrice: "缓存写入价格",
   cacheWrite1hInputPrice: "1 小时缓存写入价格",
@@ -1286,10 +1442,17 @@ const enCopy: typeof zhCopy = {
   quotaType: "Quota type",
   quotaToken: "Usage-based",
   quotaPerCall: "Per call",
+  quotaVideo: "Video resolution and duration",
   perCallPrice: "Price per call",
   textTokenPricing: "Text token pricing",
   cachePricing: "Cache pricing",
   multimodalPricing: "Multimodal pricing",
+  videoBilling: "Video billing",
+  videoResolutions: "Resolution prices",
+  videoDurations: "Duration prices",
+  addResolution: "Add resolution",
+  addDuration: "Add duration",
+  durationUnitPrice: "Price per second",
   cacheReadInputPrice: "Cache read price",
   cacheWriteInputPrice: "Cache write price",
   cacheWrite1hInputPrice: "1h cache write price",
