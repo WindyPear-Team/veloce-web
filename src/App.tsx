@@ -276,6 +276,9 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/chat/videos") {
     return language === "zh" ? "AI 视频" : language === "ja" ? "AI Videos" : "AI Videos"
   }
+  if (normalizedPathname === "/chat/files") {
+    return language === "zh" ? "文件库" : "Files"
+  }
   if (normalizedPathname === "/chat/agents") {
     return t("nav.agents")
   }

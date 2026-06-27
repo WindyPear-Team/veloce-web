@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { ArrowDown, Bot, Check, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
+import { ArrowDown, Bot, Check, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -153,6 +153,11 @@ interface WorkspaceSkill {
 interface AdvancedChatSettings {
   attachment_max_mb: number
   attachment_allowed_types: string[]
+  file_storage_enabled: boolean
+  file_storage_total_mb: number
+  file_storage_used_bytes: number
+  file_storage_auto_save_images_enabled: boolean
+  file_storage_auto_save_videos_enabled: boolean
   mcp_servers: MCPServer[]
   builtin_mcp_servers: MCPServer[]
   custom_mcp_servers: MCPServer[]
@@ -168,10 +173,38 @@ interface AdvancedChatSettings {
 
 interface ChatAttachment {
   id: string
+  storage_id?: string
   name: string
   type: string
   size: number
   text?: string
+  binary?: boolean
+  truncated?: boolean
+}
+
+interface StoredFile {
+  id: string
+  name: string
+  type: string
+  size: number
+  source: string
+  text_available: boolean
+  created_at: string
+  updated_at: string
+}
+
+interface StoredFileListResponse {
+  files: StoredFile[]
+  used_bytes: number
+  total_bytes: number
+  remaining_bytes: number
+}
+
+interface StoredFileContent {
+  id: string
+  text: string
+  binary: boolean
+  truncated: boolean
 }
 
 type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
@@ -207,11 +240,17 @@ const selectedAgentStoreKey = "windypear.advanced_chat.selected_agent.v1"
 const agentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
 const advancedSessionsQueryKey = ["advanced-chat-sessions"] as const
+const advancedFilesQueryKey = ["advanced-chat-files"] as const
 const connectorDevicesQueryKey = ["advanced-chat-connector-devices"] as const
 const connectorApprovalsQueryKey = (runID: string) => ["advanced-chat-connector-approvals", runID] as const
 const defaultAdvancedChatSettings: AdvancedChatSettings = {
   attachment_max_mb: 10,
   attachment_allowed_types: ["text/plain", "text/markdown", "application/json", "text/csv", "image/png", "image/jpeg", "application/pdf"],
+  file_storage_enabled: true,
+  file_storage_total_mb: 100,
+  file_storage_used_bytes: 0,
+  file_storage_auto_save_images_enabled: false,
+  file_storage_auto_save_videos_enabled: false,
   mcp_servers: [],
   builtin_mcp_servers: [],
   custom_mcp_servers: [],
@@ -247,12 +286,14 @@ const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
 export default function Chat({ variant = "basic" }: ChatProps) {
   const isAdvanced = variant === "advanced"
   const storeKeys = chatStoreKeys[variant]
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const location = useLocation()
   const routeSessionID = isAdvanced ? sessionIDFromAdvancedChatPath(location.pathname) : ""
   const requestedAgentID = isAdvanced ? new URLSearchParams(location.search).get("agent_id") || "" : ""
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   const copy = useMemo(() => buildChatCopy(t), [t])
+  const fileCopy = useMemo(() => (language === "zh" ? zhFileAttachmentCopy : enFileAttachmentCopy), [language])
   const { error } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [] : readStoredSessions(storeKeys.sessions, true)))
   const [draftSession, setDraftSession] = useState<ChatSession>(() => createSession())
@@ -283,6 +324,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [decidingConnectorTaskID, setDecidingConnectorTaskID] = useState("")
   const [prompt, setPrompt] = useState("")
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
+  const [isFilePickerOpen, setIsFilePickerOpen] = useState(false)
+  const [isUploadingAttachments, setIsUploadingAttachments] = useState(false)
+  const [selectingFileID, setSelectingFileID] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
@@ -390,6 +434,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => ({ ...defaultAdvancedChatSettings, ...(advancedSettings ?? {}) }),
     [advancedSettings]
   )
+  const { data: storedFilesResponse } = useQuery<StoredFileListResponse | StoredFile[]>({
+    queryKey: advancedFilesQueryKey,
+    enabled: isAdvanced && currentAdvancedSettings.file_storage_enabled,
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/files")
+      return normalizeStoredFilesResponse(res.data)
+    },
+  })
+  const storedFiles = Array.isArray(storedFilesResponse) ? storedFilesResponse : storedFilesResponse?.files || []
   const assistantModeEnabled = !isAdvanced || currentAdvancedSettings.assistant_mode_enabled
   const assistantConnectorToolsEnabled =
     currentAdvancedSettings.assistant_connector_list_files_enabled ||
@@ -1318,17 +1371,58 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || !files?.length) {
       return
     }
-    const next: ChatAttachment[] = []
-    for (const file of Array.from(files)) {
-      const validationError = validateAttachment(file, currentAdvancedSettings, copy)
-      if (validationError) {
-        error(validationError)
-        continue
-      }
-      next.push(await attachmentFromFile(file))
+    if (!currentAdvancedSettings.file_storage_enabled) {
+      error(fileCopy.storageDisabled)
+      return
     }
-    if (next.length > 0) {
-      setAttachments((current) => [...current, ...next].slice(0, 8))
+    if (isUploadingAttachments) {
+      return
+    }
+    setIsUploadingAttachments(true)
+    const next: ChatAttachment[] = []
+    try {
+      for (const file of Array.from(files)) {
+        const validationError = validateAttachment(file, currentAdvancedSettings, copy)
+        if (validationError) {
+          error(validationError)
+          continue
+        }
+        const formData = new FormData()
+        formData.append("file", file)
+        const res = await api.post("/user/advanced-chat/files", formData)
+        const storedFile = normalizeStoredFile(res.data?.file)
+        if (!storedFile) {
+          continue
+        }
+        next.push(attachmentFromStoredFile(storedFile, normalizeStoredFileContent(res.data?.content)))
+      }
+      if (next.length > 0) {
+        setAttachments((current) => mergeAttachments(current, next).slice(0, 8))
+        void queryClient.invalidateQueries({ queryKey: advancedFilesQueryKey })
+        void queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
+      }
+    } catch (err) {
+      error(apiErrorMessage(err, fileCopy.uploadFailed))
+    } finally {
+      setIsUploadingAttachments(false)
+    }
+  }
+
+  const selectStoredFile = async (file: StoredFile) => {
+    if (attachments.some((attachment) => attachment.storage_id === file.id)) {
+      setIsFilePickerOpen(false)
+      return
+    }
+    setSelectingFileID(file.id)
+    try {
+      const res = await api.get(`/user/advanced-chat/files/${encodeURIComponent(file.id)}/content`)
+      const content = normalizeStoredFileContent(res.data)
+      setAttachments((current) => mergeAttachments(current, [attachmentFromStoredFile(file, content)]).slice(0, 8))
+      setIsFilePickerOpen(false)
+    } catch (err) {
+      error(apiErrorMessage(err, fileCopy.selectFailed))
+    } finally {
+      setSelectingFileID("")
     }
   }
 
@@ -1595,17 +1689,27 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   </select>
                   <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted">
                     <Paperclip size={15} />
-                    {copy.addAttachment}
+                    {isUploadingAttachments ? fileCopy.uploading : copy.addAttachment}
                     <input
                       className="sr-only"
                       type="file"
                       multiple
+                      disabled={isUploadingAttachments || !currentAdvancedSettings.file_storage_enabled}
                       onChange={(event) => {
                         handleAttachmentFiles(event.target.files)
                         event.target.value = ""
                       }}
                     />
                   </label>
+                  <Button
+                    variant="outline"
+                    className="h-9 gap-2"
+                    disabled={!currentAdvancedSettings.file_storage_enabled}
+                    onClick={() => setIsFilePickerOpen(true)}
+                  >
+                    <FileText size={15} />
+                    {fileCopy.selectFile}
+                  </Button>
                 </div>
 
                 {isStreamActive || isActiveRunRunning || isSending ? (
@@ -1617,7 +1721,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <span className="text-xs text-muted-foreground">{copy.sending}</span>
                   </div>
                 ) : (
-                  <Button className="gap-2" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isActiveRunRunning} onClick={sendMessage}>
+                  <Button className="gap-2" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning} onClick={sendMessage}>
                     <Send size={16} />
                     {activeRunMode === "assistant" ? copy.runAssistant : copy.send}
                   </Button>
@@ -1756,17 +1860,27 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                       <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2 text-sm font-medium text-foreground hover:bg-muted">
                         <Paperclip size={15} />
-                        {copy.addAttachment}
+                        {isUploadingAttachments ? fileCopy.uploading : copy.addAttachment}
                         <input
                           className="sr-only"
                           type="file"
                           multiple
+                          disabled={isUploadingAttachments || !currentAdvancedSettings.file_storage_enabled}
                           onChange={(event) => {
                             handleAttachmentFiles(event.target.files)
                             event.target.value = ""
                           }}
                         />
                       </label>
+                      <Button
+                        variant="outline"
+                        className="gap-2"
+                        disabled={!currentAdvancedSettings.file_storage_enabled}
+                        onClick={() => setIsFilePickerOpen(true)}
+                      >
+                        <FileText size={15} />
+                        {fileCopy.selectFile}
+                      </Button>
                       <span>
                         {copy.attachmentLimit
                           .replace("{size}", String(currentAdvancedSettings.attachment_max_mb))
@@ -1784,7 +1898,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <span className="text-xs text-muted-foreground">{copy.sending}</span>
                   </div>
                 ) : (
-                  <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isActiveRunRunning} onClick={sendMessage}>
+                  <Button className="gap-2 self-end" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning} onClick={sendMessage}>
                     <Send size={16} />
                     {isSending || isActiveRunRunning
                       ? copy.sending
@@ -1799,6 +1913,56 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
       <PageInlineSlot slotKey="primary" />
       <PageInlineSlot slotKey="secondary" />
+      {isAdvanced && (
+        <Dialog open={isFilePickerOpen} onOpenChange={setIsFilePickerOpen}>
+          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{fileCopy.selectFile}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              {storedFiles.length === 0 ? (
+                <div className="rounded-md border border-dashed px-3 py-10 text-center text-sm text-muted-foreground">
+                  {fileCopy.noFiles}
+                </div>
+              ) : (
+                storedFiles.map((file) => {
+                  const selected = attachments.some((attachment) => attachment.storage_id === file.id)
+                  return (
+                    <div key={file.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="min-w-0">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate text-sm font-medium">{file.name}</span>
+                          {file.text_available && <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{fileCopy.text}</span>}
+                        </div>
+                        <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span>{file.type || "application/octet-stream"}</span>
+                          <span>{formatBytes(file.size)}</span>
+                        </div>
+                      </div>
+                      <Button
+                        variant={selected ? "outline" : "default"}
+                        disabled={selected || selectingFileID === file.id}
+                        onClick={() => selectStoredFile(file)}
+                      >
+                        {selected ? fileCopy.selected : selectingFileID === file.id ? fileCopy.loading : fileCopy.useFile}
+                      </Button>
+                    </div>
+                  )
+                })
+              )}
+            </div>
+            <DialogFooter>
+              <Button variant="ghost" onClick={() => setIsFilePickerOpen(false)}>
+                {fileCopy.close}
+              </Button>
+              <Button asChild variant="outline">
+                <Link to="/chat/files">{fileCopy.manageFiles}</Link>
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
       {isAdvanced && (
         <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
           <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
@@ -3014,6 +3178,11 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     attachment_allowed_types: Array.isArray(item.attachment_allowed_types)
       ? item.attachment_allowed_types.filter((value): value is string => typeof value === "string")
       : defaultAdvancedChatSettings.attachment_allowed_types,
+    file_storage_enabled: item.file_storage_enabled !== false,
+    file_storage_total_mb: Number(item.file_storage_total_mb || defaultAdvancedChatSettings.file_storage_total_mb),
+    file_storage_used_bytes: Number(item.file_storage_used_bytes || 0),
+    file_storage_auto_save_images_enabled: item.file_storage_auto_save_images_enabled === true,
+    file_storage_auto_save_videos_enabled: item.file_storage_auto_save_videos_enabled === true,
     mcp_servers: Array.isArray(item.mcp_servers) ? item.mcp_servers.map(normalizeMCPServer) : mergeMCPServers(builtin, custom),
     builtin_mcp_servers: builtin,
     custom_mcp_servers: custom,
@@ -3105,7 +3274,7 @@ function validateAttachment(file: File, settings: AdvancedChatSettings, copy: Ch
   if (file.size > maxBytes) {
     return copy.attachmentTooLarge.replace("{file}", file.name).replace("{size}", String(settings.attachment_max_mb))
   }
-  const type = (file.type || "application/octet-stream").toLowerCase()
+  const type = attachmentFileType(file)
   if (!mimeAllowed(type, settings.attachment_allowed_types)) {
     return copy.attachmentTypeBlocked.replace("{file}", file.name).replace("{type}", type)
   }
@@ -3125,23 +3294,108 @@ function mimeAllowed(type: string, allowedTypes: string[]) {
   })
 }
 
-async function attachmentFromFile(file: File): Promise<ChatAttachment> {
-  const type = file.type || "application/octet-stream"
-  const attachment: ChatAttachment = {
-    id: createID(),
-    name: file.name,
-    type,
-    size: file.size,
-  }
-  if (isTextLikeFile(file)) {
-    attachment.text = await file.text()
-  }
-  return attachment
+function attachmentFileType(file: File) {
+  return (file.type || mimeTypeFromName(file.name) || "application/octet-stream").toLowerCase()
 }
 
-function isTextLikeFile(file: File) {
-  const type = file.type.toLowerCase()
-  return type.startsWith("text/") || type === "application/json" || type === "application/xml" || /\.(md|txt|json|csv|xml|yaml|yml)$/i.test(file.name)
+function mimeTypeFromName(name: string) {
+  const ext = name.split(".").pop()?.toLowerCase() || ""
+  switch (ext) {
+    case "txt":
+      return "text/plain"
+    case "md":
+    case "markdown":
+      return "text/markdown"
+    case "json":
+      return "application/json"
+    case "csv":
+      return "text/csv"
+    case "xml":
+      return "application/xml"
+    case "png":
+      return "image/png"
+    case "jpg":
+    case "jpeg":
+      return "image/jpeg"
+    case "pdf":
+      return "application/pdf"
+    default:
+      return ""
+  }
+}
+
+function attachmentFromStoredFile(file: StoredFile, content?: StoredFileContent): ChatAttachment {
+  return {
+    id: createID(),
+    name: file.name,
+    type: file.type || "application/octet-stream",
+    size: file.size,
+    storage_id: file.id,
+    text: content?.text || "",
+    binary: content?.binary ?? !file.text_available,
+    truncated: content?.truncated === true,
+  }
+}
+
+function mergeAttachments(current: ChatAttachment[], next: ChatAttachment[]) {
+  const existingIDs = new Set(current.map((attachment) => attachment.storage_id).filter(Boolean))
+  const result = [...current]
+  for (const attachment of next) {
+    if (attachment.storage_id && existingIDs.has(attachment.storage_id)) {
+      continue
+    }
+    result.push(attachment)
+    if (attachment.storage_id) {
+      existingIDs.add(attachment.storage_id)
+    }
+  }
+  return result
+}
+
+function normalizeStoredFilesResponse(value: unknown): StoredFileListResponse {
+  if (Array.isArray(value)) {
+    return {
+      files: value.map(normalizeStoredFile).filter((file): file is StoredFile => Boolean(file)),
+      used_bytes: 0,
+      total_bytes: 0,
+      remaining_bytes: 0,
+    }
+  }
+  const item = isRecord(value) ? value : {}
+  return {
+    files: Array.isArray(item.files) ? item.files.map(normalizeStoredFile).filter((file): file is StoredFile => Boolean(file)) : [],
+    used_bytes: Number(item.used_bytes || 0),
+    total_bytes: Number(item.total_bytes || 0),
+    remaining_bytes: Number(item.remaining_bytes || 0),
+  }
+}
+
+function normalizeStoredFile(value: unknown): StoredFile | null {
+  const item = isRecord(value) ? value : {}
+  const id = typeof item.id === "string" ? item.id : ""
+  if (!id) {
+    return null
+  }
+  return {
+    id,
+    name: typeof item.name === "string" ? item.name : id,
+    type: typeof item.type === "string" ? item.type : "",
+    size: Number(item.size || 0),
+    source: typeof item.source === "string" ? item.source : "",
+    text_available: item.text_available === true,
+    created_at: typeof item.created_at === "string" ? item.created_at : "",
+    updated_at: typeof item.updated_at === "string" ? item.updated_at : "",
+  }
+}
+
+function normalizeStoredFileContent(value: unknown): StoredFileContent {
+  const item = isRecord(value) ? value : {}
+  return {
+    id: typeof item.id === "string" ? item.id : "",
+    text: typeof item.text === "string" ? item.text : "",
+    binary: item.binary === true,
+    truncated: item.truncated === true,
+  }
 }
 
 function messageContentWithAttachments(content: string, attachments: ChatAttachment[]) {
@@ -3149,23 +3403,31 @@ function messageContentWithAttachments(content: string, attachments: ChatAttachm
     return content
   }
   const sections = attachments.map((attachment) => {
-    const header = `[Attachment: ${attachment.name}; type=${attachment.type}; size=${formatBytes(attachment.size)}]`
+    const fileID = attachment.storage_id ? `; file_id=${attachment.storage_id}` : ""
+    const header = `[Attachment: ${attachment.name}; type=${attachment.type}; size=${formatBytes(attachment.size)}${fileID}]`
     if (!attachment.text) {
       return `${header}\n(binary content omitted)`
     }
-    return `${header}\n${attachment.text.slice(0, 20000)}`
+    const suffix = attachment.truncated ? "\n...(truncated)" : ""
+    return `${header}\n${attachment.text.slice(0, 20000)}${suffix}`
   })
   return [content, sections.join("\n\n")].filter(Boolean).join("\n\n")
 }
 
 function formatBytes(bytes: number) {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return "0 B"
+  }
   if (bytes < 1024) {
     return `${bytes} B`
   }
   if (bytes < 1024 * 1024) {
     return `${(bytes / 1024).toFixed(1)} KB`
   }
-  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  if (bytes < 1024 * 1024 * 1024) {
+    return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+  }
+  return `${(bytes / 1024 / 1024 / 1024).toFixed(1)} GB`
 }
 
 function normalizeSession(value: unknown): ChatSession | null {
@@ -4018,4 +4280,34 @@ function buildChatCopy(t: Translate): ChatCopy {
   return Object.fromEntries(
     Object.entries(chatCopyKeys).map(([name, key]) => [name, t(key)])
   ) as ChatCopy
+}
+
+const zhFileAttachmentCopy = {
+  selectFile: "选择文件",
+  useFile: "使用",
+  selected: "已选择",
+  loading: "加载中",
+  noFiles: "文件库暂无文件",
+  manageFiles: "管理文件库",
+  text: "文本",
+  close: "关闭",
+  uploading: "上传中",
+  uploadFailed: "上传附件失败",
+  selectFailed: "选择文件失败",
+  storageDisabled: "管理员已关闭文件存储功能",
+}
+
+const enFileAttachmentCopy: typeof zhFileAttachmentCopy = {
+  selectFile: "Select file",
+  useFile: "Use",
+  selected: "Selected",
+  loading: "Loading",
+  noFiles: "No files in storage",
+  manageFiles: "Manage files",
+  text: "Text",
+  close: "Close",
+  uploading: "Uploading",
+  uploadFailed: "Failed to upload attachment",
+  selectFailed: "Failed to select file",
+  storageDisabled: "File storage is disabled by the administrator",
 }

@@ -1,4 +1,4 @@
-import { Bot, Laptop, Menu, MessageSquare, Palette, SlidersHorizontal, Sparkles, UserCircle, Video } from "lucide-react"
+import { Bot, FileText, Laptop, Menu, MessageSquare, Palette, SlidersHorizontal, Sparkles, UserCircle, Video } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
@@ -6,6 +6,7 @@ import Chat from "./Chat"
 import Agents from "./Agents"
 import Skills from "./Skills"
 import AdvancedChatMCP from "./AdvancedChatMCP"
+import AdvancedChatFiles from "./AdvancedChatFiles"
 import Images from "./Images"
 import Videos from "./Videos"
 import AdvancedChatDevices from "./AdvancedChatDevices"
@@ -144,6 +145,7 @@ export default function AdvancedChat() {
                     <Route path="devices" element={<AdvancedChatDevices />} />
                     <Route path="images" element={<Images />} />
                     <Route path="videos" element={<Videos />} />
+                    <Route path="files" element={<AdvancedChatFiles />} />
                     <Route path="*" element={<Navigate to="/chat" replace />} />
                   </Routes>
                 )}
@@ -165,11 +167,13 @@ export default function AdvancedChat() {
 
 function AdvancedChatSidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
   const location = useLocation()
-  const { t } = useI18n()
+  const { language, t } = useI18n()
+  const filesLabel = language === "zh" ? "文件库" : "Files"
   const items = [
     { href: "/chat", label: t("nav.chat"), icon: MessageSquare, active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/") },
     { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
     { href: "/chat/videos", label: t("nav.videos"), icon: Video, active: location.pathname === "/chat/videos" },
+    { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
     { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
     { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
     { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },

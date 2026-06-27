@@ -31,6 +31,10 @@ interface MCPDraft {
 interface AdvancedChatSettings {
   attachment_max_mb: number
   attachment_allowed_types: string[]
+  file_storage_enabled: boolean
+  file_storage_total_mb: number
+  file_storage_auto_save_images_enabled: boolean
+  file_storage_auto_save_videos_enabled: boolean
   builtin_mcp_servers: MCPServer[]
   assistant_mode_enabled: boolean
   assistant_mcp_tools_enabled: boolean
@@ -45,6 +49,10 @@ interface AdvancedChatSettings {
 const defaultAdvancedChatSettings: AdvancedChatSettings = {
   attachment_max_mb: 10,
   attachment_allowed_types: ["text/plain", "text/markdown", "application/json", "text/csv", "image/png", "image/jpeg", "application/pdf"],
+  file_storage_enabled: true,
+  file_storage_total_mb: 100,
+  file_storage_auto_save_images_enabled: false,
+  file_storage_auto_save_videos_enabled: false,
   builtin_mcp_servers: [],
   assistant_mode_enabled: true,
   assistant_mcp_tools_enabled: true,
@@ -116,6 +124,10 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
       const res = await api.put("/advanced-chat/settings", {
         attachment_max_mb: Number(form.attachment_max_mb) || 10,
         attachment_allowed_types: allowedTypes,
+        file_storage_enabled: form.file_storage_enabled,
+        file_storage_total_mb: Number(form.file_storage_total_mb) || 100,
+        file_storage_auto_save_images_enabled: form.file_storage_auto_save_images_enabled,
+        file_storage_auto_save_videos_enabled: form.file_storage_auto_save_videos_enabled,
       })
       return normalizeAdvancedChatSettings(res.data)
     },
@@ -125,6 +137,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
       success("附件设置已保存")
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-admin-settings"] })
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
+      queryClient.invalidateQueries({ queryKey: ["advanced-chat-files"] })
     },
     onError: (err) => error(err instanceof Error ? err.message : "保存附件设置失败"),
   })
@@ -252,27 +265,59 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                   </Button>
                 </div>
               </CardHeader>
-              <CardContent className="grid gap-4 lg:grid-cols-[240px_minmax(0,1fr)]">
-                <label className="space-y-2 text-sm">
-                  <span className="font-medium">单个附件大小上限 MB</span>
-                  <Input
-                    type="number"
-                    min={1}
-                    max={100}
-                    value={form.attachment_max_mb}
-                    onChange={(event) => setForm((current) => ({ ...current, attachment_max_mb: Number(event.target.value) || 1 }))}
+              <CardContent className="space-y-4">
+                <div className="grid gap-4 lg:grid-cols-[240px_240px_minmax(0,1fr)]">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium">单个附件大小上限 MB</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={100}
+                      value={form.attachment_max_mb}
+                      onChange={(event) => setForm((current) => ({ ...current, attachment_max_mb: Number(event.target.value) || 1 }))}
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium">每用户总容量 MB</span>
+                    <Input
+                      type="number"
+                      min={1}
+                      max={102400}
+                      value={form.file_storage_total_mb}
+                      onChange={(event) => setForm((current) => ({ ...current, file_storage_total_mb: Number(event.target.value) || 1 }))}
+                    />
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium">允许的附件类型</span>
+                    <textarea
+                      className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                      value={typesText}
+                      placeholder="text/plain&#10;application/json&#10;image/png"
+                      onChange={(event) => setTypesText(event.target.value)}
+                    />
+                    <span className="block text-xs text-muted-foreground">每行一个 MIME 类型，支持 `text/*` 这样的通配。</span>
+                  </label>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-3">
+                  <ToggleRow
+                    title="启用文件存储"
+                    description="关闭后，独立高级聊天文件库、上传附件和选择已有文件都会被禁用。"
+                    checked={form.file_storage_enabled}
+                    onChange={(checked) => setForm((current) => ({ ...current, file_storage_enabled: checked }))}
                   />
-                </label>
-                <label className="space-y-2 text-sm">
-                  <span className="font-medium">允许的附件类型</span>
-                  <textarea
-                    className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                    value={typesText}
-                    placeholder="text/plain&#10;application/json&#10;image/png"
-                    onChange={(event) => setTypesText(event.target.value)}
+                  <ToggleRow
+                    title="图片生成自动入库"
+                    description="开启后，图片生成或编辑返回的图片会在用户剩余空间足够时保存到文件库。"
+                    checked={form.file_storage_auto_save_images_enabled}
+                    onChange={(checked) => setForm((current) => ({ ...current, file_storage_auto_save_images_enabled: checked }))}
                   />
-                  <span className="block text-xs text-muted-foreground">每行一个 MIME 类型，支持 `text/*` 这样的通配。</span>
-                </label>
+                  <ToggleRow
+                    title="视频生成自动入库"
+                    description="开启后，视频生成完成并返回视频时会在用户剩余空间足够时保存到文件库。"
+                    checked={form.file_storage_auto_save_videos_enabled}
+                    onChange={(checked) => setForm((current) => ({ ...current, file_storage_auto_save_videos_enabled: checked }))}
+                  />
+                </div>
               </CardContent>
             </Card>
           )}
@@ -479,6 +524,10 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     attachment_allowed_types: Array.isArray(item.attachment_allowed_types)
       ? item.attachment_allowed_types.filter((value): value is string => typeof value === "string")
       : defaultAdvancedChatSettings.attachment_allowed_types,
+    file_storage_enabled: item.file_storage_enabled !== false,
+    file_storage_total_mb: Number(item.file_storage_total_mb || defaultAdvancedChatSettings.file_storage_total_mb),
+    file_storage_auto_save_images_enabled: item.file_storage_auto_save_images_enabled === true,
+    file_storage_auto_save_videos_enabled: item.file_storage_auto_save_videos_enabled === true,
     builtin_mcp_servers: Array.isArray(item.builtin_mcp_servers) ? item.builtin_mcp_servers.map(normalizeMCPServer) : [],
     assistant_mode_enabled: item.assistant_mode_enabled !== false,
     assistant_mcp_tools_enabled: item.assistant_mcp_tools_enabled !== false,
