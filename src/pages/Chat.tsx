@@ -182,6 +182,16 @@ interface ChatAttachment {
   truncated?: boolean
 }
 
+interface ParsedMessageAttachment {
+  name: string
+  type: string
+  sizeLabel: string
+  storageID?: string
+  body: string
+  truncated: boolean
+  binary: boolean
+}
+
 interface StoredFile {
   id: string
   name: string
@@ -211,6 +221,7 @@ type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
 type ChatMode = "basic" | "advanced"
 type ChatRunMode = "chat" | "assistant"
 type SessionConfigTab = "basic" | "agent" | "skills" | "mcp" | "device"
+type AttachmentTarget = "composer" | "editor"
 
 interface ChatProps {
   variant?: ChatMode
@@ -334,7 +345,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
-  const [editingContent, setEditingContent] = useState("")
+  const [editingText, setEditingText] = useState("")
+  const [editingAttachments, setEditingAttachments] = useState<ChatAttachment[]>([])
+  const [filePickerTarget, setFilePickerTarget] = useState<AttachmentTarget>("composer")
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -1337,12 +1350,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const beginEditMessage = (message: ChatMessage) => {
     setEditingMessageID(message.id)
-    setEditingContent(message.content)
+    if (message.role === "user") {
+      const parsed = parseMessageAttachments(message.content)
+      setEditingText(parsed.text)
+      setEditingAttachments(parsed.attachments.map(chatAttachmentFromParsed))
+      return
+    }
+    setEditingText(message.content)
+    setEditingAttachments([])
   }
 
   const saveEditedMessage = () => {
-    const content = editingContent.trim()
-    if (!currentSession || !editingMessageID || !content) {
+    const content = messageContentWithAttachments(editingText.trim(), editingAttachments)
+    if (!currentSession || !editingMessageID || !content.trim()) {
       return
     }
     updateSession(currentSession.id, (session) => ({
@@ -1367,7 +1387,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
-  const handleAttachmentFiles = async (files: FileList | null) => {
+  const handleAttachmentFiles = async (files: FileList | null, target: AttachmentTarget = "composer") => {
     if (!isAdvanced || !files?.length) {
       return
     }
@@ -1397,7 +1417,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         next.push(attachmentFromStoredFile(storedFile, normalizeStoredFileContent(res.data?.content)))
       }
       if (next.length > 0) {
-        setAttachments((current) => mergeAttachments(current, next).slice(0, 8))
+        appendAttachments(target, next)
         void queryClient.invalidateQueries({ queryKey: advancedFilesQueryKey })
         void queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
       }
@@ -1409,7 +1429,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const selectStoredFile = async (file: StoredFile) => {
-    if (attachments.some((attachment) => attachment.storage_id === file.id)) {
+    const targetAttachments = filePickerTarget === "editor" ? editingAttachments : attachments
+    if (targetAttachments.some((attachment) => attachment.storage_id === file.id)) {
       setIsFilePickerOpen(false)
       return
     }
@@ -1417,7 +1438,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     try {
       const res = await api.get(`/user/advanced-chat/files/${encodeURIComponent(file.id)}/content`)
       const content = normalizeStoredFileContent(res.data)
-      setAttachments((current) => mergeAttachments(current, [attachmentFromStoredFile(file, content)]).slice(0, 8))
+      appendAttachments(filePickerTarget, [attachmentFromStoredFile(file, content)])
       setIsFilePickerOpen(false)
     } catch (err) {
       error(apiErrorMessage(err, fileCopy.selectFailed))
@@ -1426,13 +1447,32 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
+  const appendAttachments = (target: AttachmentTarget, next: ChatAttachment[]) => {
+    if (target === "editor") {
+      setEditingAttachments((current) => mergeAttachments(current, next).slice(0, 8))
+      return
+    }
+    setAttachments((current) => mergeAttachments(current, next).slice(0, 8))
+  }
+
+  const openFilePicker = (target: AttachmentTarget) => {
+    setFilePickerTarget(target)
+    setIsFilePickerOpen(true)
+  }
+
   const removeAttachment = (id: string) => {
     setAttachments((current) => current.filter((attachment) => attachment.id !== id))
   }
 
+  const removeEditingAttachment = (id: string) => {
+    setEditingAttachments((current) => current.filter((attachment) => attachment.id !== id))
+  }
+
   function cancelEdit() {
     setEditingMessageID("")
-    setEditingContent("")
+    setEditingText("")
+    setEditingAttachments([])
+    setFilePickerTarget("composer")
   }
 
   const basicConfig = (
@@ -1648,16 +1688,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               {attachments.length > 0 && (
                 <div className="flex flex-wrap gap-2 px-2 pb-3">
-                  {attachments.map((attachment) => (
-                    <div key={attachment.id} className="flex max-w-full items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
-                      <Paperclip size={14} className="shrink-0" />
-                      <span className="truncate">{attachment.name}</span>
-                      <span className="shrink-0 text-muted-foreground">{formatBytes(attachment.size)}</span>
-                      <button type="button" className="rounded p-0.5 hover:bg-muted" onClick={() => removeAttachment(attachment.id)} aria-label={copy.removeAttachment}>
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
+                  <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
                 </div>
               )}
 
@@ -1696,7 +1727,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       multiple
                       disabled={isUploadingAttachments || !currentAdvancedSettings.file_storage_enabled}
                       onChange={(event) => {
-                        handleAttachmentFiles(event.target.files)
+                        handleAttachmentFiles(event.target.files, "composer")
                         event.target.value = ""
                       }}
                     />
@@ -1705,7 +1736,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     variant="outline"
                     className="h-9 gap-2"
                     disabled={!currentAdvancedSettings.file_storage_enabled}
-                    onClick={() => setIsFilePickerOpen(true)}
+                    onClick={() => openFilePicker("composer")}
                   >
                     <FileText size={15} />
                     {fileCopy.selectFile}
@@ -1762,11 +1793,48 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                             )}
                             <div className="min-w-0 flex-1">
                               {editingMessageID === message.id ? (
-                                <textarea
-                                  className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                                  value={editingContent}
-                                  onChange={(event) => setEditingContent(event.target.value)}
-                                />
+                                <div className="space-y-2">
+                                  <textarea
+                                    className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                                    value={editingText}
+                                    onChange={(event) => setEditingText(event.target.value)}
+                                  />
+                                  {editingAttachments.length > 0 && (
+                                    <AttachmentChips
+                                      attachments={editingAttachments}
+                                      removeLabel={copy.removeAttachment}
+                                      onRemove={removeEditingAttachment}
+                                    />
+                                  )}
+                                  {isAdvanced && message.role === "user" && (
+                                    <div className="flex flex-wrap items-center gap-2">
+                                      <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border bg-background px-3 py-2 text-xs font-medium text-foreground hover:bg-muted">
+                                        <Paperclip size={14} />
+                                        {isUploadingAttachments ? fileCopy.uploading : copy.addAttachment}
+                                        <input
+                                          className="sr-only"
+                                          type="file"
+                                          multiple
+                                          disabled={isUploadingAttachments || !currentAdvancedSettings.file_storage_enabled}
+                                          onChange={(event) => {
+                                            handleAttachmentFiles(event.target.files, "editor")
+                                            event.target.value = ""
+                                          }}
+                                        />
+                                      </label>
+                                      <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="gap-2"
+                                        disabled={!currentAdvancedSettings.file_storage_enabled}
+                                        onClick={() => openFilePicker("editor")}
+                                      >
+                                        <FileText size={14} />
+                                        {fileCopy.selectFile}
+                                      </Button>
+                                    </div>
+                                  )}
+                                </div>
                               ) : (
                                 <MessageContent
                                   message={message}
@@ -1827,18 +1895,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
 
               {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2">
-                  {attachments.map((attachment) => (
-                    <div key={attachment.id} className="flex max-w-full items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
-                      <Paperclip size={14} className="shrink-0" />
-                      <span className="truncate">{attachment.name}</span>
-                      <span className="shrink-0 text-muted-foreground">{formatBytes(attachment.size)}</span>
-                      <button type="button" className="rounded p-0.5 hover:bg-muted" onClick={() => removeAttachment(attachment.id)} aria-label={copy.removeAttachment}>
-                        <X size={13} />
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
               )}
 
               <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
@@ -1867,7 +1924,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                           multiple
                           disabled={isUploadingAttachments || !currentAdvancedSettings.file_storage_enabled}
                           onChange={(event) => {
-                            handleAttachmentFiles(event.target.files)
+                            handleAttachmentFiles(event.target.files, "composer")
                             event.target.value = ""
                           }}
                         />
@@ -1876,7 +1933,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         variant="outline"
                         className="gap-2"
                         disabled={!currentAdvancedSettings.file_storage_enabled}
-                        onClick={() => setIsFilePickerOpen(true)}
+                        onClick={() => openFilePicker("composer")}
                       >
                         <FileText size={15} />
                         {fileCopy.selectFile}
@@ -1926,7 +1983,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </div>
               ) : (
                 storedFiles.map((file) => {
-                  const selected = attachments.some((attachment) => attachment.storage_id === file.id)
+                  const targetAttachments = filePickerTarget === "editor" ? editingAttachments : attachments
+                  const selected = targetAttachments.some((attachment) => attachment.storage_id === file.id)
                   return (
                     <div key={file.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
@@ -2352,6 +2410,59 @@ function MarkdownContent({ content }: { content: string }) {
   )
 }
 
+function UserMessageContent({ content }: { content: string }) {
+  const parsed = parseMessageAttachments(content)
+  return (
+    <div className="space-y-2">
+      {parsed.text && <MarkdownContent content={parsed.text} />}
+      {parsed.attachments.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {parsed.attachments.map((attachment, index) => (
+            <div
+              key={`${attachment.storageID || attachment.name}-${index}`}
+              className="flex max-w-full items-center gap-2 rounded-md border bg-muted/50 px-3 py-2 text-xs shadow-sm"
+            >
+              <Paperclip className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+              <div className="min-w-0">
+                <div className="truncate font-medium text-foreground">{attachment.name}</div>
+                <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-muted-foreground">
+                  <span>{attachment.type || "application/octet-stream"}</span>
+                  <span>{attachment.sizeLabel || "0 B"}</span>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function AttachmentChips({
+  attachments,
+  removeLabel,
+  onRemove,
+}: {
+  attachments: ChatAttachment[]
+  removeLabel: string
+  onRemove: (id: string) => void
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {attachments.map((attachment) => (
+        <div key={attachment.id} className="flex max-w-full items-center gap-2 rounded-md border bg-muted/40 px-3 py-2 text-xs">
+          <Paperclip size={14} className="shrink-0" />
+          <span className="truncate">{attachment.name}</span>
+          <span className="shrink-0 text-muted-foreground">{formatBytes(attachment.size)}</span>
+          <button type="button" className="rounded p-0.5 hover:bg-muted" onClick={() => onRemove(attachment.id)} aria-label={removeLabel}>
+            <X size={13} />
+          </button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
 function MessageContent({
   message,
   activeRun,
@@ -2370,7 +2481,7 @@ function MessageContent({
   onDecide: (taskID: string, approved: boolean) => void
 }) {
   if (message.role !== "assistant") {
-    return <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
+    return <UserMessageContent content={messageDisplayContent(message, activeRun, copy)} />
   }
 
   const parts = messageContentParts(message, activeRun, copy)
@@ -3352,6 +3463,79 @@ function mergeAttachments(current: ChatAttachment[], next: ChatAttachment[]) {
   return result
 }
 
+function parseMessageAttachments(content: string): { text: string; attachments: ParsedMessageAttachment[] } {
+  const normalized = content.replace(/\r\n/g, "\n")
+  const attachmentPattern = /^\[Attachment:\s*(.*?);\s*type=([^;\]]*);\s*size=([^;\]]+)(?:;\s*file_id=([^\]]+))?\]\s*$/gm
+  const attachments: ParsedMessageAttachment[] = []
+  const ranges: Array<{ start: number; end: number }> = []
+  let match: RegExpExecArray | null
+
+  while ((match = attachmentPattern.exec(normalized)) !== null) {
+    const headerStart = match.index
+    const nextHeader = normalized.slice(attachmentPattern.lastIndex).search(/^\[Attachment:\s*/m)
+    const blockEnd = nextHeader >= 0 ? attachmentPattern.lastIndex + nextHeader : normalized.length
+    const body = normalized.slice(attachmentPattern.lastIndex, blockEnd).trim()
+    attachments.push({
+      name: match[1]?.trim() || "Attachment",
+      type: match[2]?.trim() || "application/octet-stream",
+      sizeLabel: match[3]?.trim() || "0 B",
+      storageID: match[4]?.trim() || undefined,
+      body,
+      truncated: body.endsWith("...(truncated)"),
+      binary: body === "(binary content omitted)" || body === "(image attached for model vision input)",
+    })
+    ranges.push({ start: headerStart, end: blockEnd })
+    attachmentPattern.lastIndex = blockEnd
+  }
+
+  if (ranges.length === 0) {
+    return { text: content, attachments: [] }
+  }
+
+  let text = ""
+  let cursor = 0
+  for (const range of ranges) {
+    text += normalized.slice(cursor, range.start)
+    cursor = range.end
+  }
+  text += normalized.slice(cursor)
+  return { text: text.replace(/\n{3,}/g, "\n\n").trim(), attachments }
+}
+
+function chatAttachmentFromParsed(attachment: ParsedMessageAttachment): ChatAttachment {
+  return {
+    id: createID(),
+    storage_id: attachment.storageID,
+    name: attachment.name,
+    type: attachment.type,
+    size: bytesFromSizeLabel(attachment.sizeLabel),
+    text: attachment.binary ? "" : attachment.body.replace(/\n\.\.\.\(truncated\)$/, ""),
+    binary: attachment.binary,
+    truncated: attachment.truncated,
+  }
+}
+
+function bytesFromSizeLabel(value: string) {
+  const match = value.trim().match(/^([\d.]+)\s*(B|KB|MB|GB)$/i)
+  if (!match) {
+    return 0
+  }
+  const amount = Number(match[1])
+  if (!Number.isFinite(amount)) {
+    return 0
+  }
+  switch (match[2].toUpperCase()) {
+    case "KB":
+      return Math.round(amount * 1024)
+    case "MB":
+      return Math.round(amount * 1024 * 1024)
+    case "GB":
+      return Math.round(amount * 1024 * 1024 * 1024)
+    default:
+      return Math.round(amount)
+  }
+}
+
 function normalizeStoredFilesResponse(value: unknown): StoredFileListResponse {
   if (Array.isArray(value)) {
     return {
@@ -3406,6 +3590,9 @@ function messageContentWithAttachments(content: string, attachments: ChatAttachm
     const fileID = attachment.storage_id ? `; file_id=${attachment.storage_id}` : ""
     const header = `[Attachment: ${attachment.name}; type=${attachment.type}; size=${formatBytes(attachment.size)}${fileID}]`
     if (!attachment.text) {
+      if (attachment.type.toLowerCase().startsWith("image/") && attachment.storage_id) {
+        return `${header}\n(image attached for model vision input)`
+      }
       return `${header}\n(binary content omitted)`
     }
     const suffix = attachment.truncated ? "\n...(truncated)" : ""
