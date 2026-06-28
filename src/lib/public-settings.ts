@@ -61,6 +61,13 @@ export interface PublicSettings {
   group_multiplier_mode: string
   pricing_endpoint_enabled: boolean
   status_monitor_enabled: boolean
+  reliability_auto_disable_enabled: boolean
+  reliability_disable_after_failures: string
+  reliability_auto_detect_upstream_enabled: boolean
+  reliability_auto_detect_interval_seconds: string
+  reliability_auto_detect_timeout_seconds: string
+  reliability_auto_recover_enabled: boolean
+  reliability_recovery_after_seconds: string
   checkin_enabled: boolean
   checkin_daily_reward: string
   checkin_random_enabled: boolean
@@ -145,6 +152,13 @@ export const defaultPublicSettings: PublicSettings = {
   group_multiplier_mode: "min",
   pricing_endpoint_enabled: false,
   status_monitor_enabled: false,
+  reliability_auto_disable_enabled: false,
+  reliability_disable_after_failures: "3",
+  reliability_auto_detect_upstream_enabled: false,
+  reliability_auto_detect_interval_seconds: "300",
+  reliability_auto_detect_timeout_seconds: "10",
+  reliability_auto_recover_enabled: false,
+  reliability_recovery_after_seconds: "1800",
   checkin_enabled: false,
   checkin_daily_reward: "0",
   checkin_random_enabled: false,

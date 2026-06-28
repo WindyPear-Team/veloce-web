@@ -272,6 +272,7 @@ type SystemTab =
   | "topNavigation"
   | "navigation"
   | "statusMonitor"
+  | "reliability"
   | "groups"
   | "metaModels"
   | "advancedChatAssistant"
@@ -287,7 +288,7 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   theme: ["theme"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
-  operations: ["statusMonitor", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
+  operations: ["statusMonitor", "reliability", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
   advancedChat: ["advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP"],
   subscriptions: ["subscriptionPlans"],
   redeemCodes: ["redeemCodes"],
@@ -1369,6 +1370,52 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
+      {activeTab === "reliability" && (
+        <SettingsPanel title={copy.reliability}>
+          <div className="space-y-5">
+            <SectionTitle title={copy.reliabilityUpstreamTitle} description={copy.reliabilityUpstreamDescription} />
+            <div className="grid gap-3 lg:grid-cols-2">
+              <ToggleField label={copy.reliabilityAutoDisableEnabled} checked={form.reliability_auto_disable_enabled} onChange={(checked) => updateField("reliability_auto_disable_enabled", checked)} />
+              <TextField
+                label={copy.reliabilityDisableAfterFailures}
+                value={form.reliability_disable_after_failures}
+                placeholder="3"
+                type="number"
+                onChange={(value) => updateField("reliability_disable_after_failures", value)}
+              />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-3">
+              <ToggleField label={copy.reliabilityAutoDetectUpstreamEnabled} checked={form.reliability_auto_detect_upstream_enabled} onChange={(checked) => updateField("reliability_auto_detect_upstream_enabled", checked)} />
+              <TextField
+                label={copy.reliabilityAutoDetectIntervalSeconds}
+                value={form.reliability_auto_detect_interval_seconds}
+                placeholder="300"
+                type="number"
+                onChange={(value) => updateField("reliability_auto_detect_interval_seconds", value)}
+              />
+              <TextField
+                label={copy.reliabilityAutoDetectTimeoutSeconds}
+                value={form.reliability_auto_detect_timeout_seconds}
+                placeholder="10"
+                type="number"
+                onChange={(value) => updateField("reliability_auto_detect_timeout_seconds", value)}
+              />
+            </div>
+            <div className="grid gap-3 lg:grid-cols-2">
+              <ToggleField label={copy.reliabilityAutoRecoverEnabled} checked={form.reliability_auto_recover_enabled} onChange={(checked) => updateField("reliability_auto_recover_enabled", checked)} />
+              <TextField
+                label={copy.reliabilityRecoveryAfterSeconds}
+                value={form.reliability_recovery_after_seconds}
+                placeholder="1800"
+                type="number"
+                onChange={(value) => updateField("reliability_recovery_after_seconds", value)}
+              />
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">{copy.reliabilityHint}</p>
+          </div>
+        </SettingsPanel>
+      )}
+
       {activeTab === "groups" && (
         <SettingsPanel title={copy.groups}>
           <div className="space-y-5">
@@ -1783,6 +1830,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "topNavigation", label: copy.topNavigation, icon: ToggleLeft },
     { id: "navigation", label: copy.navigation, icon: ToggleLeft },
     { id: "statusMonitor", label: copy.statusMonitor, icon: Activity },
+    { id: "reliability", label: copy.reliability, icon: RefreshCw },
     { id: "groups", label: copy.groups, icon: Layers },
     { id: "metaModels", label: copy.metaModels, icon: Layers },
     { id: "advancedChatAssistant", label: copy.advancedChatAssistant, icon: Bot },
@@ -3486,6 +3534,7 @@ const zhCopy = {
   topNavigation: "顶部导航",
   navigation: "侧边栏模块",
   statusMonitor: "状态监测",
+  reliability: "可靠性",
   groups: "用户分组",
   advancedChat: "高级聊天",
   advancedChatAssistant: "助理设置",
@@ -3533,6 +3582,16 @@ const zhCopy = {
   statusMonitorDeleteFailed: "监测节点删除失败",
   statusMonitorChecked: "检测已完成",
   statusMonitorCheckFailed: "检测失败",
+  reliabilityUpstreamTitle: "上游渠道可靠性",
+  reliabilityUpstreamDescription: "配置上游渠道失败统计、自动禁用、自动检测和自动恢复策略。",
+  reliabilityAutoDisableEnabled: "连续失败后自动禁用上游渠道",
+  reliabilityDisableAfterFailures: "连续失败阈值",
+  reliabilityAutoDetectUpstreamEnabled: "自动检测上游渠道",
+  reliabilityAutoDetectIntervalSeconds: "检测间隔（秒）",
+  reliabilityAutoDetectTimeoutSeconds: "检测超时（秒）",
+  reliabilityAutoRecoverEnabled: "自动恢复被禁用渠道",
+  reliabilityRecoveryAfterSeconds: "恢复等待时间（秒）",
+  reliabilityHint: "网络错误、401/403、408/429 和 5xx 会累计失败；普通 400 请求错误不会自动禁用渠道。",
   statusUp: "正常",
   statusDown: "故障",
   statusPending: "等待",
@@ -3837,6 +3896,7 @@ const enCopy: SystemCopy = {
   topNavigation: "Top Navigation",
   navigation: "Sidebar Modules",
   statusMonitor: "Status Monitor",
+  reliability: "Reliability",
   groups: "User Groups",
   advancedChat: "Advanced Chat",
   advancedChatAssistant: "Assistant",
@@ -3884,6 +3944,16 @@ const enCopy: SystemCopy = {
   statusMonitorDeleteFailed: "Failed to delete monitor",
   statusMonitorChecked: "Check finished",
   statusMonitorCheckFailed: "Check failed",
+  reliabilityUpstreamTitle: "Upstream channel reliability",
+  reliabilityUpstreamDescription: "Configure upstream failure tracking, automatic disabling, health detection, and recovery.",
+  reliabilityAutoDisableEnabled: "Disable upstream channels after consecutive failures",
+  reliabilityDisableAfterFailures: "Consecutive failure threshold",
+  reliabilityAutoDetectUpstreamEnabled: "Automatically detect upstream channels",
+  reliabilityAutoDetectIntervalSeconds: "Detection interval (seconds)",
+  reliabilityAutoDetectTimeoutSeconds: "Detection timeout (seconds)",
+  reliabilityAutoRecoverEnabled: "Automatically recover disabled channels",
+  reliabilityRecoveryAfterSeconds: "Recovery wait time (seconds)",
+  reliabilityHint: "Network errors, 401/403, 408/429, and 5xx responses count as failures. Normal 400 request errors do not disable channels.",
   statusUp: "Up",
   statusDown: "Down",
   statusPending: "Pending",
