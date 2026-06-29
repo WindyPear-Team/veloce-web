@@ -47,6 +47,10 @@ interface GroupConfig {
   system_prompt_override: string
 }
 
+interface AdvancedOptions {
+  custom_provider_config_json: string
+}
+
 interface MessageChannel {
   id: number
   name: string
@@ -65,6 +69,7 @@ interface MessageChannel {
   trigger_mode: string
   system_prompt: string
   group_configs: GroupConfig[]
+  advanced_options: AdvancedOptions
   last_event_at?: string
 }
 
@@ -84,6 +89,7 @@ interface Draft {
   trigger_mode: string
   system_prompt: string
   group_configs: GroupConfig[]
+  advanced_options: AdvancedOptions
 }
 
 const emptyDraft: Draft = {
@@ -101,6 +107,7 @@ const emptyDraft: Draft = {
   trigger_mode: "mention",
   system_prompt: "",
   group_configs: [],
+  advanced_options: { custom_provider_config_json: "" },
 }
 
 const channelQueryKey = ["message-channels"] as const
@@ -173,6 +180,19 @@ export default function MessageChannels() {
   const modelOptions = useMemo(() => uniqueModels(catalog), [catalog])
   const selectedUserChannel = catalog.find((item) => String(item.id) === draft.default_user_channel_id)
   const defaultModelOptions = selectedUserChannel?.models.length ? selectedUserChannel.models : modelOptions
+  const providerConfig = parseProviderConfig(draft.advanced_options.custom_provider_config_json)
+  const updateProviderConfig = (key: string, value: string) => {
+    const next = { ...providerConfig }
+    if (value.trim() === "") {
+      delete next[key]
+    } else {
+      next[key] = value
+    }
+    setDraft((current) => ({
+      ...current,
+      advanced_options: { ...current.advanced_options, custom_provider_config_json: stringifyProviderConfig(next) },
+    }))
+  }
 
   useEffect(() => {
     if (activeChannel) {
@@ -343,18 +363,43 @@ export default function MessageChannels() {
                 <Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
               </Field>
               <Field label={copy.provider}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.provider} onChange={(event) => setDraft((current) => ({ ...current, provider: event.target.value as Draft["provider"] }))}>
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={draft.provider}
+                  onChange={(event) => {
+                    const provider = event.target.value as Draft["provider"]
+                    setDraft((current) => ({ ...current, provider, bot_token: providerUsesBotToken(provider) ? current.bot_token : "" }))
+                  }}
+                >
                   {providerOptions.map((provider) => <option key={provider.value} value={provider.value}>{provider.label}</option>)}
                 </select>
               </Field>
-              <Field label={copy.botToken}>
-                <Input
-                  type="password"
-                  value={draft.bot_token}
-                  placeholder={activeChannel?.bot_token_preview || copy.botTokenPlaceholder}
-                  onChange={(event) => setDraft((current) => ({ ...current, bot_token: event.target.value }))}
-                />
-              </Field>
+              {providerUsesBotToken(draft.provider) && (
+                <Field label={copy.botToken}>
+                  <Input
+                    type="password"
+                    value={draft.bot_token}
+                    placeholder={activeChannel?.bot_token_preview || copy.botTokenPlaceholder}
+                    onChange={(event) => setDraft((current) => ({ ...current, bot_token: event.target.value }))}
+                  />
+                </Field>
+              )}
+              {draft.provider === "qq" && (
+                <>
+                  <Field label={copy.qqBotID}>
+                    <Input value={providerConfig.bot_id || ""} placeholder="1020..." onChange={(event) => updateProviderConfig("bot_id", event.target.value)} />
+                  </Field>
+                  <Field label={copy.qqBotSecret}>
+                    <Input type="password" value={providerConfig.bot_secret || ""} placeholder={copy.qqBotSecretPlaceholder} onChange={(event) => updateProviderConfig("bot_secret", event.target.value)} />
+                  </Field>
+                  <Field label={copy.qqBaseURL}>
+                    <Input value={providerConfig.base_url || ""} placeholder="https://api.sgroup.qq.com" onChange={(event) => updateProviderConfig("base_url", event.target.value)} />
+                  </Field>
+                  <Field label={copy.qqMsgType}>
+                    <Input value={providerConfig.msg_type || ""} placeholder="0" onChange={(event) => updateProviderConfig("msg_type", event.target.value)} />
+                  </Field>
+                </>
+              )}
               <Field label={copy.status}>
                 <label className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
                   <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
@@ -529,7 +574,7 @@ function draftToPayload(draft: Draft) {
   return {
     name: draft.name.trim(),
     provider: draft.provider,
-    bot_token: draft.bot_token.trim() || undefined,
+    bot_token: providerUsesBotToken(draft.provider) ? draft.bot_token.trim() || undefined : undefined,
     enabled: draft.enabled,
     default_device_id: draft.default_device_id,
     default_user_channel_id: draft.default_user_channel_id ? Number(draft.default_user_channel_id) : null,
@@ -541,6 +586,7 @@ function draftToPayload(draft: Draft) {
     trigger_mode: draft.trigger_mode,
     system_prompt: draft.system_prompt,
     group_configs: draft.group_configs,
+    advanced_options: draft.advanced_options,
   }
 }
 
@@ -561,6 +607,7 @@ function channelToDraft(channel: MessageChannel): Draft {
     trigger_mode: channel.trigger_mode || "mention",
     system_prompt: channel.system_prompt || "",
     group_configs: channel.group_configs || [],
+    advanced_options: { custom_provider_config_json: channel.advanced_options?.custom_provider_config_json || "" },
   }
 }
 
@@ -586,8 +633,18 @@ function normalizeChannel(value: unknown): MessageChannel | null {
     trigger_mode: stringValue(value.trigger_mode) || "mention",
     system_prompt: stringValue(value.system_prompt),
     group_configs: Array.isArray(value.group_configs) ? value.group_configs.map(normalizeGroup).filter(Boolean) as GroupConfig[] : [],
+    advanced_options: normalizeAdvancedOptions(value.advanced_options),
     last_event_at: stringValue(value.last_event_at),
   }
+}
+
+function providerUsesBotToken(provider: string) {
+  return provider === "telegram" || provider === "discord"
+}
+
+function normalizeAdvancedOptions(value: unknown): AdvancedOptions {
+  const item = isRecord(value) ? value : {}
+  return { custom_provider_config_json: stringValue(item.custom_provider_config_json) }
 }
 
 function normalizeProviderValue(value: unknown): ChannelProvider {
@@ -675,6 +732,26 @@ function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
 }
 
+function parseProviderConfig(raw: string): Record<string, string> {
+  if (!raw.trim()) {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(raw)
+    if (!isRecord(parsed)) {
+      return {}
+    }
+    return Object.fromEntries(Object.entries(parsed).map(([key, value]) => [key, typeof value === "string" ? value : String(value ?? "")]))
+  } catch {
+    return {}
+  }
+}
+
+function stringifyProviderConfig(config: Record<string, string>) {
+  const cleaned = Object.fromEntries(Object.entries(config).filter(([, value]) => value.trim() !== ""))
+  return Object.keys(cleaned).length ? JSON.stringify(cleaned, null, 2) : ""
+}
+
 function apiErrorMessage(err: unknown, fallback: string) {
   if (isRecord(err) && isRecord(err.response) && isRecord(err.response.data) && typeof err.response.data.error === "string") {
     return err.response.data.error
@@ -695,6 +772,11 @@ const zhCopy = {
   provider: "渠道",
   botToken: "Bot Token",
   botTokenPlaceholder: "输入机器人 token",
+  qqBotID: "QQ 机器人 ID",
+  qqBotSecret: "QQ 机器人 Secret",
+  qqBotSecretPlaceholder: "输入 QQ 机器人 Secret",
+  qqBaseURL: "QQ 官方 API 地址",
+  qqMsgType: "QQ 消息类型",
   status: "状态",
   enabled: "启用",
   disabledState: "停用",
@@ -748,6 +830,11 @@ const enCopy: typeof zhCopy = {
   provider: "Provider",
   botToken: "Bot Token",
   botTokenPlaceholder: "Enter bot token",
+  qqBotID: "QQ bot ID",
+  qqBotSecret: "QQ bot secret",
+  qqBotSecretPlaceholder: "Enter QQ bot secret",
+  qqBaseURL: "QQ Official API URL",
+  qqMsgType: "QQ message type",
   status: "Status",
   enabled: "Enabled",
   disabledState: "Disabled",

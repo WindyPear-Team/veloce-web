@@ -394,7 +394,11 @@ function BasicTab({
           <Field label={copy.name}>
             <Input value={draft.name} onChange={(event) => onDraftChange({ name: event.target.value })} />
           </Field>
-          <SelectField label={copy.provider} value={draft.provider} onChange={(provider) => onDraftChange({ provider: provider as Draft["provider"] })}>
+          <SelectField
+            label={copy.provider}
+            value={draft.provider}
+            onChange={(provider) => onDraftChange({ provider: provider as Draft["provider"], bot_token: providerUsesBotToken(provider) ? draft.bot_token : "" })}
+          >
             {providerOptions.map((provider) => <option key={provider.value} value={provider.value}>{provider.label}</option>)}
           </SelectField>
           <Field label={copy.status}>
@@ -479,11 +483,14 @@ function ConnectionSettings({
 
         {draft.provider === "qq" && (
           <div className="grid gap-4 md:grid-cols-2">
+            <Field label={copy.qqBotID}>
+              <Input value={config.bot_id || ""} placeholder="1020..." onChange={(event) => updateConfig("bot_id", event.target.value)} />
+            </Field>
+            <Field label={copy.qqBotSecret}>
+              <Input type="password" value={config.bot_secret || ""} placeholder={copy.qqBotSecretPlaceholder} onChange={(event) => updateConfig("bot_secret", event.target.value)} />
+            </Field>
             <Field label={copy.qqBaseURL}>
               <Input value={config.base_url || ""} placeholder="https://api.sgroup.qq.com" onChange={(event) => updateConfig("base_url", event.target.value)} />
-            </Field>
-            <Field label={copy.qqAuthorization}>
-              <Input value={config.authorization || ""} placeholder="QQBot xxxxx" onChange={(event) => updateConfig("authorization", event.target.value)} />
             </Field>
             <Field label={copy.qqMsgType}>
               <Input value={config.msg_type || ""} placeholder="0" onChange={(event) => updateConfig("msg_type", event.target.value)} />
@@ -823,7 +830,7 @@ function draftToPayload(draft: Draft) {
   return {
     name: draft.name.trim(),
     provider: draft.provider,
-    bot_token: draft.bot_token.trim() || undefined,
+    bot_token: providerUsesBotToken(draft.provider) ? draft.bot_token.trim() || undefined : undefined,
     enabled: draft.enabled,
     default_device_id: draft.default_device_id,
     default_user_channel_id: draft.default_user_channel_id ? Number(draft.default_user_channel_id) : null,
@@ -837,6 +844,10 @@ function draftToPayload(draft: Draft) {
     group_configs: draft.group_configs,
     advanced_options: draft.advanced_options,
   }
+}
+
+function providerUsesBotToken(provider: string) {
+  return provider === "telegram" || provider === "discord"
 }
 
 function channelToDraft(channel: MessageChannel): Draft {
@@ -1105,8 +1116,10 @@ const zhCopy = {
   telegramBaseURL: "Telegram Bot API 地址",
   telegramParseMode: "Telegram 解析模式",
   discordBaseURL: "Discord API 地址",
+  qqBotID: "QQ 机器人 ID",
+  qqBotSecret: "QQ 机器人 Secret",
+  qqBotSecretPlaceholder: "输入 QQ 机器人 Secret",
   qqBaseURL: "QQ 官方 API 地址",
-  qqAuthorization: "QQ Authorization",
   qqMsgType: "QQ 消息类型",
   oneBotBaseURL: "OneBot HTTP 地址",
   oneBotAccessToken: "OneBot Access Token",
@@ -1200,8 +1213,10 @@ const enCopy: CopyText = {
   telegramBaseURL: "Telegram Bot API URL",
   telegramParseMode: "Telegram parse mode",
   discordBaseURL: "Discord API URL",
+  qqBotID: "QQ bot ID",
+  qqBotSecret: "QQ bot secret",
+  qqBotSecretPlaceholder: "Enter QQ bot secret",
   qqBaseURL: "QQ Official API URL",
-  qqAuthorization: "QQ Authorization",
   qqMsgType: "QQ message type",
   oneBotBaseURL: "OneBot HTTP URL",
   oneBotAccessToken: "OneBot access token",
