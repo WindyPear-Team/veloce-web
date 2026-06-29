@@ -792,11 +792,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const allVisibleRedeemCodesSelected = visibleRedeemCodes.length > 0 && visibleRedeemCodes.every((code) => selectedRedeemCodeIDs.includes(code.id))
 
   const handleSaveSettings = () => {
-    if (!isPremium && form.message_channel_enabled) {
-      updateField("message_channel_enabled", false)
-      setIsPremiumNoticeOpen(true)
-      return
-    }
     const streakRewards = validateCheckInStreakRewards(form.checkin_streak_rewards, copy)
     if (!streakRewards.valid) {
       error(streakRewards.error)
@@ -1242,17 +1237,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <ToggleField label={copy.sidebarModels} checked={form.sidebar_models_enabled} onChange={(checked) => updateField("sidebar_models_enabled", checked)} />
               <ToggleField label={copy.sidebarUsers} checked={form.sidebar_users_enabled} onChange={(checked) => updateField("sidebar_users_enabled", checked)} />
             </div>
-            <ToggleField
-              label={copy.messageChannelEnabled}
-              checked={form.message_channel_enabled}
-              onChange={(checked) => {
-                if (checked && !isPremium) {
-                  setIsPremiumNoticeOpen(true)
-                  return
-                }
-                updateField("message_channel_enabled", checked)
-              }}
-            />
           </div>
         </SettingsPanel>
       )}
@@ -1480,15 +1464,15 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
-      {isPremium && activeTab === "advancedChatAssistant" && (
+      {activeTab === "advancedChatAssistant" && (
         <AdvancedChatManagement mode="assistant" />
       )}
 
-      {isPremium && activeTab === "advancedChatAttachments" && (
+      {activeTab === "advancedChatAttachments" && (
         <AdvancedChatManagement mode="attachments" />
       )}
 
-      {isPremium && activeTab === "advancedChatMCP" && (
+      {activeTab === "advancedChatMCP" && (
         <AdvancedChatManagement mode="mcp" />
       )}
 

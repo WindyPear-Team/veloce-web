@@ -38,7 +38,7 @@ export default function AdvancedChat() {
   const [isLayoutEditing, setIsLayoutEditing] = useState(false)
   const location = useLocation()
   const { language, t } = useI18n()
-  const { data: settings } = useQuery<PublicSettings>({
+  const { data: settings, isLoading: isSettingsLoading } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => {
       const res = await api.get("/public/settings")
@@ -59,6 +59,14 @@ export default function AdvancedChat() {
   const isChatRoute = location.pathname === "/chat" || location.pathname.startsWith("/chat/session/")
   const transitionKey = isChatRoute ? "/chat" : location.pathname
   const layoutEditorLabel = language === "zh" ? (isLayoutEditing ? "退出编辑" : "可视化编辑") : isLayoutEditing ? "Exit editing" : "Visual editing"
+
+  if (isSettingsLoading) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+        {t("common.loading")}
+      </div>
+    )
+  }
 
   return (
     <PageLayoutEditorProvider

@@ -44,6 +44,7 @@ interface AdvancedChatSettings {
   assistant_connector_run_command_enabled: boolean
   assistant_connector_web_search_enabled: boolean
   scheduled_tasks_enabled: boolean
+  message_channel_enabled: boolean
   message_delivery_enabled: boolean
   delivery_system_smtp_enabled: boolean
 }
@@ -65,6 +66,7 @@ const defaultAdvancedChatSettings: AdvancedChatSettings = {
   assistant_connector_run_command_enabled: true,
   assistant_connector_web_search_enabled: true,
   scheduled_tasks_enabled: true,
+  message_channel_enabled: false,
   message_delivery_enabled: true,
   delivery_system_smtp_enabled: true,
 }
@@ -85,7 +87,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
   const [isServerDialogOpen, setIsServerDialogOpen] = useState(false)
   const [isBlockedOpen, setIsBlockedOpen] = useState(false)
 
-  const { data: publicSettings } = useQuery<PublicSettings>({
+  const { data: publicSettings, isLoading: isPublicSettingsLoading } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => {
       const res = await api.get("/public/settings")
@@ -155,6 +157,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
         ...(isPremium
           ? {
               scheduled_tasks_enabled: form.scheduled_tasks_enabled,
+              message_channel_enabled: form.message_channel_enabled,
               message_delivery_enabled: form.message_delivery_enabled,
               delivery_system_smtp_enabled: form.delivery_system_smtp_enabled,
             }
@@ -168,6 +171,8 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
       success("助理设置已保存")
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-admin-settings"] })
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
+      queryClient.invalidateQueries({ queryKey: ["public-settings"] })
+      queryClient.invalidateQueries({ queryKey: ["system-settings"] })
     },
     onError: (err) => error(err instanceof Error ? err.message : "保存助理设置失败"),
   })
@@ -243,7 +248,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
 
   const requirePremium = () => setIsBlockedOpen(true)
   const updatePremiumToggle =
-    (key: "file_storage_enabled" | "file_storage_auto_save_images_enabled" | "file_storage_auto_save_videos_enabled" | "scheduled_tasks_enabled" | "message_delivery_enabled" | "delivery_system_smtp_enabled") =>
+    (key: "file_storage_enabled" | "file_storage_auto_save_images_enabled" | "file_storage_auto_save_videos_enabled" | "scheduled_tasks_enabled" | "message_channel_enabled" | "message_delivery_enabled" | "delivery_system_smtp_enabled") =>
     (checked: boolean) => {
       if (checked && !isPremium) {
         setForm((current) => ({ ...current, [key]: false }))
@@ -252,6 +257,10 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
       }
       setForm((current) => ({ ...current, [key]: checked }))
     }
+
+  if (advancedSettings.isLoading || isPublicSettingsLoading) {
+    return <div className="text-sm text-muted-foreground">Loading...</div>
+  }
 
   return (
     <div className="space-y-6">
@@ -355,6 +364,12 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                     description="关闭后，用户不能创建、编辑或运行高级聊天计划任务，后台调度器也不会执行到期任务。"
                     checked={isPremium && form.scheduled_tasks_enabled}
                     onChange={updatePremiumToggle("scheduled_tasks_enabled")}
+                  />
+                  <ToggleRow
+                    title="启用消息通道"
+                    description="开启后，用户可以在独立聊天页面配置 Telegram、QQ、Discord 等消息通道。"
+                    checked={isPremium && form.message_channel_enabled}
+                    onChange={updatePremiumToggle("message_channel_enabled")}
                   />
                   <ToggleRow
                     title="启用消息投递"
@@ -508,7 +523,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
           <DialogHeader>
             <DialogTitle>需要高级版</DialogTitle>
           </DialogHeader>
-          <div className="text-sm text-muted-foreground">高级聊天管理属于高级版功能，当前版本不可用。</div>
+          <div className="text-sm text-muted-foreground">该设置属于高级版功能。社区版仍可配置附件限制、助手模式、工具开关和内置 MCP。</div>
           <DialogFooter>
             <Button onClick={() => setIsBlockedOpen(false)}>知道了</Button>
           </DialogFooter>
@@ -566,6 +581,7 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     assistant_connector_run_command_enabled: item.assistant_connector_run_command_enabled !== false,
     assistant_connector_web_search_enabled: item.assistant_connector_web_search_enabled !== false,
     scheduled_tasks_enabled: item.scheduled_tasks_enabled !== false,
+    message_channel_enabled: item.message_channel_enabled === true,
     message_delivery_enabled: item.message_delivery_enabled !== false,
     delivery_system_smtp_enabled: item.delivery_system_smtp_enabled !== false,
   }
@@ -581,6 +597,7 @@ function normalizeAdvancedChatSettingsForEdition(settings: AdvancedChatSettings,
     file_storage_auto_save_images_enabled: false,
     file_storage_auto_save_videos_enabled: false,
     scheduled_tasks_enabled: false,
+    message_channel_enabled: false,
     message_delivery_enabled: false,
     delivery_system_smtp_enabled: false,
   }
