@@ -1023,7 +1023,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     const path = workspacePath.trim()
     const deviceID = currentSession.connector_device_id || ""
-    if (!deviceID || !path) {
+    if (!deviceID) {
       return
     }
     setSessionConnector(
@@ -1061,7 +1061,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const refreshWorkspaceSkills = async () => {
     const deviceID = currentSession?.connector_device_id || pendingConnectorDeviceID
     const workspacePath = currentSession?.connector_workspace_path || pendingConnectorWorkspace.trim()
-    if (!deviceID || !workspacePath) {
+    if (!deviceID) {
       error(copy.noDeviceSelected)
       return
     }
@@ -1069,7 +1069,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     try {
       const res = await api.post("/user/advanced-chat/workspace-skills/refresh", {
         connector_device_id: deviceID,
-        connector_workspace_path: workspacePath,
+        connector_workspace_path: workspacePath || undefined,
       })
       const rawSkills: unknown[] = Array.isArray(res.data?.skills) ? res.data.skills : []
       const skills = rawSkills.map(normalizeWorkspaceSkill).filter((skill): skill is WorkspaceSkill => Boolean(skill))
@@ -2536,11 +2536,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </Button>
                   </div>
 
-                  {selectedConnectorDevice && currentSession?.connector_workspace_path ? (
+                  {selectedConnectorDevice ? (
                     <div className="grid grid-cols-[1fr_auto] gap-2 rounded-md border p-3">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{selectedConnectorDevice.name}</div>
-                        <div className="mt-1 truncate text-xs text-muted-foreground">{currentSession.connector_workspace_path}</div>
+                        <div className="mt-1 truncate text-xs text-muted-foreground">{currentSession?.connector_workspace_path || copy.unrestrictedWorkspace}</div>
                         {selectedConnectorDevice.remark && <div className="mt-1 truncate text-xs text-muted-foreground">{selectedConnectorDevice.remark}</div>}
                         <div className={cn("mt-1 text-xs", selectedConnectorDevice.online ? "text-emerald-600" : "text-muted-foreground")}>
                           {selectedConnectorDevice.online ? copy.deviceOnline : copy.deviceOffline}
@@ -2564,7 +2564,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         variant="outline"
                         size="sm"
                         className="gap-2"
-                        disabled={isRefreshingWorkspaceSkills || !(currentSession?.connector_device_id || pendingConnectorDeviceID) || !(currentSession?.connector_workspace_path || pendingConnectorWorkspace.trim())}
+                        disabled={isRefreshingWorkspaceSkills || !(currentSession?.connector_device_id || pendingConnectorDeviceID)}
                         onClick={refreshWorkspaceSkills}
                       >
                         <Sparkles size={15} />
@@ -4678,6 +4678,7 @@ const chatCopyKeys = {
   selectWorkspace: "chat.selectWorkspace",
   workspacePath: "chat.workspacePath",
   workspacePathPlaceholder: "chat.workspacePathPlaceholder",
+  unrestrictedWorkspace: "chat.unrestrictedWorkspace",
   workspaceSkills: "chat.workspaceSkills",
   refreshWorkspaceSkills: "chat.refreshWorkspaceSkills",
   refreshingWorkspaceSkills: "chat.refreshingWorkspaceSkills",

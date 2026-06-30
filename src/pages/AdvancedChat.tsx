@@ -1,4 +1,4 @@
-import { Bot, CalendarClock, FileText, Laptop, Menu, MessageSquare, Palette, Send, SlidersHorizontal, Sparkles, UserCircle, Video } from "lucide-react"
+import { Bot, CalendarClock, FileText, Laptop, Menu, MessageSquare, Palette, Send, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
@@ -13,6 +13,7 @@ import AdvancedChatDevices from "./AdvancedChatDevices"
 import MessageChannels from "./MessageChannelsWorkspace"
 import AdvancedChatDeliveries from "./AdvancedChatDeliveries"
 import AdvancedChatScheduledTasks from "./AdvancedChatScheduledTasks"
+import AgentGroupsPage from "./AgentGroupsPage"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { Button } from "@/components/ui/button"
@@ -155,6 +156,7 @@ export default function AdvancedChat() {
                     <Route path="skills" element={<Skills />} />
                     <Route path="mcp" element={<AdvancedChatMCP />} />
                     <Route path="devices" element={<AdvancedChatDevices />} />
+                    <Route path="agent-groups/*" element={<AgentGroupsPage />} />
                     {isPremium && publicSettings.message_channel_enabled && <Route path="channels/*" element={<MessageChannels />} />}
                     {isPremium && <Route path="deliveries" element={<AdvancedChatDeliveries />} />}
                     {isPremium && <Route path="scheduled-tasks" element={<AdvancedChatScheduledTasks />} />}
@@ -188,6 +190,7 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
   const messageChannelsLabel = language === "zh" ? "消息通道" : "Message Channels"
   const deliveriesLabel = language === "zh" ? "结果投递" : "Result Delivery"
   const scheduledTasksLabel = language === "zh" ? "计划任务" : "Scheduled Tasks"
+  const agentGroupsLabel = language === "zh" ? "代理组" : "Agent Groups"
   const items = [
     { href: "/chat", label: t("nav.chat"), icon: MessageSquare, active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/") },
     { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
@@ -199,6 +202,7 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
     { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
     { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
     { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },
+    { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname === "/chat/agent-groups" },
     { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
   ]
 
