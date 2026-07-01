@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { ArrowDown, Bot, Check, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
+import { Activity, ArrowDown, Bot, Check, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
 import api from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -92,6 +92,34 @@ interface ChatRun {
   updated_at?: string
   started_at?: string
   finished_at?: string
+}
+
+interface AgentWorkMessage {
+  role: "user" | "assistant" | "tool" | "system" | string
+  content: string
+  status?: string
+  tool?: string
+  created_at?: string
+}
+
+interface AgentWorkStatus {
+  agent_id: string
+  agent_name: string
+  agent_type: string
+  group_id: string
+  group_name: string
+  status: string
+  working: boolean
+  updated_at?: string
+  messages: AgentWorkMessage[]
+}
+
+interface AgentWorkResponse {
+  run_id: string
+  session_id: string
+  group_id: string
+  group_name: string
+  agents: AgentWorkStatus[]
 }
 
 interface ChatAgent {
@@ -278,6 +306,7 @@ const advancedSessionsQueryKey = ["advanced-chat-sessions"] as const
 const advancedFilesQueryKey = ["advanced-chat-files"] as const
 const connectorDevicesQueryKey = ["advanced-chat-connector-devices"] as const
 const connectorApprovalsQueryKey = (runID: string) => ["advanced-chat-connector-approvals", runID] as const
+const agentWorkQueryKey = (runID: string) => ["advanced-chat-agent-work", runID] as const
 const agentGroupsQueryKey = ["advanced-chat-agent-groups"] as const
 const defaultAdvancedChatSettings: AdvancedChatSettings = {
   attachment_max_mb: 10,
@@ -347,6 +376,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectedUserChannelID, setSelectedUserChannelID] = useState(() => Number(localStorage.getItem(storeKeys.userChannel) || 0))
   const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
   const [isConfigOpen, setIsConfigOpen] = useState(false)
+  const [isAgentWorkOpen, setIsAgentWorkOpen] = useState(false)
+  const [selectedWorkAgentID, setSelectedWorkAgentID] = useState("")
   const [isSessionsSidebarOpen, setIsSessionsSidebarOpen] = useState(false)
   const [configTab, setConfigTab] = useState<SessionConfigTab>("basic")
   const [pendingAgentID, setPendingAgentID] = useState("")
@@ -504,6 +535,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const activeRun = isAdvanced ? currentSession?.latest_run : undefined
   const isActiveRunRunning = isRunActive(activeRun)
   const activeRunID = activeRun?.id || ""
+  const showAgentWorkStatus = isAdvanced && activeRunMode === "agent_group"
+  const { data: agentWork } = useQuery<AgentWorkResponse | undefined>({
+    queryKey: agentWorkQueryKey(activeRunID),
+    enabled: showAgentWorkStatus && Boolean(activeRunID) && (isAgentWorkOpen || isActiveRunRunning),
+    refetchInterval: isActiveRunRunning ? 1000 : false,
+    queryFn: async () => {
+      const res = await api.get(`/user/advanced-chat/runs/${encodeURIComponent(activeRunID)}/agent-work`)
+      return normalizeAgentWorkResponse(res.data)
+    },
+  })
   const hasApprovalRequiredToolCall = useMemo(
     () => Boolean(currentSession?.messages.some((message) => message.tool_calls?.some((toolCall) => toolCall.status === "approval_required"))),
     [currentSession?.messages]
@@ -522,6 +563,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         : []
     },
   })
+  const unboundConnectorApprovals = useMemo(() => {
+    if (!currentSession || pendingConnectorApprovals.length === 0) {
+      return []
+    }
+    const toolCalls = currentSession.messages.flatMap((message) => message.tool_calls || [])
+    return pendingConnectorApprovals.filter((task) => !toolCalls.some((toolCall) => toolCall.status === "approval_required" && connectorApprovalTaskMatchesToolCall(toolCall, task)))
+  }, [currentSession, pendingConnectorApprovals])
   const activeModelName = isAdvanced ? currentSession?.model_name || selectedAgent?.default_model || modelName : modelName
   const modelSelectOptions = useMemo(
     () => activeModelName && !modelOptions.includes(activeModelName) ? [activeModelName, ...modelOptions] : modelOptions,
@@ -584,6 +632,27 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => agentGroups.find((group) => group.id === currentSession?.agent_group_id),
     [agentGroups, currentSession?.agent_group_id]
   )
+  const fallbackAgentWork = useMemo<AgentWorkResponse | undefined>(() => {
+    if (!currentAgentGroup || activeRunMode !== "agent_group") {
+      return undefined
+    }
+    return {
+      run_id: activeRunID,
+      session_id: currentSession?.id || "",
+      group_id: currentAgentGroup.id,
+      group_name: currentAgentGroup.name,
+      agents: currentAgentGroup.agents.map((agent) => ({
+        agent_id: agent.id,
+        agent_name: agent.name,
+        agent_type: agent.type || "worker",
+        group_id: currentAgentGroup.id,
+        group_name: currentAgentGroup.name,
+        status: "idle",
+        working: false,
+        messages: [],
+      })),
+    }
+  }, [activeRunID, activeRunMode, currentAgentGroup, currentSession?.id])
   const agentMentionOptions = useMemo(() => {
     if (activeRunMode !== "agent_group" || !currentAgentGroup) {
       return []
@@ -1823,6 +1892,29 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     )
   }
 
+  const agentWorkStatusButton = (className = "") => {
+    if (!showAgentWorkStatus) {
+      return null
+    }
+    const workingCount = agentWork?.agents.filter((agent) => agent.working).length || 0
+    const title = workingCount > 0
+      ? agentGroupCopy.workStatusActive.replace("{count}", String(workingCount))
+      : agentGroupCopy.workStatus
+    return (
+      <Button
+        type="button"
+        variant="outline"
+        size="icon"
+        className={cn(className, workingCount > 0 && "border-primary/40 bg-primary/5 text-primary")}
+        onClick={() => setIsAgentWorkOpen(true)}
+        title={title}
+        aria-label={title}
+      >
+        <Activity size={16} />
+      </Button>
+    )
+  }
+
   const composerModeControl = () => {
     const open = composerControlMenu === "mode"
     const chatLocked = currentSession?.run_mode !== "chat"
@@ -2224,6 +2316,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <FileText size={15} />
                     {fileCopy.selectFile}
                   </Button>
+                  {agentWorkStatusButton("h-9 w-9")}
                 </div>
 
                 {isStreamActive || isActiveRunRunning || isSending ? (
@@ -2260,6 +2353,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </div>
             <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
+              {isAdvanced && unboundConnectorApprovals.length > 0 && (
+                <PendingConnectorApprovalsPanel
+                  tasks={unboundConnectorApprovals}
+                  copy={copy}
+                  decidingTaskID={decidingConnectorTaskID}
+                  onDecide={decideConnectorApproval}
+                />
+              )}
               <div className={cn(isAdvanced ? "min-h-[360px] flex-1 space-y-3 py-3" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
@@ -2362,6 +2463,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 <div className="sticky bottom-0 -mx-4 space-y-2 border-t bg-background px-4 py-3 sm:mx-0 sm:rounded-t-md sm:border sm:bg-card">
                   <div className="flex items-end gap-2">
                     {attachmentMenuButton("composer")}
+                    {agentWorkStatusButton()}
                     <div className="relative min-w-0 flex-1">
                       <textarea
                         ref={composerTextareaRef}
@@ -2467,6 +2569,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             </DialogFooter>
           </DialogContent>
         </Dialog>
+      )}
+      {isAdvanced && (
+        <AgentWorkDialog
+          open={isAgentWorkOpen}
+          onOpenChange={setIsAgentWorkOpen}
+          work={agentWork || fallbackAgentWork}
+          selectedAgentID={selectedWorkAgentID}
+          onSelectAgent={setSelectedWorkAgentID}
+          copy={agentGroupCopy}
+        />
       )}
       {isAdvanced && (
         <Dialog open={isConfigOpen} onOpenChange={setIsConfigOpen}>
@@ -3258,6 +3370,147 @@ function ConnectorApprovalControls({
         {copy.approveConnectorTask}
       </Button>
     </div>
+  )
+}
+
+function PendingConnectorApprovalsPanel({
+  tasks,
+  copy,
+  decidingTaskID,
+  onDecide,
+}: {
+  tasks: ConnectorApprovalTask[]
+  copy: ChatCopy
+  decidingTaskID: string
+  onDecide: (taskID: string, approved: boolean) => void
+}) {
+  if (tasks.length === 0) {
+    return null
+  }
+  return (
+    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
+      <div className="font-medium text-amber-900 dark:text-amber-200">{copy.connectorApprovalTitle}</div>
+      <div className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">{copy.connectorApprovalDescription}</div>
+      <div className="mt-3 space-y-2">
+        {tasks.map((task) => (
+          <div key={task.id} className="rounded-md border bg-background p-2">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 text-xs">
+                <div className="font-medium">{connectorApprovalTaskTitle(task)}</div>
+                <div className="mt-1 truncate text-muted-foreground">{connectorApprovalTaskSubtitle(task)}</div>
+              </div>
+              <ConnectorApprovalControls
+                task={task}
+                copy={copy}
+                decidingTaskID={decidingTaskID}
+                onDecide={onDecide}
+              />
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function AgentWorkDialog({
+  open,
+  onOpenChange,
+  work,
+  selectedAgentID,
+  onSelectAgent,
+  copy,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  work?: AgentWorkResponse
+  selectedAgentID: string
+  onSelectAgent: (agentID: string) => void
+  copy: AgentGroupCopy
+}) {
+  const agents = work?.agents || []
+  const activeAgent = agents.find((agent) => agent.agent_id === selectedAgentID) || agents[0]
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-4xl overflow-hidden">
+        <DialogHeader>
+          <DialogTitle>{copy.workStatus}</DialogTitle>
+        </DialogHeader>
+        <div className="grid min-h-0 gap-3 md:grid-cols-[16rem_1fr]">
+          <div className="max-h-[65vh] space-y-2 overflow-y-auto rounded-md border p-2">
+            {agents.length === 0 ? (
+              <div className="px-3 py-10 text-center text-sm text-muted-foreground">{copy.noWorkStatus}</div>
+            ) : (
+              agents.map((agent) => {
+                const selected = (selectedAgentID || activeAgent?.agent_id) === agent.agent_id
+                return (
+                  <button
+                    key={agent.agent_id}
+                    type="button"
+                    className={cn(
+                      "w-full rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
+                      selected && "border-primary bg-primary/5 text-primary"
+                    )}
+                    onClick={() => onSelectAgent(agent.agent_id)}
+                  >
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="truncate font-medium">{agent.agent_name || agent.agent_id}</span>
+                      <span className={cn(
+                        "shrink-0 rounded px-1.5 py-0.5 text-[11px]",
+                        agent.working ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground"
+                      )}>
+                        {agent.working ? copy.working : copy.idle}
+                      </span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {agent.agent_type} · {agentWorkStatusText(agent.status, copy)}
+                    </div>
+                  </button>
+                )
+              })
+            )}
+          </div>
+
+          <div className="flex max-h-[65vh] min-h-0 flex-col rounded-md border">
+            {activeAgent ? (
+              <>
+                <div className="border-b px-3 py-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-sm font-medium">{activeAgent.agent_name || activeAgent.agent_id}</span>
+                    <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{activeAgent.agent_type}</span>
+                    <span className={cn("rounded px-2 py-0.5 text-xs", activeAgent.working ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
+                      {activeAgent.working ? copy.working : copy.idle}
+                    </span>
+                  </div>
+                  {activeAgent.updated_at && (
+                    <div className="mt-1 text-xs text-muted-foreground">{copy.updatedAt}: {formatAgentWorkTime(activeAgent.updated_at)}</div>
+                  )}
+                </div>
+                <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                  {activeAgent.messages.length === 0 ? (
+                    <div className="rounded-md border border-dashed px-3 py-10 text-center text-sm text-muted-foreground">{copy.noWorkMessages}</div>
+                  ) : (
+                    activeAgent.messages.map((message, index) => (
+                      <div key={`${message.created_at || index}-${index}`} className="rounded-md border bg-background p-3 text-sm">
+                        <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                          <span className="rounded bg-muted px-1.5 py-0.5">{agentWorkRoleLabel(message.role, copy)}</span>
+                          {message.tool && <span>{message.tool}</span>}
+                          {message.status && <span>{agentWorkStatusText(message.status, copy)}</span>}
+                          {message.created_at && <span className="ml-auto">{formatAgentWorkTime(message.created_at)}</span>}
+                        </div>
+                        <MarkdownContent content={message.content} />
+                      </div>
+                    ))
+                  )}
+                </div>
+              </>
+            ) : (
+              <div className="flex min-h-[18rem] items-center justify-center px-3 text-sm text-muted-foreground">{copy.noWorkStatus}</div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -4241,6 +4494,64 @@ function normalizeRun(value: unknown): ChatRun | undefined {
   }
 }
 
+function normalizeAgentWorkResponse(value: unknown): AgentWorkResponse | undefined {
+  if (!isRecord(value)) {
+    return undefined
+  }
+  const runID = stringFromUnknown(value.run_id) || ""
+  if (!runID) {
+    return undefined
+  }
+  const rawAgents = Array.isArray(value.agents) ? value.agents : []
+  return {
+    run_id: runID,
+    session_id: stringFromUnknown(value.session_id) || "",
+    group_id: stringFromUnknown(value.group_id) || "",
+    group_name: stringFromUnknown(value.group_name) || "",
+    agents: rawAgents.map(normalizeAgentWorkStatus).filter((agent): agent is AgentWorkStatus => Boolean(agent)),
+  }
+}
+
+function normalizeAgentWorkStatus(value: unknown): AgentWorkStatus | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const agentID = stringFromUnknown(value.agent_id) || ""
+  const agentName = stringFromUnknown(value.agent_name) || agentID
+  if (!agentID && !agentName) {
+    return null
+  }
+  const rawMessages = Array.isArray(value.messages) ? value.messages : []
+  return {
+    agent_id: agentID,
+    agent_name: agentName,
+    agent_type: stringFromUnknown(value.agent_type) || "worker",
+    group_id: stringFromUnknown(value.group_id) || "",
+    group_name: stringFromUnknown(value.group_name) || "",
+    status: stringFromUnknown(value.status) || "idle",
+    working: value.working === true,
+    updated_at: stringFromUnknown(value.updated_at) || undefined,
+    messages: rawMessages.map(normalizeAgentWorkMessage).filter((message): message is AgentWorkMessage => Boolean(message)),
+  }
+}
+
+function normalizeAgentWorkMessage(value: unknown): AgentWorkMessage | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const content = stringFromUnknown(value.content) || ""
+  if (!content.trim()) {
+    return null
+  }
+  return {
+    role: stringFromUnknown(value.role) || "system",
+    content,
+    status: stringFromUnknown(value.status) || undefined,
+    tool: stringFromUnknown(value.tool) || undefined,
+    created_at: stringFromUnknown(value.created_at) || undefined,
+  }
+}
+
 function normalizeMessage(value: unknown): ChatMessage | null {
   if (!isRecord(value)) {
     return null
@@ -4486,6 +4797,52 @@ function runStatusText(run: ChatRun, copy: ChatCopy) {
   }
   const text = streamStatusText({ message: run.status_message || "assistant_started", round: run.current_round }, copy)
   return text || copy.runningAssistant
+}
+
+function agentWorkStatusText(status: string, copy: AgentGroupCopy) {
+  switch (status) {
+    case "queued":
+      return copy.statusQueued
+    case "running":
+      return copy.statusRunning
+    case "completed":
+      return copy.statusCompleted
+    case "failed":
+    case "error":
+      return copy.statusFailed
+    case "cancelled":
+      return copy.statusCancelled
+    case "approval_required":
+      return copy.statusApproval
+    case "idle":
+    case "":
+      return copy.idle
+    default:
+      return status
+  }
+}
+
+function agentWorkRoleLabel(role: string, copy: AgentGroupCopy) {
+  switch (role) {
+    case "user":
+      return copy.roleUser
+    case "assistant":
+      return copy.roleAssistant
+    case "tool":
+      return copy.roleTool
+    case "system":
+      return copy.roleSystem
+    default:
+      return role || copy.roleSystem
+  }
+}
+
+function formatAgentWorkTime(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return date.toLocaleString()
 }
 
 function messageDisplayContent(message: ChatMessage, run: ChatRun | undefined, copy: ChatCopy) {
@@ -4753,29 +5110,39 @@ function findConnectorApprovalTask(toolCall: ChatToolCall, tasks: ConnectorAppro
   if (toolCall.status !== "approval_required" || tasks.length === 0) {
     return undefined
   }
-  const byTaskID = tasks.find((task) => task.id === stringArgument(toolCall.arguments, "connector_task_id"))
-  if (byTaskID) {
-    return byTaskID
+  return tasks.find((task) => connectorApprovalTaskMatchesToolCall(toolCall, task))
+}
+
+function connectorApprovalTaskMatchesToolCall(toolCall: ChatToolCall, task: ConnectorApprovalTask) {
+  if (task.id === stringArgument(toolCall.arguments, "connector_task_id")) {
+    return true
   }
-  const byPreviewID = tasks.find((task) => stringArgument(task.payload, "preview_tool_call_id") === toolCall.id)
-  if (byPreviewID) {
-    return byPreviewID
+  if (stringArgument(task.payload, "preview_tool_call_id") === toolCall.id) {
+    return true
   }
   const action = connectorActionForToolCall(toolCall)
-  if (!action) {
-    return undefined
+  if (!action || task.action !== action) {
+    return false
   }
-  const path = stringArgument(toolCall.arguments, "path")
-  const command = stringArgument(toolCall.arguments, "command")
-  return tasks.find((task) => {
-    if (task.action !== action) {
-      return false
-    }
-    if (action === "run_command") {
-      return stringArgument(task.payload, "command") === command
-    }
-    return stringArgument(task.payload, "path") === path
-  })
+  if (action === "run_command") {
+    return stringArgument(task.payload, "command") === stringArgument(toolCall.arguments, "command")
+  }
+  return stringArgument(task.payload, "path") === stringArgument(toolCall.arguments, "path")
+}
+
+function connectorApprovalTaskTitle(task: ConnectorApprovalTask) {
+  const action = task.action || "connector action"
+  const target =
+    stringArgument(task.payload, "path") ||
+    stringArgument(task.payload, "command") ||
+    stringArgument(task.payload, "url") ||
+    stringArgument(task.payload, "query")
+  return target ? `${action}: ${target}` : action
+}
+
+function connectorApprovalTaskSubtitle(task: ConnectorApprovalTask) {
+  const parts = [task.device_name, task.workspace_path].filter(Boolean)
+  return parts.length > 0 ? parts.join(" · ") : task.id
 }
 
 function connectorActionForToolCall(toolCall: ChatToolCall) {
@@ -5150,6 +5517,23 @@ const enAgentGroupCopy = {
   runAgentGroup: "Send to studio",
   promptPlaceholder: "Send a task to the studio, or use @agent to address one agent",
   groupRequired: "Select a studio before sending",
+  workStatus: "Work status",
+  workStatusActive: "{count} working",
+  noWorkStatus: "No main agent status yet",
+  noWorkMessages: "No messages recorded for this agent",
+  working: "Working",
+  idle: "Idle",
+  updatedAt: "Updated",
+  roleUser: "User",
+  roleAssistant: "Assistant",
+  roleTool: "Tool",
+  roleSystem: "System",
+  statusQueued: "Queued",
+  statusRunning: "Running",
+  statusCompleted: "Completed",
+  statusFailed: "Failed",
+  statusCancelled: "Cancelled",
+  statusApproval: "Approval required",
 }
 
 const zhAgentGroupCopy: AgentGroupCopy = {
@@ -5165,4 +5549,21 @@ const zhAgentGroupCopy: AgentGroupCopy = {
   runAgentGroup: "\u53d1\u9001\u5230\u5de5\u4f5c\u5ba4",
   promptPlaceholder: "\u5411\u5de5\u4f5c\u5ba4\u53d1\u9001\u4efb\u52a1\uff0c\u6216\u4f7f\u7528 @agent \u6307\u5b9a\u4ee3\u7406",
   groupRequired: "\u53d1\u9001\u524d\u8bf7\u5148\u9009\u62e9\u5de5\u4f5c\u5ba4",
+  workStatus: "\u5de5\u4f5c\u72b6\u6001",
+  workStatusActive: "{count} \u4e2a\u6b63\u5728\u5de5\u4f5c",
+  noWorkStatus: "\u6682\u65e0\u4e3b\u4ee3\u7406\u5de5\u4f5c\u72b6\u6001",
+  noWorkMessages: "\u8be5\u4ee3\u7406\u6682\u65e0\u6d88\u606f\u8bb0\u5f55",
+  working: "\u5de5\u4f5c\u4e2d",
+  idle: "\u7a7a\u95f2",
+  updatedAt: "\u66f4\u65b0",
+  roleUser: "\u7528\u6237",
+  roleAssistant: "\u52a9\u624b",
+  roleTool: "\u5de5\u5177",
+  roleSystem: "\u7cfb\u7edf",
+  statusQueued: "\u6392\u961f\u4e2d",
+  statusRunning: "\u8fd0\u884c\u4e2d",
+  statusCompleted: "\u5df2\u5b8c\u6210",
+  statusFailed: "\u5931\u8d25",
+  statusCancelled: "\u5df2\u53d6\u6d88",
+  statusApproval: "\u7b49\u5f85\u6279\u51c6",
 }
