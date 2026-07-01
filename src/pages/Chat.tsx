@@ -114,12 +114,30 @@ interface AgentWorkStatus {
   messages: AgentWorkMessage[]
 }
 
+interface AgentWorkConnectorTask {
+  id: string
+  device_id: string
+  device_name: string
+  action: string
+  status: string
+  workspace_path: string
+  workspace_unrestricted?: boolean
+  payload: Record<string, unknown>
+  result?: string
+  error_message?: string
+  created_at: string
+  updated_at?: string
+  started_at?: string
+  finished_at?: string
+}
+
 interface AgentWorkResponse {
   run_id: string
   session_id: string
   group_id: string
   group_name: string
   agents: AgentWorkStatus[]
+  connector_tasks: AgentWorkConnectorTask[]
 }
 
 interface ChatAgent {
@@ -563,13 +581,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         : []
     },
   })
-  const unboundConnectorApprovals = useMemo(() => {
-    if (!currentSession || pendingConnectorApprovals.length === 0) {
-      return []
-    }
-    const toolCalls = currentSession.messages.flatMap((message) => message.tool_calls || [])
-    return pendingConnectorApprovals.filter((task) => !toolCalls.some((toolCall) => toolCall.status === "approval_required" && connectorApprovalTaskMatchesToolCall(toolCall, task)))
-  }, [currentSession, pendingConnectorApprovals])
   const activeModelName = isAdvanced ? currentSession?.model_name || selectedAgent?.default_model || modelName : modelName
   const modelSelectOptions = useMemo(
     () => activeModelName && !modelOptions.includes(activeModelName) ? [activeModelName, ...modelOptions] : modelOptions,
@@ -651,6 +662,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         working: false,
         messages: [],
       })),
+      connector_tasks: [],
     }
   }, [activeRunID, activeRunMode, currentAgentGroup, currentSession?.id])
   const agentMentionOptions = useMemo(() => {
@@ -2353,92 +2365,106 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </div>
             <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
-              {isAdvanced && unboundConnectorApprovals.length > 0 && (
-                <PendingConnectorApprovalsPanel
-                  tasks={unboundConnectorApprovals}
-                  copy={copy}
-                  decidingTaskID={decidingConnectorTaskID}
-                  onDecide={decideConnectorApproval}
-                />
-              )}
               <div className={cn(isAdvanced ? "min-h-[360px] flex-1 space-y-3 py-3" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
                 ) : (
                   <>
-                    {currentSession.messages.map((message) => (
-                      <div key={message.id} className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                        <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
-                          <div className="flex items-start gap-2">
-                            {message.role === "user" ? (
-                              <User className="mt-0.5 h-4 w-4 shrink-0" />
-                            ) : (
-                              <Bot className="mt-0.5 h-4 w-4 shrink-0" />
-                            )}
-                            <div className="min-w-0 flex-1">
-                              {editingMessageID === message.id ? (
-                                <div className="space-y-2">
-                                  <textarea
-                                    className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                                    value={editingText}
-                                    onChange={(event) => setEditingText(event.target.value)}
-                                  />
-                                  {editingAttachments.length > 0 && (
-                                    <AttachmentChips
-                                      attachments={editingAttachments}
-                                      removeLabel={copy.removeAttachment}
-                                      onRemove={removeEditingAttachment}
+                    {currentSession.messages.map((message) => {
+                      if (message.role === "assistant" && editingMessageID !== message.id) {
+                        return (
+                          <AssistantMessageSequence
+                            key={message.id}
+                            message={message}
+                            activeRun={activeRun}
+                            copy={copy}
+                            approvalTasks={pendingConnectorApprovals}
+                            decidingTaskID={decidingConnectorTaskID}
+                            onDecide={decideConnectorApproval}
+                            onEdit={() => beginEditMessage(message)}
+                            onDelete={() => deleteMessage(message.id)}
+                            editLabel={copy.editMessage}
+                            deleteLabel={copy.deleteMessage}
+                            controlsHidden={isActiveRunRunning && activeRun?.assistant_message_id === message.id}
+                          />
+                        )
+                      }
+                      return (
+                        <div key={message.id} className="space-y-1.5">
+                          <div className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
+                            <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                              <div className="flex items-start gap-2">
+                                {message.role === "user" ? (
+                                  <User className="mt-0.5 h-4 w-4 shrink-0" />
+                                ) : (
+                                  <Bot className="mt-0.5 h-4 w-4 shrink-0" />
+                                )}
+                                <div className="min-w-0 flex-1">
+                                  {editingMessageID === message.id ? (
+                                    <div className="space-y-2">
+                                      <textarea
+                                        className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                                        value={editingText}
+                                        onChange={(event) => setEditingText(event.target.value)}
+                                      />
+                                      {editingAttachments.length > 0 && (
+                                        <AttachmentChips
+                                          attachments={editingAttachments}
+                                          removeLabel={copy.removeAttachment}
+                                          onRemove={removeEditingAttachment}
+                                        />
+                                      )}
+                                      {isAdvanced && message.role === "user" && (
+                                        <div className="flex flex-wrap items-center gap-2">
+                                          {attachmentMenuButton("editor")}
+                                        </div>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <MessageContent
+                                      message={message}
+                                      activeRun={activeRun}
+                                      isAdvanced={isAdvanced}
+                                      copy={copy}
+                                      approvalTasks={pendingConnectorApprovals}
+                                      decidingTaskID={decidingConnectorTaskID}
+                                      onDecide={decideConnectorApproval}
                                     />
                                   )}
-                                  {isAdvanced && message.role === "user" && (
-                                    <div className="flex flex-wrap items-center gap-2">
-                                      {attachmentMenuButton("editor")}
-                                    </div>
-                                  )}
                                 </div>
-                              ) : (
-                                <MessageContent
-                                  message={message}
-                                  activeRun={activeRun}
-                                  isAdvanced={isAdvanced}
-                                  copy={copy}
-                                  approvalTasks={pendingConnectorApprovals}
-                                  decidingTaskID={decidingConnectorTaskID}
-                                  onDecide={decideConnectorApproval}
-                                />
-                              )}
+                              </div>
+                              <div
+                                className={cn(
+                                  "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                                  editingMessageID === message.id && "opacity-100",
+                                  message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
+                                )}
+                              >
+                                {editingMessageID === message.id ? (
+                                  <>
+                                    <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
+                                      <Check size={15} />
+                                    </Button>
+                                    <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
+                                      <X size={15} />
+                                    </Button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
+                                      <Pencil size={14} />
+                                    </Button>
+                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                      <Trash2 size={14} />
+                                    </Button>
+                                  </>
+                                )}
+                              </div>
                             </div>
                           </div>
-                          <div
-                            className={cn(
-                              "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                              editingMessageID === message.id && "opacity-100",
-                              message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
-                            )}
-                          >
-                            {editingMessageID === message.id ? (
-                              <>
-                                <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
-                                  <Check size={15} />
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
-                                  <X size={15} />
-                                </Button>
-                              </>
-                            ) : (
-                              <>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
-                                  <Pencil size={14} />
-                                </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
-                                  <Trash2 size={14} />
-                                </Button>
-                              </>
-                            )}
-                          </div>
                         </div>
-                      </div>
-                    ))}
+                      )
+                    })}
                   </>
                 )}
                 <div ref={messagesEndRef} />
@@ -2461,6 +2487,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               {isAdvanced ? (
                 <div className="sticky bottom-0 -mx-4 space-y-2 border-t bg-background px-4 py-3 sm:mx-0 sm:rounded-t-md sm:border sm:bg-card">
+                  {pendingConnectorApprovals.length > 0 && (
+                    <PendingConnectorApprovalsPanel
+                      tasks={pendingConnectorApprovals}
+                      copy={copy}
+                      decidingTaskID={decidingConnectorTaskID}
+                      onDecide={decideConnectorApproval}
+                    />
+                  )}
                   <div className="flex items-end gap-2">
                     {attachmentMenuButton("composer")}
                     {agentWorkStatusButton()}
@@ -2578,6 +2612,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           selectedAgentID={selectedWorkAgentID}
           onSelectAgent={setSelectedWorkAgentID}
           copy={agentGroupCopy}
+          chatCopy={copy}
+          decidingTaskID={decidingConnectorTaskID}
+          onDecideConnectorTask={decideConnectorApproval}
         />
       )}
       {isAdvanced && (
@@ -3131,6 +3168,91 @@ function AttachmentChips({
   )
 }
 
+function AssistantMessageSequence({
+  message,
+  activeRun,
+  copy,
+  approvalTasks,
+  decidingTaskID,
+  onDecide,
+  onEdit,
+  onDelete,
+  editLabel,
+  deleteLabel,
+  controlsHidden,
+}: {
+  message: ChatMessage
+  activeRun?: ChatRun
+  copy: ChatCopy
+  approvalTasks: ConnectorApprovalTask[]
+  decidingTaskID: string
+  onDecide: (taskID: string, approved: boolean) => void
+  onEdit: () => void
+  onDelete: () => void
+  editLabel: string
+  deleteLabel: string
+  controlsHidden: boolean
+}) {
+  const parts = messageContentParts(message, activeRun, copy)
+  const toolCallsByRound = groupToolCallsByRound(message.tool_calls || [])
+  const rounds = orderedMessageRounds(parts, toolCallsByRound)
+  if (rounds.length === 0) {
+    return null
+  }
+  return (
+    <div className="space-y-1.5">
+      {rounds.map((round) => {
+        const roundParts = parts.filter((part) => normalizedRound(part.round) === round)
+        const roundToolCalls = toolCallsByRound.get(round) || []
+        const roundApprovalTasks = roundToolCalls.some((toolCall) => toolCall.status === "approval_required") ? approvalTasks : []
+        return (
+          <div key={round} className="space-y-1.5">
+            {roundParts.map((part, index) => (
+              <div key={`${round}-part-${index}`} className="flex justify-start">
+                <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                  <div className="flex items-start gap-2">
+                    <Bot className="mt-0.5 h-4 w-4 shrink-0" />
+                    <div className="min-w-0 flex-1">
+                      <MarkdownContent content={part.content} />
+                    </div>
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                      controlsHidden && "pointer-events-none opacity-0"
+                    )}
+                  >
+                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title={editLabel}>
+                      <Pencil size={14} />
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={onDelete} title={deleteLabel}>
+                      <Trash2 size={14} />
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ))}
+            {roundToolCalls.length > 0 && (
+              <div className="flex justify-start">
+                <div className="w-full max-w-3xl pl-1">
+                  <ToolCallRounds
+                    toolCalls={roundToolCalls}
+                    copy={copy}
+                    approvalTasks={roundApprovalTasks}
+                    decidingTaskID={decidingTaskID}
+                    onDecide={onDecide}
+                    collapseCompleted
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
 function MessageContent({
   message,
   activeRun,
@@ -3139,6 +3261,7 @@ function MessageContent({
   approvalTasks,
   decidingTaskID,
   onDecide,
+  hideToolCalls = false,
 }: {
   message: ChatMessage
   activeRun?: ChatRun
@@ -3147,12 +3270,25 @@ function MessageContent({
   approvalTasks: ConnectorApprovalTask[]
   decidingTaskID: string
   onDecide: (taskID: string, approved: boolean) => void
+  hideToolCalls?: boolean
 }) {
   if (message.role !== "assistant") {
     return <UserMessageContent content={messageDisplayContent(message, activeRun, copy)} />
   }
 
   const parts = messageContentParts(message, activeRun, copy)
+  if (hideToolCalls) {
+    if (parts.length === 0) {
+      return <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
+    }
+    return (
+      <div className="space-y-2">
+        {parts.map((part, index) => (
+          <MarkdownContent key={`${normalizedRound(part.round)}-text-${index}`} content={part.content} />
+        ))}
+      </div>
+    )
+  }
   const toolCallsByRound = groupToolCallsByRound(message.tool_calls || [])
   const rounds = orderedMessageRounds(parts, toolCallsByRound)
   if (rounds.length === 0) {
@@ -3256,55 +3392,34 @@ function ToolCallDetails({
     setOpen(collapseCompleted ? shouldAutoOpen : true)
   }, [collapseCompleted, shouldAutoOpen, toolCall.id])
 
-  if (builtinKind === "read" || builtinKind === "list") {
-    return (
-      <div className="rounded-md border bg-background p-2">
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex min-w-0 flex-wrap items-center gap-2 text-xs">
-            <Server size={13} className="shrink-0" />
-            <span className="min-w-0 truncate font-medium">{title}</span>
-            <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
-              {toolStatusLabel(toolCall.status, copy)}
-            </span>
-          </div>
-          <ConnectorApprovalControls
-            task={approvalTask}
-            copy={copy}
-            decidingTaskID={decidingTaskID}
-            onDecide={onDecide}
-          />
-        </div>
-      </div>
-    )
-  }
-
   return (
     <details
-      className="rounded-md border bg-background p-2"
+      className="group rounded-md px-1 py-1 text-muted-foreground"
       open={open}
       onToggle={(event) => setOpen(event.currentTarget.open)}
     >
-      <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
-        <Server size={13} className="shrink-0" />
-        <span className="min-w-0 truncate font-medium">{title}</span>
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs [&::-webkit-details-marker]:hidden">
+        <span className="min-w-0 flex-1 truncate">{title}</span>
         <span className={cn("rounded px-1.5 py-0.5 text-[11px]", toolStatusClassName(toolCall.status))}>
           {toolStatusLabel(toolCall.status, copy)}
         </span>
-        {!open && <span className="ml-auto text-[11px] text-muted-foreground">{copy.expandToolCall}</span>}
+        <ArrowDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-180")} />
       </summary>
       <ConnectorApprovalControls
         task={approvalTask}
         copy={copy}
         decidingTaskID={decidingTaskID}
         onDecide={onDecide}
-        className="mt-2 border-t pt-2"
+        className="mt-2"
       />
       {builtinKind === "write" ? (
-        <div className="mt-2 overflow-hidden rounded-md border">
+        <div className="mt-2 overflow-hidden rounded-md bg-muted/40">
           <LineDiff oldText={stringArgument(toolCall.arguments, "preview_old_content")} newText={content} />
         </div>
       ) : builtinKind === "replace" ? (
         <ReplacementDiffList entries={replacements} copy={copy} />
+      ) : builtinKind === "read" || builtinKind === "list" ? (
+        <ToolResultBlock result={toolCall.result} copy={copy} />
       ) : builtinKind === "command" || builtinKind === "search" || builtinKind === "fetch" ? (
         <ToolResultBlock result={toolCall.result} copy={copy} />
       ) : (
@@ -3420,6 +3535,9 @@ function AgentWorkDialog({
   selectedAgentID,
   onSelectAgent,
   copy,
+  chatCopy,
+  decidingTaskID,
+  onDecideConnectorTask,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -3427,8 +3545,12 @@ function AgentWorkDialog({
   selectedAgentID: string
   onSelectAgent: (agentID: string) => void
   copy: AgentGroupCopy
+  chatCopy: ChatCopy
+  decidingTaskID: string
+  onDecideConnectorTask: (taskID: string, approved: boolean) => void
 }) {
   const agents = work?.agents || []
+  const connectorTasks = work?.connector_tasks || []
   const activeAgent = agents.find((agent) => agent.agent_id === selectedAgentID) || agents[0]
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -3487,6 +3609,27 @@ function AgentWorkDialog({
                   )}
                 </div>
                 <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-3">
+                  {connectorTasks.length > 0 && (
+                    <div className="space-y-2 rounded-md border bg-muted/20 p-3">
+                      <div className="flex items-center justify-between gap-2 text-xs">
+                        <span className="font-medium">{copy.roleTool}</span>
+                        <span className="text-muted-foreground">{connectorTasks.length}</span>
+                      </div>
+                      <div className="space-y-2">
+                        {connectorTasks.map((task) => (
+                          <AgentWorkConnectorTaskItem
+                            key={task.id}
+                            task={task}
+                            runID={work?.run_id || ""}
+                            copy={copy}
+                            chatCopy={chatCopy}
+                            decidingTaskID={decidingTaskID}
+                            onDecide={onDecideConnectorTask}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {activeAgent.messages.length === 0 ? (
                     <div className="rounded-md border border-dashed px-3 py-10 text-center text-sm text-muted-foreground">{copy.noWorkMessages}</div>
                   ) : (
@@ -3512,6 +3655,78 @@ function AgentWorkDialog({
       </DialogContent>
     </Dialog>
   )
+}
+
+function AgentWorkConnectorTaskItem({
+  task,
+  runID,
+  copy,
+  chatCopy,
+  decidingTaskID,
+  onDecide,
+}: {
+  task: AgentWorkConnectorTask
+  runID: string
+  copy: AgentGroupCopy
+  chatCopy: ChatCopy
+  decidingTaskID: string
+  onDecide: (taskID: string, approved: boolean) => void
+}) {
+  const pending = task.status === "pending_approval"
+  const approvalTask = agentWorkConnectorTaskAsApprovalTask(task, runID)
+  const target =
+    stringArgument(task.payload, "path") ||
+    stringArgument(task.payload, "command") ||
+    stringArgument(task.payload, "url") ||
+    stringArgument(task.payload, "query")
+  const payloadText = JSON.stringify(task.payload, null, 2)
+  return (
+    <div className="rounded-md border bg-background p-2 text-xs">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-medium">{task.action || "connector"}</span>
+            <span className={cn("rounded px-1.5 py-0.5", pending ? "bg-amber-500/10 text-amber-700 dark:text-amber-200" : "bg-muted text-muted-foreground")}>
+              {agentWorkStatusText(task.status, copy)}
+            </span>
+            {task.updated_at && <span className="text-muted-foreground">{formatAgentWorkTime(task.updated_at)}</span>}
+          </div>
+          <div className="mt-1 truncate text-muted-foreground">
+            {[task.device_name, task.workspace_path, target].filter(Boolean).join(" · ") || task.id}
+          </div>
+        </div>
+        {pending && (
+          <ConnectorApprovalControls
+            task={approvalTask}
+            copy={chatCopy}
+            decidingTaskID={decidingTaskID}
+            onDecide={onDecide}
+          />
+        )}
+      </div>
+      {payloadText !== "{}" && (
+        <pre className="mt-2 max-h-28 overflow-auto rounded bg-muted px-2 py-1 font-mono text-[11px] text-muted-foreground">{payloadText}</pre>
+      )}
+      {(task.result || task.error_message) && (
+        <div className={cn("mt-2 whitespace-pre-wrap rounded px-2 py-1", task.error_message ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground")}>
+          {task.error_message || task.result}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function agentWorkConnectorTaskAsApprovalTask(task: AgentWorkConnectorTask, runID: string): ConnectorApprovalTask {
+  return {
+    id: task.id,
+    device_id: task.device_id,
+    device_name: task.device_name,
+    run_id: runID,
+    action: task.action,
+    workspace_path: task.workspace_path,
+    payload: task.payload,
+    created_at: task.created_at,
+  }
 }
 
 function ReplacementDiffList({ entries, copy }: { entries: ReplacementEntry[]; copy: ChatCopy }) {
@@ -4503,12 +4718,14 @@ function normalizeAgentWorkResponse(value: unknown): AgentWorkResponse | undefin
     return undefined
   }
   const rawAgents = Array.isArray(value.agents) ? value.agents : []
+  const rawConnectorTasks = Array.isArray(value.connector_tasks) ? value.connector_tasks : []
   return {
     run_id: runID,
     session_id: stringFromUnknown(value.session_id) || "",
     group_id: stringFromUnknown(value.group_id) || "",
     group_name: stringFromUnknown(value.group_name) || "",
     agents: rawAgents.map(normalizeAgentWorkStatus).filter((agent): agent is AgentWorkStatus => Boolean(agent)),
+    connector_tasks: rawConnectorTasks.map(normalizeAgentWorkConnectorTask).filter((task): task is AgentWorkConnectorTask => Boolean(task)),
   }
 }
 
@@ -4549,6 +4766,32 @@ function normalizeAgentWorkMessage(value: unknown): AgentWorkMessage | null {
     status: stringFromUnknown(value.status) || undefined,
     tool: stringFromUnknown(value.tool) || undefined,
     created_at: stringFromUnknown(value.created_at) || undefined,
+  }
+}
+
+function normalizeAgentWorkConnectorTask(value: unknown): AgentWorkConnectorTask | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const id = stringFromUnknown(value.id)
+  if (!id) {
+    return null
+  }
+  return {
+    id,
+    device_id: stringFromUnknown(value.device_id) || "",
+    device_name: stringFromUnknown(value.device_name) || "",
+    action: stringFromUnknown(value.action) || "",
+    status: stringFromUnknown(value.status) || "queued",
+    workspace_path: stringFromUnknown(value.workspace_path) || "",
+    workspace_unrestricted: value.workspace_unrestricted === true,
+    payload: isRecord(value.payload) ? value.payload : {},
+    result: stringFromUnknown(value.result) || undefined,
+    error_message: stringFromUnknown(value.error_message) || undefined,
+    created_at: stringFromUnknown(value.created_at) || new Date().toISOString(),
+    updated_at: stringFromUnknown(value.updated_at) || undefined,
+    started_at: stringFromUnknown(value.started_at) || undefined,
+    finished_at: stringFromUnknown(value.finished_at) || undefined,
   }
 }
 
@@ -4813,6 +5056,7 @@ function agentWorkStatusText(status: string, copy: AgentGroupCopy) {
     case "cancelled":
       return copy.statusCancelled
     case "approval_required":
+    case "pending_approval":
       return copy.statusApproval
     case "idle":
     case "":
