@@ -28,7 +28,7 @@ interface AgentGroup {
 interface AgentGroupAgent {
   id: string
   name: string
-  type: "chief" | "worker" | "critic" | "reviewer"
+  type: "chief" | "worker" | "critic" | "reviewer" | "checker"
   chat_agent_id?: string
 }
 
@@ -48,7 +48,15 @@ const devicesQueryKey = ["advanced-chat-connector-devices"] as const
 const chatAgentsQueryKey = ["advanced-chat-agents"] as const
 const agentGroupsQueryKey = (deviceID: string) => ["advanced-chat-agent-groups", deviceID] as const
 const emptyAgent = (): AgentGroupAgent => ({ id: "", name: "", type: "worker", chat_agent_id: "" })
-const emptyDraft = (): DraftGroup => ({ id: "", name: "", description: "", agents: [{ id: "chief", name: "Chief", type: "chief", chat_agent_id: "" }] })
+const emptyDraft = (): DraftGroup => ({
+  id: "",
+  name: "",
+  description: "",
+  agents: [
+    { id: "chief", name: "Chief", type: "chief", chat_agent_id: "" },
+    { id: "checker", name: "Checker", type: "checker", chat_agent_id: "" },
+  ],
+})
 
 export default function AgentGroups() {
   const { language } = useI18n()
@@ -307,6 +315,7 @@ export default function AgentGroups() {
                         <option value="worker">worker</option>
                         <option value="critic">critic</option>
                         <option value="reviewer">reviewer</option>
+                        <option value="checker">checker</option>
                       </select>
                     </Field>
                     <Field label={copy.boundAgent}>
@@ -379,7 +388,7 @@ function normalizeAgent(value: unknown): AgentGroupAgent | null {
   return {
     id,
     name: stringValue(value.name) || id,
-    type: type === "chief" || type === "critic" || type === "reviewer" ? type : "worker",
+    type: type === "chief" || type === "critic" || type === "reviewer" || type === "checker" ? type : "worker",
     chat_agent_id: stringValue(value.chat_agent_id),
   }
 }
