@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { KeyRound, LogOut } from "lucide-react"
 import { useNavigate } from "react-router-dom"
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
@@ -45,6 +45,17 @@ interface PasskeyCredential {
   created_at: string
 }
 
+interface UserChannelCatalog {
+  id: number
+  name: string
+  models: string[]
+}
+
+interface AdvancedChatUserSettings {
+  title_model_name: string
+  title_user_channel_id?: number
+}
+
 export default function Settings() {
   const navigate = useNavigate()
   const { language, t } = useI18n()
@@ -58,6 +69,8 @@ export default function Settings() {
   const [passwordStatus, setPasswordStatus] = useState("")
   const [passkeyName, setPasskeyName] = useState("")
   const [passkeyStatus, setPasskeyStatus] = useState("")
+  const [titleModelName, setTitleModelName] = useState("")
+  const [titleUserChannelID, setTitleUserChannelID] = useState(0)
 
   const { data: user, isLoading } = useQuery<CurrentUser>({
     queryKey: ["me"],
@@ -90,6 +103,33 @@ export default function Settings() {
     },
     enabled: publicSettings.passkey_enabled,
   })
+  const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
+    queryKey: ["catalog"],
+    queryFn: async () => {
+      const res = await api.get("/user/catalog")
+      return Array.isArray(res.data) ? res.data.map(normalizeCatalogItem) : []
+    },
+  })
+  const { data: advancedChatSettings } = useQuery<AdvancedChatUserSettings>({
+    queryKey: ["advanced-chat-user-settings"],
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/settings")
+      return normalizeAdvancedChatUserSettings(res.data)
+    },
+  })
+  const titleModelOptions = useMemo(() => modelsForChannel(catalog, titleUserChannelID), [catalog, titleUserChannelID])
+  const titleSelectOptions = useMemo(
+    () => titleModelName && !titleModelOptions.includes(titleModelName) ? [titleModelName, ...titleModelOptions] : titleModelOptions,
+    [titleModelName, titleModelOptions]
+  )
+
+  useEffect(() => {
+    if (!advancedChatSettings) {
+      return
+    }
+    setTitleModelName(advancedChatSettings.title_model_name || "")
+    setTitleUserChannelID(advancedChatSettings.title_user_channel_id || 0)
+  }, [advancedChatSettings])
 
   const logout = () => {
     localStorage.removeItem("token")
@@ -175,6 +215,21 @@ export default function Settings() {
     onError: (error) => setPasskeyStatus(apiErrorMessage(error, copy.passkeyDeleteFailed)),
   })
 
+  const saveTitleSettings = useMutation({
+    mutationFn: async () => {
+      const res = await api.put("/user/advanced-chat/settings", {
+        title_model_name: titleModelName.trim(),
+        title_user_channel_id: titleUserChannelID || 0,
+      })
+      return normalizeAdvancedChatUserSettings(res.data)
+    },
+    onSuccess: (saved) => {
+      setTitleModelName(saved.title_model_name || "")
+      setTitleUserChannelID(saved.title_user_channel_id || 0)
+      queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
+    },
+  })
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
@@ -218,6 +273,50 @@ export default function Settings() {
         </Card>
 
         <PageInlineSlot className="lg:col-span-2" slotKey="primary" />
+        <Card>
+          <CardHeader>
+            <CardTitle>{copy.titleGeneration}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-muted-foreground">{copy.titleGenerationDescription}</div>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.titleChannel}</span>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={titleUserChannelID || ""}
+                onChange={(event) => {
+                  const nextID = Number(event.target.value) || 0
+                  setTitleUserChannelID(nextID)
+                  const nextModels = modelsForChannel(catalog, nextID)
+                  if (titleModelName && !nextModels.includes(titleModelName)) {
+                    setTitleModelName("")
+                  }
+                }}
+              >
+                <option value="">{copy.anyChannel}</option>
+                {catalog.map((channel) => (
+                  <option key={channel.id} value={channel.id}>
+                    {channel.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.titleModel}</span>
+              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={titleModelName} onChange={(event) => setTitleModelName(event.target.value)}>
+                <option value="">{copy.titleDisabled}</option>
+                {titleSelectOptions.map((model) => (
+                  <option key={model} value={model}>
+                    {model}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <Button className="gap-2" disabled={saveTitleSettings.isPending} onClick={() => saveTitleSettings.mutate()}>
+              {saveTitleSettings.isPending ? copy.saving : copy.saveTitleSettings}
+            </Button>
+          </CardContent>
+        </Card>
         {publicSettings.oidc_enabled && (
           <Card>
             <CardHeader>
@@ -406,6 +505,34 @@ function formatDateTime(value: string) {
   return date.toLocaleString()
 }
 
+function normalizeCatalogItem(value: unknown): UserChannelCatalog {
+  const item = isRecord(value) ? value : {}
+  return {
+    id: Number(item.id || 0),
+    name: typeof item.name === "string" ? item.name : "",
+    models: Array.isArray(item.models) ? item.models.filter((model): model is string => typeof model === "string") : [],
+  }
+}
+
+function modelsForChannel(catalog: UserChannelCatalog[], channelID: number) {
+  if (!channelID) {
+    return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
+  }
+  return catalog.find((channel) => channel.id === channelID)?.models || []
+}
+
+function normalizeAdvancedChatUserSettings(value: unknown): AdvancedChatUserSettings {
+  const item = isRecord(value) ? value : {}
+  return {
+    title_model_name: typeof item.title_model_name === "string" ? item.title_model_name : "",
+    title_user_channel_id: Number(item.title_user_channel_id || 0) || undefined,
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
+}
+
 const zhSettingsCopy = {
   referral: "推广返佣",
   referralCode: "推广码",
@@ -465,6 +592,14 @@ const zhSettingsCopy = {
   paymentOrderFailed: "创建支付订单失败",
   alipay: "支付宝",
   wxpay: "微信支付",
+  titleGeneration: "会话标题生成",
+  titleGenerationDescription: "发送第一条消息后，系统会并行调用这里配置的模型生成会话标题。留空则继续使用本地摘要标题。",
+  titleChannel: "标题生成渠道",
+  titleModel: "标题生成模型",
+  anyChannel: "任意可用渠道",
+  titleDisabled: "不使用模型生成标题",
+  saveTitleSettings: "保存标题设置",
+  saving: "保存中...",
 }
 
 const enSettingsCopy: typeof zhSettingsCopy = {
@@ -526,4 +661,12 @@ const enSettingsCopy: typeof zhSettingsCopy = {
   paymentOrderFailed: "Failed to create payment order",
   alipay: "Alipay",
   wxpay: "WeChat Pay",
+  titleGeneration: "Conversation title generation",
+  titleGenerationDescription: "After the first message is sent, the system calls this model in parallel to generate the session title. Leave it empty to keep the local fallback title.",
+  titleChannel: "Title channel",
+  titleModel: "Title model",
+  anyChannel: "Any available channel",
+  titleDisabled: "Do not generate titles with a model",
+  saveTitleSettings: "Save title settings",
+  saving: "Saving...",
 }

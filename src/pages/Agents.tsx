@@ -22,6 +22,8 @@ interface ChatAgent {
   name: string
   prompt: string
   default_model: string
+  user_channel_id?: number
+  stream: boolean
   skill_ids: string[]
   mcp_server_ids: string[]
   created_at: string
@@ -50,11 +52,14 @@ const defaultAgentID = "default"
 export default function Agents() {
   const queryClient = useQueryClient()
   const { error, success } = useToast()
-  const { t } = useI18n()
+  const { language, t } = useI18n()
+  const copy = language === "zh" ? zhAgentsCopy : enAgentsCopy
   const [activeAgentID, setActiveAgentID] = useState("")
   const [name, setName] = useState("")
   const [prompt, setPrompt] = useState("")
   const [defaultModel, setDefaultModel] = useState("")
+  const [userChannelID, setUserChannelID] = useState(0)
+  const [stream, setStream] = useState(false)
   const [skillIDs, setSkillIDs] = useState<string[]>([])
   const [mcpServerIDs, setMCPServerIDs] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
@@ -63,6 +68,8 @@ export default function Agents() {
   const [createName, setCreateName] = useState("")
   const [createPrompt, setCreatePrompt] = useState("")
   const [createDefaultModel, setCreateDefaultModel] = useState("")
+  const [createUserChannelID, setCreateUserChannelID] = useState(0)
+  const [createStream, setCreateStream] = useState(false)
   const [createSkillIDs, setCreateSkillIDs] = useState<string[]>([])
   const [createMCPServerIDs, setCreateMCPServerIDs] = useState<string[]>([])
   const [isCreating, setIsCreating] = useState(false)
@@ -104,7 +111,17 @@ export default function Agents() {
     },
   })
 
-  const modelOptions = useMemo(() => uniqueModels(catalog), [catalog])
+  const editModelOptions = useMemo(() => modelsForChannel(catalog, userChannelID), [catalog, userChannelID])
+  const createModelOptions = useMemo(() => modelsForChannel(catalog, createUserChannelID), [catalog, createUserChannelID])
+  const editModelSelectOptions = useMemo(
+    () => defaultModel && !editModelOptions.includes(defaultModel) ? [defaultModel, ...editModelOptions] : editModelOptions,
+    [defaultModel, editModelOptions]
+  )
+  const createModelSelectOptions = useMemo(
+    () => createDefaultModel && !createModelOptions.includes(createDefaultModel) ? [createDefaultModel, ...createModelOptions] : createModelOptions,
+    [createDefaultModel, createModelOptions]
+  )
+  const channelName = useMemo(() => new Map(catalog.map((channel) => [channel.id, channel.name])), [catalog])
   const activeAgent = useMemo(() => agents.find((agent) => agent.id === activeAgentID), [activeAgentID, agents])
   const skillName = useMemo(() => new Map(skills.map((skill) => [skill.id, skill.name])), [skills])
   const normalizedMCPServers = Array.isArray(mcpServers) ? mcpServers : []
@@ -114,6 +131,8 @@ export default function Agents() {
     setCreateName(t("chat.defaultAgentName"))
     setCreatePrompt("")
     setCreateDefaultModel("")
+    setCreateUserChannelID(0)
+    setCreateStream(false)
     setCreateSkillIDs([])
     setCreateMCPServerIDs([])
     setIsCreateOpen(true)
@@ -124,6 +143,8 @@ export default function Agents() {
     setName(agent.name)
     setPrompt(agent.prompt)
     setDefaultModel(agent.default_model)
+    setUserChannelID(agent.user_channel_id || 0)
+    setStream(agent.stream === true)
     setSkillIDs(Array.isArray(agent.skill_ids) ? agent.skill_ids : [])
     setMCPServerIDs(Array.isArray(agent.mcp_server_ids) ? agent.mcp_server_ids : [])
   }
@@ -138,6 +159,8 @@ export default function Agents() {
     setName("")
     setPrompt("")
     setDefaultModel("")
+    setUserChannelID(0)
+    setStream(false)
     setSkillIDs([])
     setMCPServerIDs([])
     setIsEditOpen(false)
@@ -157,6 +180,8 @@ export default function Agents() {
         name: trimmedName,
         prompt: createPrompt.trim(),
         default_model: trimmedModel,
+        user_channel_id: createUserChannelID || 0,
+        stream: createStream,
         skill_ids: uniqueStrings(createSkillIDs),
         mcp_server_ids: uniqueStrings(createMCPServerIDs),
       })
@@ -193,6 +218,8 @@ export default function Agents() {
         name: trimmedName,
         prompt: prompt.trim(),
         default_model: trimmedModel,
+        user_channel_id: userChannelID || 0,
+        stream,
         skill_ids: uniqueStrings(skillIDs),
         mcp_server_ids: uniqueStrings(mcpServerIDs),
       })
@@ -267,7 +294,10 @@ export default function Agents() {
                     <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate text-sm font-medium">{agent.name}</span>
                   </div>
-                  <div className="mt-1 truncate text-xs text-muted-foreground">{agent.default_model || t("chat.noDefaultModel")}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">
+                    {[agent.default_model || t("chat.noDefaultModel"), agent.user_channel_id ? channelName.get(agent.user_channel_id) || `#${agent.user_channel_id}` : copy.noChannel].join(" · ")}
+                  </div>
+                  {agent.stream && <div className="mt-1 text-xs text-primary">{copy.streaming}</div>}
                   {((Array.isArray(agent.skill_ids) && agent.skill_ids.length > 0) || (Array.isArray(agent.mcp_server_ids) && agent.mcp_server_ids.length > 0)) && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {(Array.isArray(agent.skill_ids) ? agent.skill_ids : []).map((id) => (
@@ -317,7 +347,7 @@ export default function Agents() {
             <DialogTitle>{t("chat.editAgent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("common.name")}</span>
                 <input
@@ -328,6 +358,28 @@ export default function Agents() {
                 />
               </label>
               <label className="space-y-1 text-sm">
+                <span className="font-medium">{copy.channel}</span>
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={userChannelID || ""}
+                  onChange={(event) => {
+                    const nextID = Number(event.target.value) || 0
+                    setUserChannelID(nextID)
+                    const nextModels = modelsForChannel(catalog, nextID)
+                    if (defaultModel && !nextModels.includes(defaultModel)) {
+                      setDefaultModel("")
+                    }
+                  }}
+                >
+                  <option value="">{copy.noChannel}</option>
+                  {catalog.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("chat.agentDefaultModel")}</span>
                 <select
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -335,7 +387,7 @@ export default function Agents() {
                   onChange={(event) => setDefaultModel(event.target.value)}
                 >
                   <option value="">{t("chat.noDefaultModel")}</option>
-                  {modelOptions.map((model) => (
+                  {editModelSelectOptions.map((model) => (
                     <option key={model} value={model}>
                       {model}
                     </option>
@@ -343,6 +395,10 @@ export default function Agents() {
                 </select>
               </label>
             </div>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4" checked={stream} onChange={(event) => setStream(event.target.checked)} />
+              <span className="font-medium">{copy.streamAgent}</span>
+            </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{t("chat.agentPrompt")}</span>
               <textarea
@@ -389,7 +445,7 @@ export default function Agents() {
             <DialogTitle>{t("chat.newAgent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid gap-4 md:grid-cols-3">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("common.name")}</span>
                 <input
@@ -399,6 +455,28 @@ export default function Agents() {
                 />
               </label>
               <label className="space-y-1 text-sm">
+                <span className="font-medium">{copy.channel}</span>
+                <select
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  value={createUserChannelID || ""}
+                  onChange={(event) => {
+                    const nextID = Number(event.target.value) || 0
+                    setCreateUserChannelID(nextID)
+                    const nextModels = modelsForChannel(catalog, nextID)
+                    if (createDefaultModel && !nextModels.includes(createDefaultModel)) {
+                      setCreateDefaultModel("")
+                    }
+                  }}
+                >
+                  <option value="">{copy.noChannel}</option>
+                  {catalog.map((channel) => (
+                    <option key={channel.id} value={channel.id}>
+                      {channel.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("chat.agentDefaultModel")}</span>
                 <select
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm"
@@ -406,7 +484,7 @@ export default function Agents() {
                   onChange={(event) => setCreateDefaultModel(event.target.value)}
                 >
                   <option value="">{t("chat.noDefaultModel")}</option>
-                  {modelOptions.map((model) => (
+                  {createModelSelectOptions.map((model) => (
                     <option key={model} value={model}>
                       {model}
                     </option>
@@ -414,6 +492,10 @@ export default function Agents() {
                 </select>
               </label>
             </div>
+            <label className="inline-flex items-center gap-2 text-sm">
+              <input type="checkbox" className="h-4 w-4" checked={createStream} onChange={(event) => setCreateStream(event.target.checked)} />
+              <span className="font-medium">{copy.streamAgent}</span>
+            </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{t("chat.agentPrompt")}</span>
               <textarea
@@ -515,6 +597,13 @@ function uniqueModels(catalog: UserChannelCatalog[]) {
   return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
 }
 
+function modelsForChannel(catalog: UserChannelCatalog[], channelID: number) {
+  if (!channelID) {
+    return uniqueModels(catalog)
+  }
+  return catalog.find((channel) => channel.id === channelID)?.models || []
+}
+
 function normalizeCatalogItem(value: unknown): UserChannelCatalog {
   const item = isRecord(value) ? value : {}
   return {
@@ -537,11 +626,27 @@ function normalizeAgent(value: unknown): ChatAgent | null {
     name: typeof value.name === "string" ? value.name : "",
     prompt: typeof value.prompt === "string" ? value.prompt : "",
     default_model: typeof value.default_model === "string" ? value.default_model : "",
+    user_channel_id: Number(value.user_channel_id || 0) || undefined,
+    stream: value.stream === true,
     skill_ids: stringArray(value.skill_ids),
     mcp_server_ids: stringArray(value.mcp_server_ids),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
+}
+
+const zhAgentsCopy = {
+  channel: "渠道",
+  noChannel: "未指定渠道",
+  streamAgent: "流式输出",
+  streaming: "流式",
+}
+
+const enAgentsCopy: typeof zhAgentsCopy = {
+  channel: "Channel",
+  noChannel: "No channel",
+  streamAgent: "Stream responses",
+  streaming: "Streaming",
 }
 
 function normalizeSkill(value: unknown): ChatSkill | null {

@@ -145,6 +145,8 @@ interface ChatAgent {
   name: string
   prompt: string
   default_model: string
+  user_channel_id?: number
+  stream: boolean
   created_at: string
   updated_at: string
 }
@@ -584,9 +586,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     },
   })
   const activeModelName = isAdvanced ? currentSession?.model_name || selectedAgent?.default_model || modelName : modelName
+  const channelModelOptions = useMemo(() => {
+    const channelID = currentSession?.user_channel_id || selectedAgent?.user_channel_id || 0
+    const channel = channelID ? catalog.find((item) => item.id === channelID) : undefined
+    return channel ? channel.models : modelOptions
+  }, [catalog, currentSession?.user_channel_id, modelOptions, selectedAgent?.user_channel_id])
   const modelSelectOptions = useMemo(
-    () => activeModelName && !modelOptions.includes(activeModelName) ? [activeModelName, ...modelOptions] : modelOptions,
-    [activeModelName, modelOptions]
+    () => activeModelName && !channelModelOptions.includes(activeModelName) ? [activeModelName, ...channelModelOptions] : channelModelOptions,
+    [activeModelName, channelModelOptions]
   )
   const selectableUserChannels = useMemo(
     () => catalog.filter((channel) => !activeModelName || channel.models.includes(activeModelName)),
@@ -1065,12 +1072,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (nextModel) {
       setModelName(nextModel)
     }
+    setSelectedUserChannelID(agent?.user_channel_id || 0)
     if (!currentSession) {
       return
     }
     updateSession(currentSession.id, (session) => ({
       ...session,
       agent_id: nextAgentID,
+      user_channel_id: agent?.user_channel_id || undefined,
       model_name: nextModel,
     }), { persist: true })
   }
@@ -1079,10 +1088,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!currentSession) {
       return
     }
+    const defaultAgent = agents.find((agent) => agent.id === defaultAgentID)
     setSelectedAgentID(defaultAgentID)
     updateSession(currentSession.id, (session) => ({
       ...session,
       agent_id: defaultAgentID,
+      user_channel_id: defaultAgent?.user_channel_id || undefined,
     }), { persist: true })
   }
 
@@ -1591,6 +1602,50 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
         const assistantMessage = createMessage("assistant", "", [])
         const assistantMessageID = assistantMessage.id
+        if (selectedAgent?.stream !== true) {
+          updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
+          try {
+            const res = await api.post("/user/advanced-chat/completions", {
+              session_id: session.id,
+              title: nextTitle,
+              model: resolvedModel,
+              user_channel_id: selectedUserChannel?.id || 0,
+              mode: activeRunMode,
+              messages: advancedMessagePayload(nextMessages),
+              agent_id: session.agent_id || defaultAgentID,
+              agent_group_id: session.agent_group_id || "",
+              skill_ids: session.skill_ids,
+              mcp_server_ids: session.mcp_server_ids,
+              connector_device_id: "",
+              connector_workspace_path: "",
+              connector_auto_approve: false,
+              connector_command_prefixes: [],
+              max_tokens: session.max_tokens || 0,
+              temperature: session.temperature ?? null,
+              reasoning_effort: session.reasoning_effort || "",
+              stream: false,
+            })
+            const content = typeof res.data?.message?.content === "string" ? res.data.message.content : ""
+            const finalParts = normalizeContentParts(res.data?.message?.content_parts, content)
+            const finalToolCalls = normalizeToolCalls(res.data?.tool_call_details)
+            updateSession(session.id, (current) => ({
+              ...current,
+              messages: current.messages.map((message) =>
+                message.id === assistantMessageID
+                  ? { ...message, content: content || copy.emptyResponse, content_parts: finalParts, tool_calls: finalToolCalls }
+                  : message
+              ),
+            }))
+          } catch (err) {
+            updateSession(session.id, (current) => ({
+              ...current,
+              messages: current.messages.filter((message) => message.id !== assistantMessageID),
+            }))
+            throw err
+          }
+          void refetchAdvancedSessions()
+          return
+        }
         const controller = new AbortController()
         abortControllerRef.current = controller
         setIsStreamActive(true)
@@ -5021,6 +5076,8 @@ function normalizeAgent(value: unknown): ChatAgent | null {
     name: typeof value.name === "string" ? value.name : "",
     prompt: typeof value.prompt === "string" ? value.prompt : "",
     default_model: typeof value.default_model === "string" ? value.default_model : "",
+    user_channel_id: Number(value.user_channel_id || 0) || undefined,
+    stream: value.stream === true,
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
