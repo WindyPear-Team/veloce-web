@@ -4891,7 +4891,12 @@ function mergeToolCalls(current: ChatToolCall[], incoming: ChatToolCall[]) {
       (item) => item.id === next.id
     )
     if (index >= 0) {
-      merged[index] = { ...merged[index], ...next }
+      const currentItem = merged[index]
+      merged[index] = {
+        ...currentItem,
+        ...next,
+        result: typeof next.result === "string" && next.result.trim() ? next.result : currentItem.result,
+      }
     } else {
       merged.push(next)
     }
