@@ -419,6 +419,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectingFileID, setSelectingFileID] = useState("")
   const [attachmentMenuTarget, setAttachmentMenuTarget] = useState<AttachmentTarget | "">("")
   const [composerControlMenu, setComposerControlMenu] = useState<ComposerControlMenu>("")
+  const [sessionMenu, setSessionMenu] = useState<{ sessionID: string; x: number; y: number } | null>(null)
+  const [regeneratingTitleSessionID, setRegeneratingTitleSessionID] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
@@ -702,6 +704,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       setConfigTab("basic")
     }
   }, [activeRunMode, configTab])
+
+  useEffect(() => {
+    if (!sessionMenu) {
+      return
+    }
+    const close = () => setSessionMenu(null)
+    window.addEventListener("click", close)
+    window.addEventListener("scroll", close, true)
+    return () => {
+      window.removeEventListener("click", close)
+      window.removeEventListener("scroll", close, true)
+    }
+  }, [sessionMenu])
+
   const recentWorkspacePaths = useMemo(() => {
     const deviceID = currentConnectorDeviceID
     if (!deviceID) {
@@ -979,6 +995,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [selectableConnectorDevices, connectorDevices, pendingConnectorDeviceID])
 
   const createNewSession = () => {
+    setSessionMenu(null)
     const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
     const session = createSession({
       agentID: defaultAgent?.id,
@@ -996,6 +1013,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const deleteSession = (sessionID: string) => {
+    setSessionMenu(null)
     if (isAdvanced) {
       void api.delete(`/user/advanced-chat/sessions/${encodeURIComponent(sessionID)}`).then(() => refetchAdvancedSessions()).catch(() => undefined)
     }
@@ -1010,6 +1028,41 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       setActiveSessionID(nextSessions[0]?.id || "")
     }
     cancelEdit()
+  }
+
+  const renameSessionTitle = (session: ChatSession) => {
+    setSessionMenu(null)
+    const nextTitle = window.prompt(copy.customTitlePrompt, session.title || copy.untitledSession)
+    if (nextTitle === null) {
+      return
+    }
+    const title = nextTitle.trim()
+    if (!title) {
+      return
+    }
+    updateSession(session.id, (current) => ({ ...current, title }), { persist: true })
+  }
+
+  const regenerateSessionTitle = async (session: ChatSession) => {
+    setSessionMenu(null)
+    if (!isAdvanced) {
+      return
+    }
+    setRegeneratingTitleSessionID(session.id)
+    try {
+      const res = await api.post(`/user/advanced-chat/sessions/${encodeURIComponent(session.id)}/title/regenerate`)
+      const saved = normalizeSession(res.data?.session)
+      if (saved) {
+        setSessions((current) => upsertSession(current, saved))
+      } else if (typeof res.data?.title === "string" && res.data.title.trim()) {
+        updateSession(session.id, (current) => ({ ...current, title: res.data.title.trim() }))
+      }
+      void refetchAdvancedSessions()
+    } catch (err) {
+      error(apiErrorMessage(err, copy.regenerateTitleFailed))
+    } finally {
+      setRegeneratingTitleSessionID("")
+    }
   }
 
   const persistAdvancedSession = (session: ChatSession) => {
@@ -1056,6 +1109,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const selectSession = (sessionID: string) => {
+    setSessionMenu(null)
     setActiveSessionID(sessionID)
     if (isAdvanced) {
       navigate(`/chat/session/${encodeURIComponent(sessionID)}`)
@@ -2310,6 +2364,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               "grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border p-2",
               session.id === activeSession?.id && "border-primary bg-primary/5"
             )}
+            onContextMenu={(event) => {
+              event.preventDefault()
+              setSessionMenu({ sessionID: session.id, x: event.clientX, y: event.clientY })
+            }}
           >
             <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
               <div className="truncate text-sm font-medium">{session.title || copy.untitledSession}</div>
@@ -2340,6 +2398,31 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             </Button>
           </div>
         ))}
+        {sessionMenu && (() => {
+          const session = sessions.find((item) => item.id === sessionMenu.sessionID)
+          if (!session) {
+            return null
+          }
+          return (
+            <div
+              className="fixed z-[80] w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
+              style={{ left: Math.min(sessionMenu.x, window.innerWidth - 184), top: Math.min(sessionMenu.y, window.innerHeight - 112) }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => renameSessionTitle(session)}>
+                {copy.customTitle}
+              </button>
+              <button
+                type="button"
+                className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                disabled={!isAdvanced || regeneratingTitleSessionID === session.id}
+                onClick={() => void regenerateSessionTitle(session)}
+              >
+                {regeneratingTitleSessionID === session.id ? copy.regeneratingTitle : copy.regenerateTitle}
+              </button>
+            </div>
+          )
+        })()}
       </div>
     </aside>
   )
@@ -5705,6 +5788,11 @@ const chatCopyKeys = {
   untitledSession: "chat.untitledSession",
   messageCount: "chat.messageCount",
   deleteSession: "chat.deleteSession",
+  customTitle: "chat.customTitle",
+  customTitlePrompt: "chat.customTitlePrompt",
+  regenerateTitle: "chat.regenerateTitle",
+  regeneratingTitle: "chat.regeneratingTitle",
+  regenerateTitleFailed: "chat.regenerateTitleFailed",
   config: "chat.config",
   advancedConfig: "chat.advancedConfig",
   apiKey: "chat.apiKey",

@@ -54,6 +54,7 @@ interface UserChannelCatalog {
 interface AdvancedChatUserSettings {
   title_model_name: string
   title_user_channel_id?: number
+  title_generation_scope: "all" | "recent"
 }
 
 export default function Settings() {
@@ -71,6 +72,7 @@ export default function Settings() {
   const [passkeyStatus, setPasskeyStatus] = useState("")
   const [titleModelName, setTitleModelName] = useState("")
   const [titleUserChannelID, setTitleUserChannelID] = useState(0)
+  const [titleGenerationScope, setTitleGenerationScope] = useState<"all" | "recent">("recent")
 
   const { data: user, isLoading } = useQuery<CurrentUser>({
     queryKey: ["me"],
@@ -129,6 +131,7 @@ export default function Settings() {
     }
     setTitleModelName(advancedChatSettings.title_model_name || "")
     setTitleUserChannelID(advancedChatSettings.title_user_channel_id || 0)
+    setTitleGenerationScope(advancedChatSettings.title_generation_scope || "recent")
   }, [advancedChatSettings])
 
   const logout = () => {
@@ -220,12 +223,14 @@ export default function Settings() {
       const res = await api.put("/user/advanced-chat/settings", {
         title_model_name: titleModelName.trim(),
         title_user_channel_id: titleUserChannelID || 0,
+        title_generation_scope: titleGenerationScope,
       })
       return normalizeAdvancedChatUserSettings(res.data)
     },
     onSuccess: (saved) => {
       setTitleModelName(saved.title_model_name || "")
       setTitleUserChannelID(saved.title_user_channel_id || 0)
+      setTitleGenerationScope(saved.title_generation_scope || "recent")
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
     },
   })
@@ -310,6 +315,13 @@ export default function Settings() {
                     {model}
                   </option>
                 ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.titleScope}</span>
+              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={titleGenerationScope} onChange={(event) => setTitleGenerationScope(normalizeTitleScope(event.target.value))}>
+                <option value="recent">{copy.titleScopeRecent}</option>
+                <option value="all">{copy.titleScopeAll}</option>
               </select>
             </label>
             <Button className="gap-2" disabled={saveTitleSettings.isPending} onClick={() => saveTitleSettings.mutate()}>
@@ -526,7 +538,12 @@ function normalizeAdvancedChatUserSettings(value: unknown): AdvancedChatUserSett
   return {
     title_model_name: typeof item.title_model_name === "string" ? item.title_model_name : "",
     title_user_channel_id: Number(item.title_user_channel_id || 0) || undefined,
+    title_generation_scope: normalizeTitleScope(item.title_generation_scope),
   }
+}
+
+function normalizeTitleScope(value: unknown): "all" | "recent" {
+  return value === "all" ? "all" : "recent"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -598,6 +615,9 @@ const zhSettingsCopy = {
   titleModel: "标题生成模型",
   anyChannel: "任意可用渠道",
   titleDisabled: "不使用模型生成标题",
+  titleScope: "重新生成范围",
+  titleScopeRecent: "最近对话",
+  titleScopeAll: "全部对话",
   saveTitleSettings: "保存标题设置",
   saving: "保存中...",
 }
@@ -667,6 +687,9 @@ const enSettingsCopy: typeof zhSettingsCopy = {
   titleModel: "Title model",
   anyChannel: "Any available channel",
   titleDisabled: "Do not generate titles with a model",
+  titleScope: "Regeneration scope",
+  titleScopeRecent: "Recent conversation",
+  titleScopeAll: "Full conversation",
   saveTitleSettings: "Save title settings",
   saving: "Saving...",
 }
