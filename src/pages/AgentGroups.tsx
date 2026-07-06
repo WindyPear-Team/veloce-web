@@ -30,6 +30,7 @@ interface AgentGroupAgent {
   name: string
   type: "chief" | "worker" | "critic" | "reviewer" | "checker"
   chat_agent_id?: string
+  stream?: boolean
 }
 
 interface ChatAgent {
@@ -47,14 +48,14 @@ interface DraftGroup {
 const devicesQueryKey = ["advanced-chat-connector-devices"] as const
 const chatAgentsQueryKey = ["advanced-chat-agents"] as const
 const agentGroupsQueryKey = (deviceID: string) => ["advanced-chat-agent-groups", deviceID] as const
-const emptyAgent = (): AgentGroupAgent => ({ id: "", name: "", type: "worker", chat_agent_id: "" })
+const emptyAgent = (): AgentGroupAgent => ({ id: "", name: "", type: "worker", chat_agent_id: "", stream: false })
 const emptyDraft = (): DraftGroup => ({
   id: "",
   name: "",
   description: "",
   agents: [
-    { id: "chief", name: "Chief", type: "chief", chat_agent_id: "" },
-    { id: "checker", name: "Checker", type: "checker", chat_agent_id: "" },
+    { id: "chief", name: "Chief", type: "chief", chat_agent_id: "", stream: false },
+    { id: "checker", name: "Checker", type: "checker", chat_agent_id: "", stream: false },
   ],
 })
 
@@ -165,6 +166,7 @@ export default function AgentGroups() {
         name: agent.name.trim() || chatAgents.find((item) => item.id === agent.chat_agent_id)?.name || "",
         type: agent.type,
         chat_agent_id: (agent.chat_agent_id || "").trim(),
+        stream: agent.stream === true,
       })),
     }
     if (!payload.name) {
@@ -305,7 +307,7 @@ export default function AgentGroups() {
               </div>
               {draft.agents.map((agent, index) => (
                 <div key={index} className="rounded-md border p-3">
-                  <div className="grid gap-3 md:grid-cols-[1fr_140px_1fr_auto]">
+                  <div className="grid gap-3 md:grid-cols-[1fr_140px_1fr_120px_auto]">
                     <Field label={copy.agentName}>
                       <Input value={agent.name} onChange={(event) => updateAgent(index, { name: event.target.value })} />
                     </Field>
@@ -328,6 +330,10 @@ export default function AgentGroups() {
                         ))}
                       </select>
                     </Field>
+                    <label className="flex items-end gap-2 pb-2 text-sm">
+                      <input type="checkbox" className="h-4 w-4" checked={agent.stream === true} onChange={(event) => updateAgent(index, { stream: event.target.checked })} />
+                      <span>{copy.streamAgent}</span>
+                    </label>
                     <div className="flex items-end">
                       <Button variant="ghost" size="icon" disabled={draft.agents.length <= 1} onClick={() => removeAgent(index)} title={copy.removeAgent}>
                         <Trash2 size={16} />
@@ -390,6 +396,7 @@ function normalizeAgent(value: unknown): AgentGroupAgent | null {
     name: stringValue(value.name) || id,
     type: type === "chief" || type === "critic" || type === "reviewer" || type === "checker" ? type : "worker",
     chat_agent_id: stringValue(value.chat_agent_id),
+    stream: value.stream === true,
   }
 }
 
@@ -489,6 +496,7 @@ const zhCopy = {
   boundAgent: "\u4ee3\u7406",
   noAgents: "\u6682\u65e0\u4ee3\u7406",
   selectAgent: "\u9009\u62e9\u4ee3\u7406",
+  streamAgent: "\u6d41\u5f0f",
   removeAgent: "\u79fb\u9664\u6210\u5458",
   cancel: "\u53d6\u6d88",
   save: "\u4fdd\u5b58",
@@ -527,6 +535,7 @@ const enCopy = {
   boundAgent: "Agent",
   noAgents: "No agents",
   selectAgent: "Select agent",
+  streamAgent: "Stream",
   removeAgent: "Remove agent",
   cancel: "Cancel",
   save: "Save",

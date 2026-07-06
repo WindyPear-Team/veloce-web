@@ -28,6 +28,7 @@ interface AgentGroupAgent {
   name: string
   type: "chief" | "worker" | "critic" | "reviewer" | "checker"
   chat_agent_id?: string
+  stream?: boolean
 }
 
 interface DraftGroup {
@@ -47,14 +48,14 @@ interface AgentGroupsData {
 
 const chatAgentsQueryKey = ["advanced-chat-agents"] as const
 const agentGroupsQueryKey = ["advanced-chat-agent-groups"] as const
-const emptyAgent = (): AgentGroupAgent => ({ id: "", name: "", type: "worker", chat_agent_id: "" })
+const emptyAgent = (): AgentGroupAgent => ({ id: "", name: "", type: "worker", chat_agent_id: "", stream: false })
 const emptyDraft = (): DraftGroup => ({
   id: "",
   name: "",
   description: "",
   agents: [
-    { id: "chief", name: "Chief", type: "chief", chat_agent_id: "" },
-    { id: "checker", name: "Checker", type: "checker", chat_agent_id: "" },
+    { id: "chief", name: "Chief", type: "chief", chat_agent_id: "", stream: false },
+    { id: "checker", name: "Checker", type: "checker", chat_agent_id: "", stream: false },
   ],
 })
 
@@ -373,6 +374,7 @@ function AgentGroupEditor({ data, mode }: { data: AgentGroupsData; mode: "new" |
                     <div className="flex min-w-0 flex-wrap items-center gap-2">
                       <span className="truncate text-sm font-semibold">{agent.name || agent.id || copy.unnamedAgent}</span>
                       <span className="rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{agent.type}</span>
+                      {agent.stream && <span className="rounded border px-2 py-0.5 text-xs text-muted-foreground">{copy.streaming}</span>}
                     </div>
                     <div className="mt-1 truncate text-xs text-muted-foreground">
                       {chatAgentName ? `${copy.chatAgent}: ${chatAgentName}` : copy.noChatAgentSelected}
@@ -470,6 +472,10 @@ function AgentDialog({
               </select>
             </Field>
           </div>
+          <label className="flex items-center gap-2 text-sm">
+            <input type="checkbox" className="h-4 w-4" checked={agent.stream === true} onChange={(event) => updateAgent({ stream: event.target.checked })} />
+            <span>{copy.streamAgent}</span>
+          </label>
         </div>
         <DialogFooter>
           <Button variant="ghost" onClick={() => onOpenChange(false)}>{copy.cancel}</Button>
@@ -514,6 +520,7 @@ function normalizeDraftAgentForSave(agent: AgentGroupAgent, index: number, chatA
     name: agent.name.trim() || chatAgent?.name || id,
     type: agent.type,
     chat_agent_id: chatAgentID,
+    stream: agent.stream === true,
   }
 }
 
@@ -555,6 +562,7 @@ function normalizeAgent(value: unknown): AgentGroupAgent | null {
     name: stringValue(value.name) || id,
     type: type === "chief" || type === "critic" || type === "reviewer" || type === "checker" ? type : "worker",
     chat_agent_id: stringValue(value.chat_agent_id),
+    stream: value.stream === true,
   }
 }
 
@@ -660,6 +668,8 @@ const enCopy = {
   noChatAgentSelected: "No chat agent selected",
   agentName: "Name",
   agentType: "Type",
+  streamAgent: "Stream agent calls",
+  streaming: "Streaming",
   removeAgent: "Remove agent",
   cancel: "Cancel",
   done: "Done",
