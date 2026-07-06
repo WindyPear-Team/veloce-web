@@ -45,6 +45,7 @@ const agentsQueryKey = ["advanced-chat-agents", "full"] as const
 const sharedAgentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
 const agentMCPServersQueryKey = ["advanced-chat-agent-mcp-servers"] as const
+const defaultAgentID = "default"
 
 export default function Agents() {
   const queryClient = useQueryClient()
@@ -211,6 +212,10 @@ export default function Agents() {
   }
 
   const deleteAgent = async (agent: ChatAgent) => {
+    if (agent.id === defaultAgentID) {
+      error(t("chat.agentDeleteFailed"))
+      return
+    }
     setDeletingAgentID(agent.id)
     try {
       await api.delete(`/user/advanced-chat/agents/${encodeURIComponent(agent.id)}`)
@@ -286,15 +291,17 @@ export default function Agents() {
                       <MessageSquare size={15} />
                     </Link>
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={deletingAgentID === agent.id}
-                    onClick={() => deleteAgent(agent)}
-                    title={t("chat.deleteAgent")}
-                  >
-                    <Trash2 size={15} />
-                  </Button>
+                  {agent.id !== defaultAgentID && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={deletingAgentID === agent.id}
+                      onClick={() => deleteAgent(agent)}
+                      title={t("chat.deleteAgent")}
+                    >
+                      <Trash2 size={15} />
+                    </Button>
+                  )}
                 </div>
               </div>
             ))
@@ -316,6 +323,7 @@ export default function Agents() {
                 <input
                   className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
                   value={name}
+                  disabled={activeAgentID === defaultAgentID}
                   onChange={(event) => setName(event.target.value)}
                 />
               </label>

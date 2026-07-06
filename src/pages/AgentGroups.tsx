@@ -133,6 +133,10 @@ export default function AgentGroups() {
   }
 
   const updateAgent = (index: number, patch: Partial<AgentGroupAgent>) => {
+    if (patch.type && studioUniqueRoleConflict(draft.agents, patch.type, index)) {
+      error(uniqueStudioRoleMessage(patch.type, copy))
+      return
+    }
     setDraft((current) => ({
       ...current,
       agents: current.agents.map((agent, itemIndex) => (itemIndex === index ? { ...agent, ...patch } : agent)),
@@ -175,6 +179,11 @@ export default function AgentGroups() {
     }
     if (payload.agents.length === 0 || payload.agents.some((agent) => !agent.chat_agent_id)) {
       error(copy.agentRequired)
+      return
+    }
+    const roleError = studioRoleValidationError(payload.agents, copy)
+    if (roleError) {
+      error(roleError)
       return
     }
     setIsSaving(true)
@@ -400,6 +409,23 @@ function normalizeAgent(value: unknown): AgentGroupAgent | null {
   }
 }
 
+function studioUniqueRoleConflict(agents: AgentGroupAgent[], type: AgentGroupAgent["type"], editingIndex: number) {
+  if (type !== "chief" && type !== "checker") return false
+  return agents.some((agent, index) => index !== editingIndex && agent.type === type)
+}
+
+function studioRoleValidationError(agents: AgentGroupAgent[], copy: typeof enCopy) {
+  const chiefCount = agents.filter((agent) => agent.type === "chief").length
+  if (chiefCount !== 1) return copy.exactlyOneChief
+  const checkerCount = agents.filter((agent) => agent.type === "checker").length
+  if (checkerCount !== 1) return copy.exactlyOneChecker
+  return ""
+}
+
+function uniqueStudioRoleMessage(type: AgentGroupAgent["type"], copy: typeof enCopy) {
+  return type === "chief" ? copy.onlyOneChief : type === "checker" ? copy.onlyOneChecker : ""
+}
+
 function agentMemberID(agent?: ChatAgent) {
   const source = agent?.name || agent?.id || "agent"
   const normalized = source.trim().toLowerCase().replace(/[^a-z0-9_-]+/g, "-").replace(/^-+|-+$/g, "")
@@ -484,6 +510,10 @@ const zhCopy = {
   saveFailed: "\u4fdd\u5b58\u5de5\u4f5c\u5ba4\u5931\u8d25",
   nameRequired: "\u8bf7\u8f93\u5165\u5de5\u4f5c\u5ba4\u540d\u79f0",
   agentRequired: "\u6bcf\u4e2a\u5de5\u4f5c\u5ba4\u6210\u5458\u90fd\u5fc5\u987b\u9009\u62e9\u4e00\u4e2a\u4ee3\u7406",
+  exactlyOneChief: "\u6bcf\u4e2a\u5de5\u4f5c\u5ba4\u5fc5\u987b\u4e14\u53ea\u80fd\u6709\u4e00\u4e2a Chief",
+  exactlyOneChecker: "\u6bcf\u4e2a\u5de5\u4f5c\u5ba4\u5fc5\u987b\u4e14\u53ea\u80fd\u6709\u4e00\u4e2a Checker",
+  onlyOneChief: "\u6bcf\u4e2a\u5de5\u4f5c\u5ba4\u53ea\u80fd\u6dfb\u52a0\u4e00\u4e2a Chief",
+  onlyOneChecker: "\u6bcf\u4e2a\u5de5\u4f5c\u5ba4\u53ea\u80fd\u6dfb\u52a0\u4e00\u4e2a Checker",
   groupID: "\u5de5\u4f5c\u5ba4 ID",
   groupIDPlaceholder: "\u7559\u7a7a\u81ea\u52a8\u751f\u6210",
   groupName: "\u5de5\u4f5c\u5ba4\u540d\u79f0",
@@ -523,6 +553,10 @@ const enCopy = {
   saveFailed: "Failed to save studio",
   nameRequired: "Studio name is required",
   agentRequired: "Each studio member must select an agent",
+  exactlyOneChief: "Each studio must contain exactly one Chief",
+  exactlyOneChecker: "Each studio must contain exactly one Checker",
+  onlyOneChief: "Each studio can only have one Chief",
+  onlyOneChecker: "Each studio can only have one Checker",
   groupID: "Group ID",
   groupIDPlaceholder: "Leave empty to generate",
   groupName: "Studio name",

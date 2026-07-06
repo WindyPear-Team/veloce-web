@@ -247,6 +247,11 @@ function AgentGroupEditor({ data, mode }: { data: AgentGroupsData; mode: "new" |
       error(copy.agentRequired)
       return
     }
+    const roleError = studioRoleValidationError(payload.agents, copy)
+    if (roleError) {
+      error(roleError)
+      return
+    }
     setIsSaving(true)
     try {
       const path = mode === "edit" ? `/user/advanced-chat/agent-groups/${encodeURIComponent(groupID)}` : "/user/advanced-chat/agent-groups"
@@ -288,6 +293,10 @@ function AgentGroupEditor({ data, mode }: { data: AgentGroupsData; mode: "new" |
     }
     if (!normalizedAgent.chat_agent_id) {
       error(copy.agentRequired)
+      return
+    }
+    if (studioUniqueRoleConflict(draft.agents, normalizedAgent.type, editingAgentIndex)) {
+      error(uniqueStudioRoleMessage(normalizedAgent.type, copy))
       return
     }
     setDraft((current) => {
@@ -402,7 +411,13 @@ function AgentGroupEditor({ data, mode }: { data: AgentGroupsData; mode: "new" |
         chatAgents={chatAgents}
         isEditing={editingAgentIndex !== null}
         onOpenChange={setIsAgentDialogOpen}
-        onAgentChange={setAgentDraft}
+        onAgentChange={(nextAgent) => {
+          if (nextAgent.type !== agentDraft.type && studioUniqueRoleConflict(draft.agents, nextAgent.type, editingAgentIndex)) {
+            error(uniqueStudioRoleMessage(nextAgent.type, copy))
+            return
+          }
+          setAgentDraft(nextAgent)
+        }}
         onSave={saveAgentDraft}
       />
     </div>
@@ -566,6 +581,23 @@ function normalizeAgent(value: unknown): AgentGroupAgent | null {
   }
 }
 
+function studioUniqueRoleConflict(agents: AgentGroupAgent[], type: AgentGroupAgent["type"], editingIndex: number | null) {
+  if (type !== "chief" && type !== "checker") return false
+  return agents.some((agent, index) => index !== editingIndex && agent.type === type)
+}
+
+function studioRoleValidationError(agents: AgentGroupAgent[], copy: typeof enCopy) {
+  const chiefCount = agents.filter((agent) => agent.type === "chief").length
+  if (chiefCount !== 1) return copy.exactlyOneChief
+  const checkerCount = agents.filter((agent) => agent.type === "checker").length
+  if (checkerCount !== 1) return copy.exactlyOneChecker
+  return ""
+}
+
+function uniqueStudioRoleMessage(type: AgentGroupAgent["type"], copy: typeof enCopy) {
+  return type === "chief" ? copy.onlyOneChief : type === "checker" ? copy.onlyOneChecker : ""
+}
+
 function apiErrorMessage(err: unknown, fallback: string) {
   if (isRecord(err) && isRecord(err.response) && isRecord(err.response.data) && typeof err.response.data.error === "string") {
     return err.response.data.error
@@ -610,6 +642,10 @@ const zhCopy = {
   saveFailed: "保存工作室失败",
   nameRequired: "请输入工作室名称",
   agentRequired: "每个工作室成员都必须选择一个代理",
+  exactlyOneChief: "每个工作室必须且只能有一个 Chief",
+  exactlyOneChecker: "每个工作室必须且只能有一个 Checker",
+  onlyOneChief: "每个工作室只能添加一个 Chief",
+  onlyOneChecker: "每个工作室只能添加一个 Checker",
   backToList: "返回工作室",
   groupSettings: "工作室设置",
   groupID: "工作室 ID",
@@ -652,6 +688,10 @@ const enCopy = {
   saveFailed: "Failed to save studio",
   nameRequired: "Studio name is required",
   agentRequired: "Each studio member must select an agent",
+  exactlyOneChief: "Each studio must contain exactly one Chief",
+  exactlyOneChecker: "Each studio must contain exactly one Checker",
+  onlyOneChief: "Each studio can only have one Chief",
+  onlyOneChecker: "Each studio can only have one Checker",
   backToList: "Back to studios",
   groupSettings: "Studio settings",
   groupID: "Studio ID",

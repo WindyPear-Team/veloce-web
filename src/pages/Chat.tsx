@@ -318,6 +318,7 @@ const modelStoreKey = "windypear.chat.model.v1"
 const endpointStoreKey = "windypear.chat.endpoint.v1"
 const apiKeyStoreKey = "windypear.chat.api_key_id.v1"
 const selectedAgentStoreKey = "windypear.advanced_chat.selected_agent.v1"
+const defaultAgentID = "default"
 const agentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
 const advancedSessionsQueryKey = ["advanced-chat-sessions"] as const
@@ -547,7 +548,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced) {
       return undefined
     }
-    return agents.find((agent) => agent.id === currentSession?.agent_id)
+    const agentID = currentSession?.agent_id || defaultAgentID
+    return agents.find((agent) => agent.id === agentID)
   }, [currentSession?.agent_id, agents, isAdvanced])
   const activeRunMode: ChatRunMode = isAdvanced && assistantModeEnabled ? currentSession?.run_mode || "chat" : "chat"
   const activeRun = isAdvanced ? currentSession?.latest_run : undefined
@@ -687,6 +689,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       closeAgentMention()
     }
   }, [activeRunMode, currentAgentGroup?.id])
+
+  useEffect(() => {
+    if ((configTab === "device" && activeRunMode === "chat") || (configTab === "agent" && activeRunMode === "agent_group")) {
+      setConfigTab("basic")
+    }
+  }, [activeRunMode, configTab])
   const recentWorkspacePaths = useMemo(() => {
     const deviceID = currentConnectorDeviceID
     if (!deviceID) {
@@ -866,9 +874,30 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       localStorage.setItem(selectedAgentStoreKey, selectedAgentID)
       return
     }
+    const defaultAgent = agents.find((agent) => agent.id === defaultAgentID) || agents[0]
+    if (defaultAgent) {
+      setSelectedAgentID(defaultAgent.id)
+      localStorage.setItem(selectedAgentStoreKey, defaultAgent.id)
+      return
+    }
     setSelectedAgentID("")
     localStorage.removeItem(selectedAgentStoreKey)
   }, [agents, agentsFetched, isAdvanced, selectedAgentID])
+
+  useEffect(() => {
+    if (!isAdvanced || !agentsFetched || !currentSession || currentSession.agent_id) {
+      return
+    }
+    const defaultAgent = agents.find((agent) => agent.id === defaultAgentID) || agents[0]
+    if (!defaultAgent) {
+      return
+    }
+    updateSession(currentSession.id, (session) => ({
+      ...session,
+      agent_id: defaultAgent.id,
+      model_name: session.model_name || defaultAgent.default_model || modelName || modelOptions[0] || "",
+    }))
+  }, [agents, agentsFetched, currentSession?.agent_id, currentSession?.id, isAdvanced, modelName, modelOptions])
 
   useEffect(() => {
     if (!isAdvanced || !requestedAgentID || !agentsFetched) {
@@ -881,7 +910,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     const session = createSession({
       agentID: agent.id,
-      modelName: agent.default_model || modelName || modelOptions[0] || "",
+      modelName: modelName || agent.default_model || modelOptions[0] || "",
     })
     setDraftSession(session)
     setActiveSessionID("")
@@ -902,8 +931,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [currentSession, isAdvanced, modelName, modelOptions, selectedAgent?.default_model])
 
   useEffect(() => {
-    if (!pendingAgentID && agents[0]) {
-      setPendingAgentID(agents[0].id)
+    const defaultAgent = agents.find((agent) => agent.id === defaultAgentID) || agents[0]
+    if (!pendingAgentID && defaultAgent) {
+      setPendingAgentID(defaultAgent.id)
+      return
+    }
+    if (pendingAgentID && !agents.some((agent) => agent.id === pendingAgentID)) {
+      setPendingAgentID(defaultAgent?.id || "")
     }
   }, [agents, pendingAgentID])
 
@@ -938,8 +972,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [selectableConnectorDevices, connectorDevices, pendingConnectorDeviceID])
 
   const createNewSession = () => {
+    const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
     const session = createSession({
-      modelName: isAdvanced ? modelName || modelOptions[0] || "" : undefined,
+      agentID: defaultAgent?.id,
+      modelName: isAdvanced ? modelName || defaultAgent?.default_model || modelOptions[0] || "" : undefined,
     })
     setDraftSession(session)
     setActiveSessionID("")
@@ -1022,15 +1058,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const setSessionAgent = (agentID: string) => {
-    setSelectedAgentID(agentID)
-    const agent = agents.find((item) => item.id === agentID)
+    const nextAgentID = agentID || defaultAgentID
+    setSelectedAgentID(nextAgentID)
+    const agent = agents.find((item) => item.id === nextAgentID)
+    const nextModel = agent?.default_model || modelName || modelOptions[0] || ""
+    if (nextModel) {
+      setModelName(nextModel)
+    }
     if (!currentSession) {
       return
     }
     updateSession(currentSession.id, (session) => ({
       ...session,
-      agent_id: agentID || undefined,
-      model_name: agent?.default_model || session.model_name || modelName || modelOptions[0] || "",
+      agent_id: nextAgentID,
+      model_name: nextModel,
     }), { persist: true })
   }
 
@@ -1038,14 +1079,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!currentSession) {
       return
     }
-    setSelectedAgentID("")
+    setSelectedAgentID(defaultAgentID)
     updateSession(currentSession.id, (session) => ({
       ...session,
-      agent_id: undefined,
+      agent_id: defaultAgentID,
     }), { persist: true })
   }
 
   const handleSessionModelChange = (value: string) => {
+    if (activeRunMode === "agent_group") {
+      return
+    }
     if (value.trim()) {
       setModelName(value.trim())
     }
@@ -1060,14 +1104,25 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || !currentSession) {
       return
     }
-    if (currentSession.run_mode !== "chat" && mode === "chat") {
+    const hasStarted = currentSession.messages.length > 0 || isRunActive(currentSession.latest_run)
+    if (currentSession.run_mode !== "chat" && mode === "chat" && hasStarted) {
       return
     }
     if ((mode === "assistant" || mode === "agent_group") && !assistantModeEnabled) {
       error(copy.assistantModeDisabled)
       return
     }
-    updateSession(currentSession.id, (session) => ({ ...session, run_mode: mode }), { persist: true })
+    updateSession(currentSession.id, (session) => ({
+      ...session,
+      run_mode: mode,
+      agent_id: mode === "agent_group" ? undefined : session.agent_id || defaultAgentID,
+      agent_group_id: mode === "agent_group" ? session.agent_group_id : undefined,
+      connector_device_id: mode === "chat" ? undefined : session.connector_device_id,
+      connector_workspace_path: mode === "chat" ? undefined : session.connector_workspace_path,
+      connector_auto_approve: mode === "chat" ? false : session.connector_auto_approve,
+      connector_command_prefixes: mode === "chat" ? [] : session.connector_command_prefixes,
+      model_name: mode === "agent_group" ? undefined : session.model_name,
+    }), { persist: true })
     setComposerControlMenu("")
   }
 
@@ -1422,7 +1477,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       error(copy.modelRequired)
       return
     }
-    if (!selectedAgent?.default_model) {
+    if (isAdvanced && activeRunMode !== "agent_group" && !selectedAgent) {
+      error(copy.agentSelectRequired)
+      return
+    }
+    if (!selectedAgent?.default_model && activeRunMode !== "agent_group") {
       setModelName(resolvedModel)
     }
     if (isAdvanced && !selectedUserChannel) {
@@ -1461,7 +1520,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     const userMessage = createMessage("user", messageContent)
     const nextMessages = [...session.messages, userMessage]
     const nextTitle = session.title || titleFromMessage(content || attachments[0]?.name || copy.attachmentMessageTitle, copy)
-    updateSession(session.id, (current) => ({ ...current, title: nextTitle, messages: nextMessages, model_name: resolvedModel }), { materialize: true })
+    updateSession(session.id, (current) => ({
+      ...current,
+      title: nextTitle,
+      messages: nextMessages,
+      agent_id: activeRunMode === "agent_group" ? undefined : current.agent_id || defaultAgentID,
+      model_name: activeRunMode === "agent_group" ? undefined : resolvedModel,
+    }), { materialize: true })
     setPrompt("")
     closeAgentMention()
     setAttachments([])
@@ -1489,11 +1554,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             const res = await api.post("/user/advanced-chat/completions", {
               session_id: session.id,
               title: nextTitle,
-              model: resolvedModel,
+              model: activeRunMode === "agent_group" ? "" : resolvedModel,
               user_channel_id: selectedUserChannel?.id || 0,
               mode: activeRunMode,
               messages: advancedMessagePayload(nextMessages),
-              agent_id: session.agent_id || "",
+              agent_id: activeRunMode === "agent_group" ? "" : session.agent_id || defaultAgentID,
               agent_group_id: session.agent_group_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
@@ -1547,14 +1612,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               user_channel_id: selectedUserChannel?.id || 0,
               mode: activeRunMode,
               messages: advancedMessagePayload(nextMessages),
-              agent_id: session.agent_id || "",
+              agent_id: session.agent_id || defaultAgentID,
               agent_group_id: session.agent_group_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
-              connector_device_id: session.connector_device_id || "",
-              connector_workspace_path: session.connector_workspace_path || "",
-              connector_auto_approve: session.connector_auto_approve,
-              connector_command_prefixes: session.connector_command_prefixes,
+              connector_device_id: "",
+              connector_workspace_path: "",
+              connector_auto_approve: false,
+              connector_command_prefixes: [],
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
               reasoning_effort: session.reasoning_effort || "",
@@ -1927,9 +1992,21 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     )
   }
 
+  const sessionAgentName = (session: ChatSession) => {
+    if (!isAdvanced) {
+      return ""
+    }
+    if (session.run_mode === "agent_group") {
+      const groupID = session.agent_group_id || ""
+      return agentGroups.find((group) => group.id === groupID)?.name || groupID
+    }
+    const agentID = session.agent_id || defaultAgentID
+    return agents.find((agent) => agent.id === agentID)?.name || agentID
+  }
+
   const composerModeControl = () => {
     const open = composerControlMenu === "mode"
-    const chatLocked = currentSession?.run_mode !== "chat"
+    const chatLocked = Boolean((currentSession?.messages.length || 0) > 0 || isActiveRunRunning)
     return (
       <div className="relative min-w-0">
         <Button
@@ -1969,6 +2046,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const composerDeviceControl = () => {
+    if (activeRunMode === "chat") {
+      return null
+    }
     const open = composerControlMenu === "device"
     return (
       <div className="relative min-w-0">
@@ -2008,6 +2088,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const composerWorkspaceControl = () => {
+    if (activeRunMode === "chat") {
+      return null
+    }
     const open = composerControlMenu === "workspace"
     const disabled = !currentConnectorDeviceID
     return (
@@ -2178,6 +2261,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <div className="mt-1 text-xs text-muted-foreground">
                 {copy.messageCount.replace("{count}", String(session.messages.length))}
               </div>
+              {isAdvanced && sessionAgentName(session) && (
+                <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                  <Bot size={12} className="shrink-0" />
+                  <span className="truncate">{sessionAgentName(session)}</span>
+                </div>
+              )}
               {isAdvanced && session.run_mode !== "chat" && (
                 <div className="mt-1 flex flex-wrap gap-1">
                   <span className="inline-flex rounded-md border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary">
@@ -2272,7 +2361,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </div>
               )}
 
-              <div className={cn("grid gap-2 border-t px-2 pt-3", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+              <div className={cn(
+                "grid gap-2 border-t px-2 pt-3",
+                activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-4" : activeRunMode === "assistant" ? "grid-cols-3" : "grid-cols-1"
+              )}>
                 {composerModeControl()}
                 {composerDeviceControl()}
                 {activeRunMode === "agent_group" && composerAgentGroupControl()}
@@ -2281,30 +2373,34 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               <div className="flex flex-col gap-3 border-t px-2 pt-3 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  <select
-                    className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
-                    value={activeModelName}
-                    onChange={(event) => handleSessionModelChange(event.target.value)}
-                  >
-                    <option value="">{copy.selectModel}</option>
-                    {modelSelectOptions.map((model) => (
-                      <option key={model} value={model}>
-                        {model}
-                      </option>
-                    ))}
-                  </select>
-                  <select
-                    className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
-                    value={currentSession?.agent_id || ""}
-                    onChange={(event) => setSessionAgent(event.target.value)}
-                  >
-                    <option value="">{agents.length ? copy.noAgentSelected : copy.noAgents}</option>
-                    {agents.map((agent) => (
-                      <option key={agent.id} value={agent.id}>
-                        {agent.name}
-                      </option>
-                    ))}
-                  </select>
+                  {activeRunMode !== "agent_group" && (
+                    <select
+                      className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
+                      value={activeModelName}
+                      onChange={(event) => handleSessionModelChange(event.target.value)}
+                    >
+                      <option value="">{copy.selectModel}</option>
+                      {modelSelectOptions.map((model) => (
+                        <option key={model} value={model}>
+                          {model}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {activeRunMode !== "agent_group" && (
+                    <select
+                      className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
+                      value={currentSession?.agent_id || defaultAgentID}
+                      onChange={(event) => setSessionAgent(event.target.value)}
+                    >
+                      {agents.length === 0 && <option value="">{copy.noAgents}</option>}
+                      {agents.map((agent) => (
+                        <option key={agent.id} value={agent.id}>
+                          {agent.name}
+                        </option>
+                      ))}
+                    </select>
+                  )}
                   <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted">
                     <Paperclip size={15} />
                     {isUploadingAttachments ? fileCopy.uploading : copy.addAttachment}
@@ -2629,11 +2725,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 {([
                   ["basic", copy.basicSettings],
                   ["advanced", copy.advancedModelSettings],
-                  ["agent", copy.agent],
+                  ...(activeRunMode !== "agent_group" ? ([["agent", copy.agent]] as const) : []),
                   ["agent_group", agentGroupCopy.agentGroups],
                   ["skills", copy.skills],
                   ...(currentAdvancedSettings.assistant_mcp_tools_enabled ? ([["mcp", copy.mcpServers]] as const) : []),
-                  ...(assistantConnectorToolsEnabled ? ([["device", copy.devices]] as const) : []),
+                  ...(assistantConnectorToolsEnabled && activeRunMode !== "chat" ? ([["device", copy.devices]] as const) : []),
                 ] as const).map(([tab, label]) => (
                   <button
                     key={tab}
@@ -2657,21 +2753,23 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               {configTab === "basic" && (
                 <div className="space-y-4 rounded-md border p-3">
-                  <label className="space-y-1 text-sm">
-                    <span className="font-medium">{copy.sessionModel}</span>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={activeModelName}
-                      onChange={(event) => handleSessionModelChange(event.target.value)}
-                    >
-                      <option value="">{copy.selectModel}</option>
-                      {modelSelectOptions.map((model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+                  {activeRunMode !== "agent_group" && (
+                    <label className="space-y-1 text-sm">
+                      <span className="font-medium">{copy.sessionModel}</span>
+                      <select
+                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                        value={activeModelName}
+                        onChange={(event) => handleSessionModelChange(event.target.value)}
+                      >
+                        <option value="">{copy.selectModel}</option>
+                        {modelSelectOptions.map((model) => (
+                          <option key={model} value={model}>
+                            {model}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
 
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{copy.channel}</span>
@@ -2769,9 +2867,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         <div className="truncate text-sm font-medium">{selectedAgent.name}</div>
                         {selectedAgent.prompt && <div className="mt-1 line-clamp-3 whitespace-pre-wrap text-xs text-muted-foreground">{selectedAgent.prompt}</div>}
                       </div>
-                      <Button variant="ghost" size="sm" onClick={removeAgentFromSession} title={copy.remove}>
-                        <X size={15} />
-                      </Button>
+                      {selectedAgent.id !== defaultAgentID && (
+                        <Button variant="ghost" size="sm" onClick={removeAgentFromSession} title={copy.remove}>
+                          <X size={15} />
+                        </Button>
+                      )}
                     </div>
                   ) : (
                     <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{copy.noAgentAdded}</div>
@@ -2782,7 +2882,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       value={pendingAgentID}
                       onChange={(event) => setPendingAgentID(event.target.value)}
                     >
-                      <option value="">{agents.length ? copy.selectAgent : copy.noAgents}</option>
+                      {agents.length === 0 && <option value="">{copy.noAgents}</option>}
                       {agents.map((agent) => (
                         <option key={agent.id} value={agent.id}>
                           {agent.name}
@@ -4167,19 +4267,21 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
   if (isRunActive(session.latest_run)) {
     return null
   }
+  const isStudio = session.run_mode === "agent_group"
+  const isChat = session.run_mode === "chat"
   const res = await api.put(`/user/advanced-chat/sessions/${encodeURIComponent(session.id)}`, {
     id: session.id,
     title: session.title,
     run_mode: session.run_mode,
-    agent_id: session.agent_id || "",
-    agent_group_id: session.agent_group_id || "",
+    agent_id: isStudio ? "" : session.agent_id || defaultAgentID,
+    agent_group_id: isStudio ? session.agent_group_id || "" : "",
     skill_ids: session.skill_ids,
     mcp_server_ids: session.mcp_server_ids,
-    connector_device_id: session.connector_device_id || "",
-    connector_workspace_path: session.connector_workspace_path || "",
-    connector_auto_approve: session.connector_auto_approve,
-    connector_command_prefixes: session.connector_command_prefixes,
-    model_name: session.model_name || "",
+    connector_device_id: isChat ? "" : session.connector_device_id || "",
+    connector_workspace_path: isChat ? "" : session.connector_workspace_path || "",
+    connector_auto_approve: isChat ? false : session.connector_auto_approve,
+    connector_command_prefixes: isChat ? [] : session.connector_command_prefixes,
+    model_name: isStudio ? "" : session.model_name || "",
     user_channel_id: session.user_channel_id || 0,
     max_tokens: session.max_tokens || 0,
     temperature: session.temperature ?? null,
@@ -4654,13 +4756,15 @@ function normalizeSession(value: unknown): ChatSession | null {
   const messages = Array.isArray(value.messages)
     ? value.messages.map(normalizeMessage).filter((message): message is ChatMessage => Boolean(message))
     : []
+  const runMode = normalizeChatRunMode(value.run_mode)
+  const agentID = stringFromUnknown(value.agent_id)
   return {
     id: typeof value.id === "string" && value.id ? value.id : createID(),
     title: typeof value.title === "string" ? value.title : "",
     messages,
-    run_mode: normalizeChatRunMode(value.run_mode),
+    run_mode: runMode,
     latest_run: normalizeRun(value.latest_run),
-    agent_id: stringFromUnknown(value.agent_id),
+    agent_id: runMode === "agent_group" ? undefined : agentID || defaultAgentID,
     agent_group_id: stringFromUnknown(value.agent_group_id),
     skill_ids: stringArrayFromUnknown(value.skill_ids),
     mcp_server_ids: stringArrayFromUnknown(value.mcp_server_ids),
