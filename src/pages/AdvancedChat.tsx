@@ -1,4 +1,4 @@
-import { Bot, CalendarClock, FileText, Laptop, ListTree, Menu, MessageSquare, Palette, Send, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import { Bot, CalendarClock, FileText, Globe2, Laptop, ListTree, Menu, MessageSquare, Palette, Send, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
@@ -10,6 +10,7 @@ import AdvancedChatFiles from "./AdvancedChatFiles"
 import Images from "./Images"
 import Videos from "./Videos"
 import AdvancedChatDevices from "./AdvancedChatDevices"
+import AdvancedChatSites from "./AdvancedChatSites"
 import MessageChannels from "./MessageChannelsWorkspace"
 import AdvancedChatDeliveries from "./AdvancedChatDeliveries"
 import AdvancedChatScheduledTasks from "./AdvancedChatScheduledTasks"
@@ -157,6 +158,7 @@ export default function AdvancedChat() {
                     <Route path="skills" element={<Skills />} />
                     <Route path="mcp" element={<AdvancedChatMCP />} />
                     <Route path="devices" element={<AdvancedChatDevices />} />
+                    <Route path="sites" element={<AdvancedChatSites />} />
                     <Route path="agent-groups/*" element={<AgentGroupsPage />} />
                     <Route path="agent-tasks" element={<AgentTasks />} />
                     {isPremium && publicSettings.message_channel_enabled && <Route path="channels/*" element={<MessageChannels />} />}
@@ -194,6 +196,7 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
   const scheduledTasksLabel = language === "zh" ? "计划任务" : "Scheduled Tasks"
   const agentGroupsLabel = language === "zh" ? "工作室" : "Agent Studios"
   const agentTasksLabel = language === "zh" ? "\u4ee3\u7406\u4efb\u52a1" : "Agent Tasks"
+  const sitesLabel = language === "zh" ? "站点" : language === "ja" ? "サイト" : "Sites"
   const items = [
     { href: "/chat", label: t("nav.chat"), icon: MessageSquare, active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/") },
     { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
@@ -205,6 +208,7 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
     { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
     { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
     { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },
+    { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
     { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
     { href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" },
     { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },

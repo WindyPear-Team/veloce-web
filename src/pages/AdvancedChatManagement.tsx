@@ -43,6 +43,7 @@ interface AdvancedChatSettings {
   assistant_connector_replace_text_enabled: boolean
   assistant_connector_run_command_enabled: boolean
   assistant_connector_web_search_enabled: boolean
+  assistant_connector_static_site_enabled: boolean
   scheduled_tasks_enabled: boolean
   message_channel_enabled: boolean
   message_delivery_enabled: boolean
@@ -65,6 +66,7 @@ const defaultAdvancedChatSettings: AdvancedChatSettings = {
   assistant_connector_replace_text_enabled: true,
   assistant_connector_run_command_enabled: true,
   assistant_connector_web_search_enabled: true,
+  assistant_connector_static_site_enabled: true,
   scheduled_tasks_enabled: true,
   message_channel_enabled: false,
   message_delivery_enabled: true,
@@ -154,6 +156,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
         assistant_connector_replace_text_enabled: form.assistant_connector_replace_text_enabled,
         assistant_connector_run_command_enabled: form.assistant_connector_run_command_enabled,
         assistant_connector_web_search_enabled: form.assistant_connector_web_search_enabled,
+        assistant_connector_static_site_enabled: form.assistant_connector_static_site_enabled,
         ...(isPremium
           ? {
               scheduled_tasks_enabled: form.scheduled_tasks_enabled,
@@ -430,6 +433,12 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                       checked={form.assistant_connector_web_search_enabled}
                       onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_web_search_enabled: checked }))}
                     />
+                    <ToggleRow
+                      title="静态站点"
+                      description="允许 AI 管理连接器托管的静态站点，包括部署、启停和删除。"
+                      checked={form.assistant_connector_static_site_enabled}
+                      onChange={(checked) => setForm((current) => ({ ...current, assistant_connector_static_site_enabled: checked }))}
+                    />
                   </div>
                 </div>
               </CardContent>
@@ -580,6 +589,7 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     assistant_connector_replace_text_enabled: item.assistant_connector_replace_text_enabled !== false,
     assistant_connector_run_command_enabled: item.assistant_connector_run_command_enabled !== false,
     assistant_connector_web_search_enabled: item.assistant_connector_web_search_enabled !== false,
+    assistant_connector_static_site_enabled: item.assistant_connector_static_site_enabled !== false,
     scheduled_tasks_enabled: item.scheduled_tasks_enabled !== false,
     message_channel_enabled: item.message_channel_enabled === true,
     message_delivery_enabled: item.message_delivery_enabled !== false,

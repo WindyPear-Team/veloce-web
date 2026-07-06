@@ -11,6 +11,8 @@ import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
 import { withPublicSettingsDefaults, type PublicSettings } from "@/lib/public-settings"
 
+type ConnectorDeviceMode = "platform" | "web_server"
+
 interface ConnectorDevice {
   id: string
   name: string
@@ -18,6 +20,8 @@ interface ConnectorDevice {
   os?: string
   arch?: string
   version?: string
+  mode: string
+  listen_port?: number
   status: string
   online: boolean
   last_seen_at?: string
@@ -32,6 +36,8 @@ export default function AdvancedChatDevices() {
   const queryClient = useQueryClient()
   const { success, error } = useToast()
   const [deviceName, setDeviceName] = useState(copy.defaultDeviceName)
+  const [deviceMode, setDeviceMode] = useState<ConnectorDeviceMode>("platform")
+  const [listenPort, setListenPort] = useState(8080)
   const [token, setToken] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [generatingDeviceID, setGeneratingDeviceID] = useState("")
@@ -71,11 +77,12 @@ export default function AdvancedChatDevices() {
     }
     const server = quoteArg(baseURL)
     const rawToken = quoteArg(token)
+    const modeArgs = deviceMode === "web_server" ? ` -mode web_server -web-port ${listenPort || 8080}` : ""
     return {
-      windows: `app.exe -server ${server} -token ${rawToken}`,
-      unix: `./app -server ${server} -token ${rawToken}`,
+      windows: `app.exe -server ${server} -token ${rawToken}${modeArgs}`,
+      unix: `./app -server ${server} -token ${rawToken}${modeArgs}`,
     }
-  }, [baseURL, token])
+  }, [baseURL, deviceMode, listenPort, token])
 
   const createToken = async () => {
     const name = deviceName.trim() || copy.defaultDeviceName
@@ -83,6 +90,8 @@ export default function AdvancedChatDevices() {
     try {
       const res = await api.post("/user/advanced-chat/devices/token", {
         name,
+        mode: deviceMode,
+        listen_port: deviceMode === "web_server" ? listenPort || 8080 : 0,
       })
       const nextToken = typeof res.data?.token === "string" ? res.data.token : ""
       if (!nextToken) {
@@ -115,6 +124,9 @@ export default function AdvancedChatDevices() {
         throw new Error(copy.regenerateFailed)
       }
       setDeviceName(device.name)
+      const nextMode = normalizeDeviceMode(device.mode)
+      setDeviceMode(nextMode)
+      setListenPort(nextMode === "web_server" ? device.listen_port || 8080 : 8080)
       setToken(nextToken)
       success(copy.commandRegenerated)
       await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
@@ -192,15 +204,52 @@ export default function AdvancedChatDevices() {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
-          <div className="grid gap-3 lg:grid-cols-[1fr_1fr_1fr_auto]">
+          <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[1fr_1fr_9rem_1fr_auto]">
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.deviceName}</span>
               <input
                 className="h-10 w-full rounded-md border bg-background px-3 text-sm"
                 value={deviceName}
-                onChange={(event) => setDeviceName(event.target.value)}
+                onChange={(event) => {
+                  setDeviceName(event.target.value)
+                  setToken("")
+                }}
               />
             </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.deviceType}</span>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={deviceMode}
+                onChange={(event) => {
+                  const mode = normalizeDeviceMode(event.target.value)
+                  setDeviceMode(mode)
+                  setToken("")
+                  if (mode === "web_server" && !listenPort) {
+                    setListenPort(8080)
+                  }
+                }}
+              >
+                <option value="platform">{copy.standardDevice}</option>
+                <option value="web_server">{copy.websiteDevice}</option>
+              </select>
+            </label>
+            {deviceMode === "web_server" && (
+              <label className="space-y-1 text-sm">
+                <span className="font-medium">{copy.listenPort}</span>
+                <input
+                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                  type="number"
+                  min={1}
+                  max={65535}
+                  value={listenPort}
+                  onChange={(event) => {
+                    setListenPort(Math.max(1, Math.min(65535, Number(event.target.value) || 8080)))
+                    setToken("")
+                  }}
+                />
+              </label>
+            )}
             <label className="space-y-1 text-sm">
               <span className="font-medium">Base URL</span>
               <input className="h-10 w-full rounded-md border bg-muted px-3 text-sm text-muted-foreground" value={baseURL} readOnly />
@@ -246,7 +295,7 @@ export default function AdvancedChatDevices() {
                         </span>
                       </div>
                       <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {[device.hostname, device.os, device.arch, device.version].filter(Boolean).join(" / ") || "-"}
+                        {[device.hostname, device.os, device.arch, device.version, device.mode === "web_server" ? `web:${device.listen_port || 8080}` : "platform"].filter(Boolean).join(" / ") || "-"}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">{copy.lastSeen}: {formatDateTime(device.last_seen_at) || "-"}</div>
                     </div>
@@ -353,6 +402,8 @@ function normalizeDevice(value: unknown): ConnectorDevice | null {
     os: stringFromUnknown(value.os) || undefined,
     arch: stringFromUnknown(value.arch) || undefined,
     version: stringFromUnknown(value.version) || undefined,
+    mode: normalizeDeviceMode(value.mode),
+    listen_port: typeof value.listen_port === "number" ? value.listen_port : undefined,
     status: stringFromUnknown(value.status) || "offline",
     online: value.online === true,
     last_seen_at: stringFromUnknown(value.last_seen_at) || undefined,
@@ -366,6 +417,10 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function stringFromUnknown(value: unknown) {
   return typeof value === "string" ? value.trim() : ""
+}
+
+function normalizeDeviceMode(value: unknown): ConnectorDeviceMode {
+  return stringFromUnknown(value) === "web_server" ? "web_server" : "platform"
 }
 
 function quoteArg(value: string) {
@@ -398,6 +453,10 @@ const zhCopy = {
   subtitle: "管理连接到高级聊天的本地设备，并生成本地连接器启动命令。",
   commandTitle: "添加设备",
   deviceName: "设备名称",
+  deviceType: "设备类型",
+  standardDevice: "标准设备",
+  websiteDevice: "网站设备",
+  listenPort: "站点端口",
   defaultDeviceName: "本地设备",
   generateCommand: "生成连接命令",
   creating: "生成中...",
@@ -435,6 +494,10 @@ const enCopy: typeof zhCopy = {
   subtitle: "Manage local devices connected to advanced chat and generate connector start commands.",
   commandTitle: "Add device",
   deviceName: "Device name",
+  deviceType: "Device type",
+  standardDevice: "Standard device",
+  websiteDevice: "Website device",
+  listenPort: "Site port",
   defaultDeviceName: "Local device",
   generateCommand: "Generate command",
   creating: "Generating...",
@@ -473,6 +536,10 @@ const jaCopy: typeof zhCopy = {
   subtitle: "高度なチャットに接続するローカルデバイスを管理し、コネクター起動コマンドを生成します。",
   commandTitle: "デバイスを追加",
   deviceName: "デバイス名",
+  deviceType: "デバイスタイプ",
+  standardDevice: "標準デバイス",
+  websiteDevice: "Webサイトデバイス",
+  listenPort: "サイトポート",
   defaultDeviceName: "ローカルデバイス",
   generateCommand: "コマンドを生成",
   deviceList: "デバイス一覧",

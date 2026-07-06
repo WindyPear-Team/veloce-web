@@ -240,6 +240,7 @@ interface AdvancedChatSettings {
   assistant_connector_replace_text_enabled: boolean
   assistant_connector_run_command_enabled: boolean
   assistant_connector_web_search_enabled: boolean
+  assistant_connector_static_site_enabled: boolean
 }
 
 interface ChatAttachment {
@@ -348,6 +349,7 @@ const defaultAdvancedChatSettings: AdvancedChatSettings = {
   assistant_connector_replace_text_enabled: true,
   assistant_connector_run_command_enabled: true,
   assistant_connector_web_search_enabled: true,
+  assistant_connector_static_site_enabled: true,
 }
 
 const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
@@ -547,7 +549,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     currentAdvancedSettings.assistant_connector_write_file_enabled ||
     currentAdvancedSettings.assistant_connector_replace_text_enabled ||
     currentAdvancedSettings.assistant_connector_run_command_enabled ||
-    currentAdvancedSettings.assistant_connector_web_search_enabled
+    currentAdvancedSettings.assistant_connector_web_search_enabled ||
+    currentAdvancedSettings.assistant_connector_static_site_enabled
   const selectedAgent = useMemo(() => {
     if (!isAdvanced) {
       return undefined
@@ -3620,11 +3623,14 @@ function ToolCallDetails({
   const command = stringArgument(toolCall.arguments, "command")
   const query = stringArgument(toolCall.arguments, "query")
   const url = stringArgument(toolCall.arguments, "url")
+  const domainName = stringArgument(toolCall.arguments, "domain_name")
+  const siteID = stringArgument(toolCall.arguments, "site_id")
   const replacements = replacementEntriesFromArguments(toolCall.arguments)
   const toolTarget = builtinKind === "search" ? query : builtinKind === "fetch" ? url : command
+  const siteTitle = staticSiteToolTitle(toolCall, domainName, siteID)
   const title = builtinKind
     ? builtinToolTitle(builtinKind, path, toolTarget, copy, booleanArgument(toolCall.arguments, "preview_old_content_available"))
-    : toolLabel(toolCall)
+    : siteTitle || toolLabel(toolCall)
 
   useEffect(() => {
     setOpen(collapseCompleted ? shouldAutoOpen : true)
@@ -4575,6 +4581,7 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     assistant_connector_replace_text_enabled: item.assistant_connector_replace_text_enabled !== false,
     assistant_connector_run_command_enabled: item.assistant_connector_run_command_enabled !== false,
     assistant_connector_web_search_enabled: item.assistant_connector_web_search_enabled !== false,
+    assistant_connector_static_site_enabled: item.assistant_connector_static_site_enabled !== false,
   }
 }
 
@@ -5597,6 +5604,24 @@ function splitDiffLines(value: string) {
 
 function toolLabel(toolCall: ChatToolCall) {
   return `${toolCall.server ? `${toolCall.server}: ` : ""}${toolCall.tool || toolCall.name}`
+}
+
+function staticSiteToolTitle(toolCall: ChatToolCall, domainName: string, siteID: string) {
+  const name = toolCall.name.toLowerCase()
+  const target = domainName || siteID || "."
+  if (name === "list_static_sites") {
+    return "列出静态站点"
+  }
+  if (name === "deploy_static_site") {
+    return `部署静态站点: ${target}`
+  }
+  if (name === "set_static_site_enabled") {
+    return `切换静态站点: ${target}`
+  }
+  if (name === "delete_static_site") {
+    return `删除静态站点: ${target}`
+  }
+  return ""
 }
 
 function findConnectorApprovalTask(toolCall: ChatToolCall, tasks: ConnectorApprovalTask[]) {
