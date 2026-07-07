@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
-import api, { getOAuthLoginURL } from "@/lib/api"
+import api, { apiURL, getOAuthLoginURL, isDesktopTarget } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
@@ -80,7 +80,7 @@ export default function Login() {
             referral_code: localStorage.getItem("referral_code") || "",
             agreement_accepted: true,
           }
-      const response = await fetch(endpoint, {
+      const response = await fetch(apiURL(endpoint), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -94,7 +94,7 @@ export default function Login() {
     onSuccess: (result) => {
       localStorage.setItem("token", result.token)
       localStorage.removeItem("referral_code")
-      window.location.href = "/dashboard"
+      window.location.href = isDesktopTarget() ? "#/chat" : "/dashboard"
     },
     onError: (err) => error(err instanceof Error ? err.message : copy.authFailed),
   })
@@ -107,7 +107,7 @@ export default function Login() {
       if (!passkeySupported()) {
         throw new Error(copy.passkeyUnsupported)
       }
-      const optionsResponse = await fetch("/auth/passkey/login/options", {
+      const optionsResponse = await fetch(apiURL("/auth/passkey/login/options"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ identifier, agreement_accepted: true }),
@@ -123,7 +123,7 @@ export default function Login() {
       if (!payload) {
         throw new Error(copy.passkeyFailed)
       }
-      const response = await fetch("/auth/passkey/login", {
+      const response = await fetch(apiURL("/auth/passkey/login"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -137,14 +137,14 @@ export default function Login() {
     onSuccess: (result) => {
       localStorage.setItem("token", result.token)
       localStorage.removeItem("referral_code")
-      window.location.href = "/dashboard"
+      window.location.href = isDesktopTarget() ? "#/chat" : "/dashboard"
     },
     onError: (err) => error(err instanceof Error ? err.message : copy.passkeyFailed),
   })
 
   const sendCode = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/auth/password/email-code", {
+      const response = await fetch(apiURL("/auth/password/email-code"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email, captcha_token: captchaToken }),

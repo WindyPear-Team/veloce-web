@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Activity, ArrowDown, Bot, Check, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
-import api from "@/lib/api"
+import api, { apiURL } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -1711,7 +1711,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         let accumulatedText = ""
         try {
           const token = localStorage.getItem("token") || ""
-          const response = await fetch("/api/user/advanced-chat/completions", {
+          const response = await fetch(apiURL("/api/user/advanced-chat/completions"), {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
@@ -1851,7 +1851,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       let answer = ""
       const systemPrompt = ""
       const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, systemPrompt)
-      const response = await fetch(request.url, {
+      const response = await fetch(apiURL(request.url), {
         method: "POST",
         headers: request.headers,
         body: JSON.stringify(request.body),

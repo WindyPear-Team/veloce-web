@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Download, Video, WandSparkles } from "lucide-react"
-import api from "@/lib/api"
+import api, { apiURL } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -196,7 +196,7 @@ export default function Videos() {
     try {
       const body = buildVideoRequestBody()
 
-      const response = await fetch("/v1/video/generations", {
+      const response = await fetch(apiURL("/v1/video/generations"), {
         method: "POST",
         headers: {
           Authorization: `Bearer ${rawKey}`,
@@ -238,7 +238,7 @@ export default function Videos() {
     }
     setIsRefreshingTask(true)
     try {
-      const response = await fetch(`/v1/video/generations/${encodeURIComponent(currentTask.id)}`, {
+      const response = await fetch(apiURL(`/v1/video/generations/${encodeURIComponent(currentTask.id)}`), {
         headers: {
           Authorization: `Bearer ${rawKey}`,
         },

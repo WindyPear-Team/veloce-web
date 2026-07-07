@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Download, Image as ImageIcon, WandSparkles } from "lucide-react"
-import api from "@/lib/api"
+import api, { apiURL } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -346,12 +346,12 @@ const enCopy: typeof zhCopy = {
       Object.assign(body, parseExtraParams(extraParams, copy.extraParamsInvalid))
 
       const response = mode === "edit"
-        ? await fetch("/v1/images/edits", {
+        ? await fetch(apiURL("/v1/images/edits"), {
             method: "POST",
             headers: { Authorization: `Bearer ${rawKey}` },
             body: imageEditFormData(body, editImage, editMask),
           })
-        : await fetch("/v1/images/generations", {
+        : await fetch(apiURL("/v1/images/generations"), {
             method: "POST",
             headers: {
               Authorization: `Bearer ${rawKey}`,
