@@ -295,7 +295,7 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   redeemCodes: ["redeemCodes"],
 }
 
-const premiumOnlySystemTabs: SystemTab[] = ["metaModels", "subscriptionPlans", "redeemCodes"]
+const premiumOnlySystemTabs: SystemTab[] = ["payment", "metaModels", "subscriptionPlans", "redeemCodes"]
 
 interface NavRow {
   id: string
@@ -928,7 +928,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
-      {activeTab === "payment" && (
+      {isPremium && activeTab === "payment" && (
         <SettingsPanel title={copy.paymentInterface}>
           <div className="space-y-4">
             <SectionTitle title={copy.paymentSettings} description={copy.paymentSettingsDescription} />
@@ -3504,7 +3504,7 @@ const zhCopy = {
   ssrfAllowedHosts: "SSRF 允许主机",
   ssrfAllowedHostsPlaceholder: "每行或用逗号分隔，例如：internal-api.example.com\n192.168.1.10",
   premiumRequiredTitle: "需要高级版",
-  premiumRequiredDescription: "该功能属于高级版功能。升级到高级版后可以使用安全策略、订阅套餐和兑换码等高级能力。",
+  premiumRequiredDescription: "该功能属于高级版功能。升级到高级版后可以使用支付接口、安全策略、订阅套餐和兑换码等高级能力。",
   premiumRequiredAction: "知道了",
   auth: "登录认证",
   email: "邮件配置",
@@ -3876,7 +3876,7 @@ const enCopy: SystemCopy = {
   ssrfAllowedHosts: "SSRF allowed hosts",
   ssrfAllowedHostsPlaceholder: "One per line or comma-separated, e.g. internal-api.example.com\n192.168.1.10",
   premiumRequiredTitle: "Premium edition required",
-  premiumRequiredDescription: "This is a premium feature. Upgrade to use Security Policy, subscription plans, redeem codes, and other premium capabilities.",
+  premiumRequiredDescription: "This is a premium feature. Upgrade to use payment gateways, Security Policy, subscription plans, redeem codes, and other premium capabilities.",
   premiumRequiredAction: "Got it",
   auth: "Authentication",
   email: "Email",
