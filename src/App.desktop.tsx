@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Check, Globe2, Plus, Server } from "lucide-react"
+import { Activity, Check, Globe2, Plus, Server } from "lucide-react"
 import Login from "./pages/Login"
 import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
@@ -36,6 +36,8 @@ interface BuiltinServerStatus {
 interface SetupStatus {
   required: boolean
 }
+
+type DesktopProcessItem = DesktopProcessStatus["processes"][number]
 
 const getTokenFromURL = () => {
   const hash = window.location.hash
@@ -150,16 +152,19 @@ function DocumentTitle() {
 function DesktopTitleBar() {
   const { language } = useI18n()
   const queryClient = useQueryClient()
-  const popupRef = useRef<HTMLDivElement | null>(null)
-  const [isOpen, setIsOpen] = useState(false)
+  const serverPopupRef = useRef<HTMLDivElement | null>(null)
+  const statusPopupRef = useRef<HTMLDivElement | null>(null)
+  const [isServerOpen, setIsServerOpen] = useState(false)
+  const [isStatusOpen, setIsStatusOpen] = useState(false)
   const [value, setValue] = useState(() => getDesktopServerURL())
   const [servers, setServers] = useState(readServerList)
   const [builtinStatus, setBuiltinStatus] = useState<BuiltinServerStatus | null>(null)
+  const [processStatus, setProcessStatus] = useState<DesktopProcessStatus | null>(null)
   const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
   const currentServer = getDesktopServerURL()
   const copy = language === "zh"
-    ? { title: "Veloce", label: "服务器", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪" }
-    : { title: "Veloce", label: "Server", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
+    ? { title: "Veloce", label: "服务器", status: "服务状态", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪" }
+    : { title: "Veloce", label: "Server", status: "Service status", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
 
   const { data: user } = useQuery<{ username?: string; email?: string }>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
@@ -179,19 +184,23 @@ function DesktopTitleBar() {
   }, [currentServer, user?.email, user?.username])
 
   useEffect(() => {
-    if (!isOpen) {
+    if (!isServerOpen && !isStatusOpen) {
       return
     }
     const closeOnOutsidePointer = (event: PointerEvent) => {
       const target = event.target
-      if (target instanceof Node && popupRef.current?.contains(target)) {
+      if (
+        target instanceof Node &&
+        (serverPopupRef.current?.contains(target) || statusPopupRef.current?.contains(target))
+      ) {
         return
       }
-      setIsOpen(false)
+      setIsServerOpen(false)
+      setIsStatusOpen(false)
     }
     document.addEventListener("pointerdown", closeOnOutsidePointer)
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer)
-  }, [isOpen])
+  }, [isServerOpen, isStatusOpen])
 
   useEffect(() => {
     let cancelled = false
@@ -203,6 +212,22 @@ function DesktopTitleBar() {
     const unsubscribe = window.veloceDesktop?.onBuiltinServerStatus((status) => {
       setBuiltinStatus(status)
       setIsBuiltinBusy(status.phase === "checking" || status.phase === "downloading" || status.phase === "starting")
+    })
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void window.veloceDesktop?.getDesktopProcessStatus().then((status) => {
+      if (!cancelled) {
+        setProcessStatus(status)
+      }
+    })
+    const unsubscribe = window.veloceDesktop?.onDesktopProcessStatus((status) => {
+      setProcessStatus(status)
     })
     return () => {
       cancelled = true
@@ -258,18 +283,53 @@ function DesktopTitleBar() {
           <img src={logoURL} alt="" className="h-5 w-5 rounded object-cover" />
           <span className="truncate">{copy.title}</span>
         </div>
-        <div ref={popupRef} className="relative [-webkit-app-region:no-drag]">
+        <div className="flex items-center gap-1 [-webkit-app-region:no-drag]">
+        <div ref={statusPopupRef} className="relative">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title={copy.status}
+            aria-label={copy.status}
+            onClick={() => {
+              setIsStatusOpen((open) => !open)
+              setIsServerOpen(false)
+            }}
+          >
+            <Activity size={16} />
+          </Button>
+          {isStatusOpen && (
+            <div className="absolute right-0 top-9 w-[min(380px,calc(100vw-2rem))] rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Activity size={14} />
+                <span>{copy.status}</span>
+              </div>
+              <div className="space-y-2">
+                {(processStatus?.processes.length ? processStatus.processes : []).map((item) => (
+                  <ProcessStatusRow key={item.id} item={item} copy={copy} onStatusChange={setProcessStatus} />
+                ))}
+                {!processStatus?.processes.length && (
+                  <div className="rounded-md border border-dashed p-3 text-xs text-muted-foreground">{copy.noProcess}</div>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+        <div ref={serverPopupRef} className="relative">
           <Button
             variant="ghost"
             size="icon"
             className="h-8 w-8"
             title={copy.label}
             aria-label={copy.label}
-            onClick={() => setIsOpen((open) => !open)}
+            onClick={() => {
+              setIsServerOpen((open) => !open)
+              setIsStatusOpen(false)
+            }}
           >
             <Globe2 size={16} />
           </Button>
-          {isOpen && (
+          {isServerOpen && (
             <div className="absolute right-0 top-9 w-[min(360px,calc(100vw-2rem))] rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <Server size={14} />
@@ -348,7 +408,60 @@ function DesktopTitleBar() {
             </div>
           )}
         </div>
+        </div>
       </div>
+    </div>
+  )
+}
+
+function ProcessStatusRow({
+  item,
+  copy,
+  onStatusChange,
+}: {
+  item: DesktopProcessItem
+  copy: Record<string, string>
+  onStatusChange: (status: DesktopProcessStatus) => void
+}) {
+  const title = item.kind === "builtin-server" ? copy.builtin : copy.connector
+  const statusLabel = item.running ? copy.running : copy.stopped
+  const terminate = async () => {
+    const status = await window.veloceDesktop?.terminateDesktopProcess(item.id)
+    if (status) {
+      onStatusChange(status)
+    }
+  }
+  return (
+    <div className="rounded-md border p-3 text-xs">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate font-medium">{title}</div>
+          <div className="mt-1 truncate text-muted-foreground">{item.message || item.serverURL || statusLabel}</div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className={`rounded-full px-2 py-0.5 text-[11px] ${item.running ? "bg-emerald-500/15 text-emerald-600" : "bg-muted text-muted-foreground"}`}>
+            {statusLabel}
+          </span>
+          <Button variant="outline" size="sm" className="h-6 px-2 text-[11px]" onClick={terminate}>
+            {copy.terminate}
+          </Button>
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 text-muted-foreground">
+        <ProcessMeta label={copy.pid} value={item.pid ? String(item.pid) : "-"} />
+        <ProcessMeta label={copy.version} value={item.version || "-"} />
+        {item.mode && <ProcessMeta label={copy.mode} value={item.mode} />}
+        {item.serverURL && <ProcessMeta label="URL" value={item.serverURL} />}
+      </div>
+    </div>
+  )
+}
+
+function ProcessMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-[11px] uppercase tracking-normal">{label}</div>
+      <div className="truncate text-foreground">{value}</div>
     </div>
   )
 }
