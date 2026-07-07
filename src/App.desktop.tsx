@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Activity, Check, Globe2, Plus, Server } from "lucide-react"
+import { Activity, Check, FolderOpen, Globe2, Plus, Server, Settings } from "lucide-react"
 import Login from "./pages/Login"
 import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
@@ -38,6 +38,13 @@ interface SetupStatus {
 }
 
 type DesktopProcessItem = DesktopProcessStatus["processes"][number]
+
+const emptyDesktopSettings: DesktopSettings = {
+  httpProxy: "",
+  builtinServerPath: "",
+  connectorPath: "",
+  preparedUpdate: null,
+}
 
 const getTokenFromURL = () => {
   const hash = window.location.hash
@@ -156,15 +163,20 @@ function DesktopTitleBar() {
   const statusPopupRef = useRef<HTMLDivElement | null>(null)
   const [isServerOpen, setIsServerOpen] = useState(false)
   const [isStatusOpen, setIsStatusOpen] = useState(false)
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [value, setValue] = useState(() => getDesktopServerURL())
   const [servers, setServers] = useState(readServerList)
   const [builtinStatus, setBuiltinStatus] = useState<BuiltinServerStatus | null>(null)
   const [processStatus, setProcessStatus] = useState<DesktopProcessStatus | null>(null)
+  const [settingsDraft, setSettingsDraft] = useState<DesktopSettings>(emptyDesktopSettings)
+  const [updateResult, setUpdateResult] = useState<DesktopUpdateResult | null>(null)
+  const [isSavingSettings, setIsSavingSettings] = useState(false)
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
   const currentServer = getDesktopServerURL()
   const copy = language === "zh"
-    ? { title: "Veloce", label: "服务器", status: "服务状态", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪" }
-    : { title: "Veloce", label: "Server", status: "Service status", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
+    ? { title: "Veloce", label: "服务器", settings: "设置", status: "服务状态", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪" }
+    : { title: "Veloce", label: "Server", settings: "Settings", status: "Service status", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
 
   const { data: user } = useQuery<{ username?: string; email?: string }>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
@@ -235,6 +247,24 @@ function DesktopTitleBar() {
     }
   }, [])
 
+  useEffect(() => {
+    if (!isSettingsOpen) {
+      return
+    }
+    let cancelled = false
+    void window.veloceDesktop?.getDesktopSettings().then((settings) => {
+      if (!cancelled) {
+        setSettingsDraft(settings)
+        setUpdateResult(settings.preparedUpdate
+          ? { state: "ready", message: copy.updateReady, version: settings.preparedUpdate.tagName, filePath: settings.preparedUpdate.filePath }
+          : null)
+      }
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [copy.updateReady, isSettingsOpen])
+
   const saveServer = () => {
     const nextURL = setDesktopServerURL(value)
     writeServerList([nextURL, ...servers])
@@ -276,7 +306,40 @@ function DesktopTitleBar() {
     }
   }
 
+  const saveDesktopSettings = async () => {
+    if (!window.veloceDesktop) {
+      return
+    }
+    setIsSavingSettings(true)
+    const saved = await window.veloceDesktop.saveDesktopSettings(settingsDraft)
+    setSettingsDraft(saved)
+    setIsSavingSettings(false)
+  }
+
+  const chooseDesktopPath = async (field: "builtinServerPath" | "connectorPath") => {
+    const filePath = await window.veloceDesktop?.chooseDesktopFile()
+    if (filePath) {
+      setSettingsDraft((draft) => ({ ...draft, [field]: filePath }))
+    }
+  }
+
+  const checkForDesktopUpdate = async () => {
+    if (!window.veloceDesktop || isCheckingUpdate) {
+      return
+    }
+    setIsCheckingUpdate(true)
+    await window.veloceDesktop.saveDesktopSettings(settingsDraft)
+    const result = await window.veloceDesktop.checkDesktopUpdate()
+    setUpdateResult(result)
+    setIsCheckingUpdate(false)
+  }
+
+  const installPreparedUpdate = async () => {
+    await window.veloceDesktop?.installPreparedDesktopUpdate()
+  }
+
   return (
+    <>
     <div className="fixed inset-x-0 top-0 z-50 h-9 select-none border-b bg-background/95 backdrop-blur [-webkit-app-region:drag]">
       <div className="flex h-full items-center justify-between pl-3 pr-[138px]">
         <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
@@ -284,6 +347,20 @@ function DesktopTitleBar() {
           <span className="truncate">{copy.title}</span>
         </div>
         <div className="flex items-center gap-1 [-webkit-app-region:no-drag]">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-8 w-8"
+          title={copy.settings}
+          aria-label={copy.settings}
+          onClick={() => {
+            setIsSettingsOpen(true)
+            setIsStatusOpen(false)
+            setIsServerOpen(false)
+          }}
+        >
+          <Settings size={16} />
+        </Button>
         <div ref={statusPopupRef} className="relative">
           <Button
             variant="ghost"
@@ -411,6 +488,147 @@ function DesktopTitleBar() {
         </div>
       </div>
     </div>
+    {isSettingsOpen && (
+      <DesktopSettingsModal
+        copy={copy}
+        settings={settingsDraft}
+        updateResult={updateResult}
+        isSaving={isSavingSettings}
+        isChecking={isCheckingUpdate}
+        onSettingsChange={setSettingsDraft}
+        onClose={() => setIsSettingsOpen(false)}
+        onSave={saveDesktopSettings}
+        onChoosePath={chooseDesktopPath}
+        onCheckUpdate={checkForDesktopUpdate}
+        onInstallUpdate={installPreparedUpdate}
+        onDismissUpdate={() => setUpdateResult(null)}
+      />
+    )}
+    </>
+  )
+}
+
+function DesktopSettingsModal({
+  copy,
+  settings,
+  updateResult,
+  isSaving,
+  isChecking,
+  onSettingsChange,
+  onClose,
+  onSave,
+  onChoosePath,
+  onCheckUpdate,
+  onInstallUpdate,
+  onDismissUpdate,
+}: {
+  copy: Record<string, string>
+  settings: DesktopSettings
+  updateResult: DesktopUpdateResult | null
+  isSaving: boolean
+  isChecking: boolean
+  onSettingsChange: (settings: DesktopSettings) => void
+  onClose: () => void
+  onSave: () => void
+  onChoosePath: (field: "builtinServerPath" | "connectorPath") => void
+  onCheckUpdate: () => void
+  onInstallUpdate: () => void
+  onDismissUpdate: () => void
+}) {
+  const updateMessage = updateResult?.state === "ready"
+    ? `${copy.updateReady}${updateResult.version ? ` (${updateResult.version})` : ""}`
+    : updateResult?.state === "not_available"
+      ? copy.noUpdate
+      : updateResult?.message || ""
+  return (
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-gray-950/50 p-4 backdrop-blur-sm [-webkit-app-region:no-drag]">
+      <div className="w-[min(560px,calc(100vw-2rem))] rounded-md border bg-popover p-4 text-popover-foreground shadow-xl">
+        <div className="mb-4 flex items-center justify-between gap-3">
+          <div className="text-sm font-semibold">{copy.settings}</div>
+          <Button variant="ghost" size="sm" className="h-8 px-2 text-xs" onClick={onClose}>
+            {copy.close}
+          </Button>
+        </div>
+        <div className="space-y-3">
+          <label className="block text-xs">
+            <span className="mb-1 block font-medium">{copy.httpProxy}</span>
+            <Input
+              value={settings.httpProxy}
+              placeholder={copy.httpProxyPlaceholder}
+              className="h-8 text-xs"
+              onChange={(event) => onSettingsChange({ ...settings, httpProxy: event.target.value })}
+            />
+          </label>
+          <PathSettingRow
+            label={copy.builtinPath}
+            value={settings.builtinServerPath}
+            browseLabel={copy.browse}
+            onChange={(value) => onSettingsChange({ ...settings, builtinServerPath: value })}
+            onChoose={() => onChoosePath("builtinServerPath")}
+          />
+          <PathSettingRow
+            label={copy.connectorPath}
+            value={settings.connectorPath}
+            browseLabel={copy.browse}
+            onChange={(value) => onSettingsChange({ ...settings, connectorPath: value })}
+            onChoose={() => onChoosePath("connectorPath")}
+          />
+        </div>
+        <div className="mt-4 flex flex-wrap items-center justify-between gap-2 border-t pt-4">
+          <Button variant="outline" className="h-8 text-xs" disabled={isChecking} onClick={onCheckUpdate}>
+            {isChecking ? copy.checkingUpdate : copy.checkUpdate}
+          </Button>
+          <Button className="h-8 text-xs" disabled={isSaving} onClick={onSave}>
+            {copy.save}
+          </Button>
+        </div>
+        {updateResult && (
+          <div className="mt-3 rounded-md border p-3 text-xs">
+            <div className="font-medium">{updateMessage}</div>
+            {updateResult.state === "ready" ? (
+              <>
+                <div className="mt-1 text-muted-foreground">{copy.updateReadyDescription}</div>
+                <div className="mt-3 flex justify-end gap-2">
+                  <Button variant="outline" size="sm" className="h-7 px-3 text-xs" onClick={onDismissUpdate}>
+                    {copy.cancel}
+                  </Button>
+                  <Button size="sm" className="h-7 px-3 text-xs" onClick={onInstallUpdate}>
+                    {copy.installNow}
+                  </Button>
+                </div>
+              </>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function PathSettingRow({
+  label,
+  value,
+  browseLabel,
+  onChange,
+  onChoose,
+}: {
+  label: string
+  value: string
+  browseLabel: string
+  onChange: (value: string) => void
+  onChoose: () => void
+}) {
+  return (
+    <label className="block text-xs">
+      <span className="mb-1 block font-medium">{label}</span>
+      <div className="flex gap-2">
+        <Input value={value} className="h-8 min-w-0 text-xs" onChange={(event) => onChange(event.target.value)} />
+        <Button type="button" variant="outline" className="h-8 shrink-0 gap-2 px-3 text-xs" onClick={onChoose}>
+          <FolderOpen size={14} />
+          {browseLabel}
+        </Button>
+      </div>
+    </label>
   )
 }
 
@@ -467,7 +685,7 @@ function ProcessMeta({ label, value }: { label: string; value: string }) {
 }
 
 function defaultServerCandidate(servers: string[]) {
-  const base = "http://localhost:12789"
+  const base = "http://localhost:8080"
   if (!servers.includes(base)) {
     return base
   }

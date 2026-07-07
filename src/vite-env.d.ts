@@ -26,11 +26,34 @@ interface DesktopProcessStatus {
   }>
 }
 
+interface DesktopSettings {
+  httpProxy: string
+  builtinServerPath: string
+  connectorPath: string
+  preparedUpdate?: {
+    tagName: string
+    assetName: string
+    filePath: string
+  } | null
+}
+
+interface DesktopUpdateResult {
+  state: "ready" | "not_available" | "error"
+  message: string
+  version: string
+  filePath?: string
+}
+
 interface Window {
   veloceDesktop?: {
     getBuiltinServerStatus: () => Promise<BuiltinServerStatus>
     getDesktopProcessStatus: () => Promise<DesktopProcessStatus>
     terminateDesktopProcess: (id: string) => Promise<DesktopProcessStatus>
+    getDesktopSettings: () => Promise<DesktopSettings>
+    saveDesktopSettings: (settings: DesktopSettings) => Promise<DesktopSettings>
+    chooseDesktopFile: () => Promise<string>
+    checkDesktopUpdate: () => Promise<DesktopUpdateResult>
+    installPreparedDesktopUpdate: () => Promise<{ ok: boolean; message: string }>
     setBuiltinServerEnabled: (enabled: boolean) => Promise<BuiltinServerStatus>
     startConnector: (input: {
       serverURL: string

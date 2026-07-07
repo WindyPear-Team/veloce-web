@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 export const desktopServerStorageKey = "veloce.desktop.server_url";
-export const defaultDesktopServerURL = "http://localhost:12789";
+export const defaultDesktopServerURL = "http://localhost:8080";
 const desktopServerTokenPrefix = "veloce.desktop.server_token.";
 
 export const isDesktopTarget = () => import.meta.env.VITE_APP_TARGET === "desktop";

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { useMutation, useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useNavigate } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -15,6 +16,8 @@ interface SetupResponse {
 
 export default function Setup() {
   const { language } = useI18n()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const copy = language === "zh" ? zhCopy : enCopy
   const { error } = useToast()
   const { data: settings } = useQuery<PublicSettings>({
@@ -65,7 +68,12 @@ export default function Setup() {
       if (isDesktopTarget()) {
         await api.put("/settings", { system_mode: "personal" }).catch(() => undefined)
       }
-      window.location.href = isDesktopTarget() ? "#/chat" : "/dashboard"
+      queryClient.setQueryData(["setup-status"], { required: false })
+      if (isDesktopTarget()) {
+        navigate("/chat", { replace: true })
+      } else {
+        window.location.href = "/dashboard"
+      }
     },
     onError: (err) => error(err instanceof Error ? err.message : copy.failed),
   })

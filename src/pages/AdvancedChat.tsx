@@ -1,4 +1,4 @@
-import { Bot, CalendarClock, FileText, Globe2, Laptop, ListTree, Menu, MessageSquare, Palette, Send, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import { BarChart3, Bot, Boxes, CalendarClock, Database, FileText, Globe2, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { useState } from "react"
@@ -16,6 +16,12 @@ import AdvancedChatDeliveries from "./AdvancedChatDeliveries"
 import AdvancedChatScheduledTasks from "./AdvancedChatScheduledTasks"
 import AgentGroupsPage from "./AgentGroupsPage"
 import AgentTasks from "./AgentTasks"
+import SystemManagement from "./SystemManagement"
+import AdminOverview from "./AdminOverview"
+import AdminAuditLogs from "./AdminAuditLogs"
+import Channels from "./Channels"
+import Models from "./Models"
+import UsersPage from "./Users"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { Button } from "@/components/ui/button"
@@ -125,7 +131,7 @@ export default function AdvancedChat() {
 
       <div className="flex min-h-0 flex-1">
         <div className="hidden lg:block lg:h-full lg:shrink-0">
-          <AdvancedChatSidebar publicSettings={publicSettings} />
+          <AdvancedChatSidebar publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} />
         </div>
 
         {isSidebarOpen && (
@@ -137,7 +143,7 @@ export default function AdvancedChat() {
               onClick={() => setIsSidebarOpen(false)}
             />
             <div className="relative z-50 h-full w-72 max-w-[85vw]">
-              <AdvancedChatSidebar className="w-full" publicSettings={publicSettings} onNavigate={() => setIsSidebarOpen(false)} />
+              <AdvancedChatSidebar className="w-full" publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} onNavigate={() => setIsSidebarOpen(false)} />
             </div>
           </div>
         )}
@@ -168,6 +174,17 @@ export default function AdvancedChat() {
                     <Route path="images" element={<Images />} />
                     <Route path="videos" element={<Videos />} />
                     {isPremium && <Route path="files" element={<AdvancedChatFiles />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin-overview" element={<AdminOverview />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin-logs" element={<AdminAuditLogs />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin/general" element={<SystemManagement section="general" />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin/theme" element={<SystemManagement section="theme" />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin/auth" element={<SystemManagement section="auth" />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin/content" element={<SystemManagement section="content" />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin/operations" element={<SystemManagement section="operations" />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin/advanced-chat" element={<SystemManagement section="advancedChat" />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin-channels" element={<Channels />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin-models" element={<Models />} />}
+                    {isDesktopTarget() && user?.is_admin && <Route path="admin-users" element={<UsersPage />} />}
                     <Route path="*" element={<Navigate to="/chat" replace />} />
                   </Routes>
                 )}
@@ -187,7 +204,17 @@ export default function AdvancedChat() {
   )
 }
 
-function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { className?: string; publicSettings: PublicSettings; onNavigate?: () => void }) {
+function AdvancedChatSidebar({
+  className,
+  publicSettings,
+  isAdmin,
+  onNavigate,
+}: {
+  className?: string
+  publicSettings: PublicSettings
+  isAdmin: boolean
+  onNavigate?: () => void
+}) {
   const location = useLocation()
   const { language, t } = useI18n()
   const isPremium = isPremiumEdition(publicSettings)
@@ -198,6 +225,22 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
   const agentGroupsLabel = language === "zh" ? "工作室" : "Agent Studios"
   const agentTasksLabel = language === "zh" ? "\u4ee3\u7406\u4efb\u52a1" : "Agent Tasks"
   const sitesLabel = language === "zh" ? "站点" : language === "ja" ? "サイト" : "Sites"
+  const adminItems = [
+    { href: "/chat/admin-overview", label: t("nav.adminOverview"), icon: BarChart3, active: location.pathname === "/chat/admin-overview" },
+    { href: "/chat/admin-logs", label: t("nav.auditLogs"), icon: ScrollText, active: location.pathname === "/chat/admin-logs" },
+    { href: "/chat/admin/general", label: t("nav.system"), icon: Shield, active: location.pathname.startsWith("/chat/admin/") },
+    { href: "/chat/admin-channels", label: t("nav.channels"), icon: Database, active: location.pathname === "/chat/admin-channels" },
+    { href: "/chat/admin-models", label: t("nav.models"), icon: Boxes, active: location.pathname === "/chat/admin-models" },
+    { href: "/chat/admin-users", label: t("nav.users"), icon: Users, active: location.pathname === "/chat/admin-users" },
+  ]
+  const systemSubItems = [
+    { href: "/chat/admin/general", label: t("nav.systemGeneral") },
+    { href: "/chat/admin/theme", label: t("nav.systemTheme") },
+    { href: "/chat/admin/auth", label: t("nav.systemAuth") },
+    { href: "/chat/admin/content", label: t("nav.systemContent") },
+    { href: "/chat/admin/operations", label: t("nav.systemOperations") },
+    { href: "/chat/admin/advanced-chat", label: t("nav.systemAdvancedChat") },
+  ]
   const items = [
     { href: "/chat", label: t("nav.chat"), icon: MessageSquare, active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/") },
     { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
@@ -233,6 +276,43 @@ function AdvancedChatSidebar({ className, publicSettings, onNavigate }: { classN
               <span className="flex-1 truncate">{item.label}</span>
             </Link>
           ))}
+          {isDesktopTarget() && isAdmin && (
+            <>
+              <div className="my-2 border-t" />
+              {adminItems.map((item) => (
+                <div key={item.href}>
+                  <Link
+                    to={item.href}
+                    onClick={onNavigate}
+                    className={cn(
+                      "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                      item.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+                    )}
+                  >
+                    <item.icon size={18} />
+                    <span className="flex-1 truncate">{item.label}</span>
+                  </Link>
+                  {item.href === "/chat/admin/general" && location.pathname.startsWith("/chat/admin/") && (
+                    <div className="ml-9 mt-1 flex flex-col gap-1">
+                      {systemSubItems.map((child) => (
+                        <Link
+                          key={child.href}
+                          to={child.href}
+                          onClick={onNavigate}
+                          className={cn(
+                            "rounded-md px-3 py-1.5 text-xs transition-colors",
+                            location.pathname === child.href ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                          )}
+                        >
+                          {child.label}
+                        </Link>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </nav>
       <div className="shrink-0 border-t p-4">
