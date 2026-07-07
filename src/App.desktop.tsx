@@ -158,8 +158,8 @@ function DesktopTitleBar() {
   const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
   const currentServer = getDesktopServerURL()
   const copy = language === "zh"
-    ? { title: "Veloce", label: "服务器", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", builtinStarting: "正在准备内置服务器...", builtinUnavailable: "桌面桥接未就绪" }
-    : { title: "Veloce", label: "Server", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", builtinStarting: "Preparing built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
+    ? { title: "Veloce", label: "服务器", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪" }
+    : { title: "Veloce", label: "Server", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
 
   const { data: user } = useQuery<{ username?: string; email?: string }>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
@@ -240,7 +240,13 @@ function DesktopTitleBar() {
     if (status.enabled && status.serverURL) {
       const nextURL = setDesktopServerURL(status.serverURL)
       writeServerList([nextURL, ...servers])
+      setBuiltinStatus({ ...status, message: copy.builtinWaiting })
+      const setupStatus = await waitForSetupStatus(nextURL)
+      if (!setupStatus?.required && hasAuthToken()) {
+        await api.put("/settings", { system_mode: "personal" }).catch(() => undefined)
+      }
       queryClient.clear()
+      window.location.hash = setupStatus?.required ? "/setup" : hasAuthToken() ? "/chat" : "/login"
       window.location.reload()
     }
   }
@@ -353,6 +359,26 @@ function defaultServerCandidate(servers: string[]) {
     return base
   }
   return "http://"
+}
+
+async function waitForSetupStatus(serverURL: string) {
+  const endpoint = `${normalizeServerURL(serverURL)}/api/setup/status`
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      const response = await fetch(endpoint, { cache: "no-store" })
+      if (response.ok) {
+        return await response.json() as SetupStatus
+      }
+    } catch {
+      // Keep polling until the just-started local server is ready.
+    }
+    await delay(500)
+  }
+  return null
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
 }
 
 function DesktopRoutes() {

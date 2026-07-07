@@ -518,8 +518,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => sessions.find((session) => session.id === activeSessionID),
     [sessions, activeSessionID]
   )
-  const currentSession = activeSession || (isAdvanced && routeSessionID ? undefined : draftSession)
-  const latestMessage = currentSession?.messages[currentSession.messages.length - 1]
+  const displaySessions = useMemo(() => sessions.map(normalizeRuntimeSession), [sessions])
+  const currentSessionRaw = activeSession || (isAdvanced && routeSessionID ? undefined : draftSession)
+  const currentSession = currentSessionRaw ? normalizeRuntimeSession(currentSessionRaw) : undefined
+  const currentMessages = currentSession?.messages || []
+  const latestMessage = currentMessages[currentMessages.length - 1]
   const latestMessageSignal = useMemo(
     () => [
       currentSession?.id || "",
@@ -528,7 +531,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       latestMessage?.content || "",
       JSON.stringify(latestMessage?.tool_calls || []),
     ].join("|"),
-    [currentSession?.id, currentSession?.messages.length, latestMessage?.id, latestMessage?.content, latestMessage?.tool_calls]
+    [currentSession?.id, currentMessages.length, latestMessage?.id, latestMessage?.content, latestMessage?.tool_calls]
   )
   const currentAdvancedSettings = useMemo<AdvancedChatSettings>(
     () => ({ ...defaultAdvancedChatSettings, ...(advancedSettings ?? {}) }),
@@ -627,7 +630,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     const selectedIDs = new Set(currentSession?.skill_ids || [])
     return skills.filter((skill) => !selectedIDs.has(skill.id))
   }, [currentSession?.skill_ids, skills])
-  const skillMCPServerIDs = useMemo(() => uniqueStrings(selectedSkills.flatMap((skill) => skill.mcp_server_ids)), [selectedSkills])
+  const skillMCPServerIDs = useMemo(() => uniqueStrings(selectedSkills.flatMap((skill) => skill.mcp_server_ids || [])), [selectedSkills])
   const sessionMCPServers = useMemo(() => {
     const selectedIDs = new Set(currentSession?.mcp_server_ids || [])
     return enabledMCPServers.filter((server) => selectedIDs.has(server.id))
@@ -692,7 +695,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     return agents.filter((agent) => {
       const id = agent.id.toLowerCase()
       const name = agent.name.toLowerCase()
-      const type = agent.type.toLowerCase()
+      const type = (agent.type || "").toLowerCase()
       return id.includes(query) || name.includes(query) || type.includes(query)
     })
   }, [activeRunMode, agentMention.query, currentAgentGroup])
@@ -728,11 +731,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       return []
     }
     return uniqueStrings(
-      sessions
+      displaySessions
         .filter((session) => session.connector_device_id === deviceID && session.connector_workspace_path)
         .map((session) => session.connector_workspace_path || "")
     ).slice(0, 6)
-  }, [currentConnectorDeviceID, sessions])
+  }, [currentConnectorDeviceID, displaySessions])
 
   useEffect(() => {
     if (isAdvanced) {
@@ -1085,21 +1088,21 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const updateSession = (sessionID: string, updater: (session: ChatSession) => ChatSession, options: { persist?: boolean; materialize?: boolean } = {}) => {
     const existingSession = sessions.find((session) => session.id === sessionID)
     const baseSession = existingSession || (draftSession.id === sessionID ? draftSession : undefined)
-    const persistedSession = baseSession ? { ...updater(baseSession), updated_at: new Date().toISOString() } : undefined
+    const persistedSession = baseSession ? normalizeRuntimeSession({ ...updater(normalizeRuntimeSession(baseSession)), updated_at: new Date().toISOString() }) : undefined
     setSessions((current) => {
       const index = current.findIndex((session) => session.id === sessionID)
       if (index >= 0) {
         return current.map((session) =>
-          session.id === sessionID ? { ...updater(session), updated_at: new Date().toISOString() } : session
+          session.id === sessionID ? normalizeRuntimeSession({ ...updater(normalizeRuntimeSession(session)), updated_at: new Date().toISOString() }) : normalizeRuntimeSession(session)
         )
       }
       if (options.materialize && persistedSession) {
         return [persistedSession, ...current]
       }
-      return current
+      return current.map(normalizeRuntimeSession)
     })
     if (draftSession.id === sessionID) {
-      setDraftSession((current) => current.id === sessionID ? { ...updater(current), updated_at: new Date().toISOString() } : current)
+      setDraftSession((current) => current.id === sessionID ? normalizeRuntimeSession({ ...updater(normalizeRuntimeSession(current)), updated_at: new Date().toISOString() }) : normalizeRuntimeSession(current))
     }
     if (options.materialize) {
       setActiveSessionID(sessionID)
@@ -1173,7 +1176,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || !currentSession) {
       return
     }
-    const hasStarted = currentSession.messages.length > 0 || isRunActive(currentSession.latest_run)
+    const hasStarted = currentMessages.length > 0 || isRunActive(currentSession.latest_run)
     if (currentSession.run_mode !== "chat" && mode === "chat" && hasStarted) {
       return
     }
@@ -1189,7 +1192,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       connector_device_id: mode === "chat" ? undefined : session.connector_device_id,
       connector_workspace_path: mode === "chat" ? undefined : session.connector_workspace_path,
       connector_auto_approve: mode === "chat" ? false : session.connector_auto_approve,
-      connector_command_prefixes: mode === "chat" ? [] : session.connector_command_prefixes,
+      connector_command_prefixes: mode === "chat" ? [] : session.connector_command_prefixes || [],
       model_name: mode === "agent_group" ? undefined : session.model_name,
     }), { persist: true })
     setComposerControlMenu("")
@@ -1199,12 +1202,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!currentSession) {
       return
     }
-    if (currentSession.skill_ids.includes(skillID)) {
+    if ((currentSession.skill_ids || []).includes(skillID)) {
       return
     }
     updateSession(currentSession.id, (session) => ({
       ...session,
-      skill_ids: [...session.skill_ids, skillID],
+      skill_ids: [...(session.skill_ids || []), skillID],
     }), { persist: true })
   }
 
@@ -1214,7 +1217,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     updateSession(currentSession.id, (session) => ({
       ...session,
-      skill_ids: session.skill_ids.filter((id) => id !== skillID),
+      skill_ids: (session.skill_ids || []).filter((id) => id !== skillID),
     }), { persist: true })
   }
 
@@ -1226,12 +1229,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       error(copy.assistantMCPToolsDisabled)
       return
     }
-    if (currentSession.mcp_server_ids.includes(serverID)) {
+    if ((currentSession.mcp_server_ids || []).includes(serverID)) {
       return
     }
     updateSession(currentSession.id, (session) => ({
       ...session,
-      mcp_server_ids: [...session.mcp_server_ids, serverID],
+      mcp_server_ids: [...(session.mcp_server_ids || []), serverID],
     }), { persist: true })
   }
 
@@ -1241,7 +1244,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     updateSession(currentSession.id, (session) => ({
       ...session,
-      mcp_server_ids: session.mcp_server_ids.filter((id) => id !== serverID),
+      mcp_server_ids: (session.mcp_server_ids || []).filter((id) => id !== serverID),
     }), { persist: true })
   }
 
@@ -1568,7 +1571,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           return
         }
       }
-      if (!currentAdvancedSettings.assistant_mcp_tools_enabled && (session.mcp_server_ids.length > 0 || selectedSkills.some((skill) => skill.mcp_server_ids.length > 0))) {
+      if (!currentAdvancedSettings.assistant_mcp_tools_enabled && ((session.mcp_server_ids || []).length > 0 || selectedSkills.some((skill) => (skill.mcp_server_ids || []).length > 0))) {
         error(copy.assistantMCPToolsDisabled)
         return
       }
@@ -2361,7 +2364,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         </Button>
       </div>
       <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
-        {sessions.map((session) => (
+        {displaySessions.map((session) => (
           <div
             key={session.id}
             className={cn(
@@ -3115,7 +3118,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         </div>
                       ))}
                       {enabledMCPServers
-                        .filter((server) => skillMCPServerIDs.includes(server.id) && !currentSession?.mcp_server_ids.includes(server.id))
+                        .filter((server) => skillMCPServerIDs.includes(server.id) && !(currentSession?.mcp_server_ids || []).includes(server.id))
                         .map((server) => (
                           <div key={`skill-${server.id}`} className="rounded-md border bg-muted/40 p-3">
                             <div className="flex min-w-0 items-center gap-2">
@@ -4409,29 +4412,30 @@ async function responseErrorMessage(response: Response) {
 }
 
 async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSession | null> {
-  if (isRunActive(session.latest_run)) {
+  const safeSession = normalizeRuntimeSession(session)
+  if (isRunActive(safeSession.latest_run)) {
     return null
   }
-  const isStudio = session.run_mode === "agent_group"
-  const isChat = session.run_mode === "chat"
-  const res = await api.put(`/user/advanced-chat/sessions/${encodeURIComponent(session.id)}`, {
-    id: session.id,
-    title: session.title,
-    run_mode: session.run_mode,
-    agent_id: isStudio ? "" : session.agent_id || defaultAgentID,
-    agent_group_id: isStudio ? session.agent_group_id || "" : "",
-    skill_ids: session.skill_ids,
-    mcp_server_ids: session.mcp_server_ids,
-    connector_device_id: isChat ? "" : session.connector_device_id || "",
-    connector_workspace_path: isChat ? "" : session.connector_workspace_path || "",
-    connector_auto_approve: isChat ? false : session.connector_auto_approve,
-    connector_command_prefixes: isChat ? [] : session.connector_command_prefixes,
-    model_name: isStudio ? "" : session.model_name || "",
-    user_channel_id: session.user_channel_id || 0,
-    max_tokens: session.max_tokens || 0,
-    temperature: session.temperature ?? null,
-    reasoning_effort: session.reasoning_effort || "",
-    messages: session.messages.map((message) => ({
+  const isStudio = safeSession.run_mode === "agent_group"
+  const isChat = safeSession.run_mode === "chat"
+  const res = await api.put(`/user/advanced-chat/sessions/${encodeURIComponent(safeSession.id)}`, {
+    id: safeSession.id,
+    title: safeSession.title,
+    run_mode: safeSession.run_mode,
+    agent_id: isStudio ? "" : safeSession.agent_id || defaultAgentID,
+    agent_group_id: isStudio ? safeSession.agent_group_id || "" : "",
+    skill_ids: safeSession.skill_ids,
+    mcp_server_ids: safeSession.mcp_server_ids,
+    connector_device_id: isChat ? "" : safeSession.connector_device_id || "",
+    connector_workspace_path: isChat ? "" : safeSession.connector_workspace_path || "",
+    connector_auto_approve: isChat ? false : safeSession.connector_auto_approve,
+    connector_command_prefixes: isChat ? [] : safeSession.connector_command_prefixes,
+    model_name: isStudio ? "" : safeSession.model_name || "",
+    user_channel_id: safeSession.user_channel_id || 0,
+    max_tokens: safeSession.max_tokens || 0,
+    temperature: safeSession.temperature ?? null,
+    reasoning_effort: safeSession.reasoning_effort || "",
+    messages: safeSession.messages.map((message) => ({
       id: message.id,
       role: message.role,
       content: message.content,
@@ -4928,6 +4932,20 @@ function normalizeSession(value: unknown): ChatSession | null {
   }
 }
 
+function normalizeRuntimeSession(session: ChatSession): ChatSession {
+  return {
+    ...session,
+    messages: Array.isArray(session.messages) ? session.messages : [],
+    skill_ids: Array.isArray(session.skill_ids) ? session.skill_ids.filter((id): id is string => typeof id === "string") : [],
+    mcp_server_ids: Array.isArray(session.mcp_server_ids) ? session.mcp_server_ids.filter((id): id is string => typeof id === "string") : [],
+    connector_command_prefixes: Array.isArray(session.connector_command_prefixes)
+      ? session.connector_command_prefixes.filter((prefix): prefix is string => typeof prefix === "string")
+      : [],
+    run_mode: normalizeChatRunMode(session.run_mode),
+    latest_run: normalizeRun(session.latest_run),
+  }
+}
+
 function normalizeChatRunMode(value: unknown): ChatRunMode {
   return value === "assistant" || value === "agent_group" ? value : "chat"
 }
@@ -5395,21 +5413,23 @@ function normalizedRound(round?: number) {
 }
 
 function upsertSession(current: ChatSession[], next: ChatSession) {
-  const index = current.findIndex((session) => session.id === next.id)
+  const safeNext = normalizeRuntimeSession(next)
+  const index = current.findIndex((session) => session.id === safeNext.id)
   if (index < 0) {
-    return [next, ...current]
+    return [safeNext, ...current.map(normalizeRuntimeSession)]
   }
-  const updated = [...current]
-  updated[index] = next
+  const updated = current.map(normalizeRuntimeSession)
+  updated[index] = safeNext
   return updated
 }
 
 function mergeServerSessions(current: ChatSession[], serverSessions: ChatSession[], activeSessionID = "") {
-  const serverIDs = new Set(serverSessions.map((session) => session.id))
-  const localDrafts = current.filter((session) =>
+  const safeServerSessions = serverSessions.map(normalizeRuntimeSession)
+  const serverIDs = new Set(safeServerSessions.map((session) => session.id))
+  const localDrafts = current.map(normalizeRuntimeSession).filter((session) =>
     !serverIDs.has(session.id) && (session.messages.length === 0 || session.id === activeSessionID || isRunActive(session.latest_run))
   )
-  return [...localDrafts, ...serverSessions]
+  return [...localDrafts, ...safeServerSessions]
 }
 
 function sessionIDFromAdvancedChatPath(pathname: string) {

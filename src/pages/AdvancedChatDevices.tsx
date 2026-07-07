@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Copy, KeyRound, Laptop, Plus, RefreshCcw, Save, Settings, Terminal, Trash2 } from "lucide-react"
-import api from "@/lib/api"
+import { Copy, KeyRound, Laptop, Play, Plus, RefreshCcw, Save, Settings, Terminal, Trash2 } from "lucide-react"
+import api, { getDesktopServerURL, isDesktopTarget } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -41,6 +41,7 @@ export default function AdvancedChatDevices() {
   const [token, setToken] = useState("")
   const [isCreating, setIsCreating] = useState(false)
   const [generatingDeviceID, setGeneratingDeviceID] = useState("")
+  const [connectingDeviceID, setConnectingDeviceID] = useState("")
   const [deletingDeviceID, setDeletingDeviceID] = useState("")
   const [editingDeviceID, setEditingDeviceID] = useState("")
   const [editingDeviceName, setEditingDeviceName] = useState("")
@@ -63,6 +64,9 @@ export default function AdvancedChatDevices() {
   })
 
   const baseURL = useMemo(() => {
+    if (isDesktopTarget()) {
+      return getDesktopServerURL()
+    }
     const value = withPublicSettingsDefaults(publicSettings).base_url.trim()
     return value || (typeof window !== "undefined" ? window.location.origin : "http://localhost:8080")
   }, [publicSettings])
@@ -134,6 +138,78 @@ export default function AdvancedChatDevices() {
       error(apiErrorMessage(err, copy.regenerateFailed))
     } finally {
       setGeneratingDeviceID("")
+    }
+  }
+
+  const connectToken = async ({
+    connectionToken,
+    mode,
+    port,
+    deviceID,
+  }: {
+    connectionToken: string
+    mode: ConnectorDeviceMode
+    port: number
+    deviceID: string
+  }) => {
+    if (!window.veloceDesktop) {
+      error(copy.desktopOnly)
+      return
+    }
+    setConnectingDeviceID(deviceID)
+    try {
+      const result = await window.veloceDesktop.startConnector({
+        serverURL: baseURL,
+        token: connectionToken,
+        mode,
+        webPort: mode === "web_server" ? port || 8080 : undefined,
+      })
+      if (!result.ok) {
+        throw new Error(result.message || copy.connectFailed)
+      }
+      success(result.version ? copy.connectedWithVersion.replace("{version}", result.version) : copy.connected)
+      await queryClient.invalidateQueries({ queryKey: devicesQueryKey })
+    } catch (err) {
+      error(err instanceof Error ? err.message : copy.connectFailed)
+    } finally {
+      setConnectingDeviceID("")
+    }
+  }
+
+  const connectCurrentToken = async () => {
+    await connectToken({
+      connectionToken: token,
+      mode: deviceMode,
+      port: listenPort,
+      deviceID: "__new__",
+    })
+  }
+
+  const regenerateAndConnectDevice = async (device: ConnectorDevice) => {
+    setGeneratingDeviceID(device.id)
+    setConnectingDeviceID(device.id)
+    try {
+      const res = await api.post(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}/token`)
+      const nextToken = typeof res.data?.token === "string" ? res.data.token : ""
+      if (!nextToken) {
+        throw new Error(copy.regenerateFailed)
+      }
+      const nextMode = normalizeDeviceMode(device.mode)
+      setDeviceName(device.name)
+      setDeviceMode(nextMode)
+      setListenPort(nextMode === "web_server" ? device.listen_port || 8080 : 8080)
+      setToken(nextToken)
+      await connectToken({
+        connectionToken: nextToken,
+        mode: nextMode,
+        port: nextMode === "web_server" ? device.listen_port || 8080 : 8080,
+        deviceID: device.id,
+      })
+    } catch (err) {
+      error(apiErrorMessage(err, copy.connectFailed))
+    } finally {
+      setGeneratingDeviceID("")
+      setConnectingDeviceID("")
     }
   }
 
@@ -267,6 +343,14 @@ export default function AdvancedChatDevices() {
               <CommandRow label={copy.token} value={token} copyText={copy.copy} onCopy={copyValue} />
               <CommandRow label={copy.windowsCommand} value={commands.windows} copyText={copy.copy} onCopy={copyValue} />
               <CommandRow label={copy.unixCommand} value={commands.unix} copyText={copy.copy} onCopy={copyValue} />
+              {window.veloceDesktop && (
+                <div className="flex justify-end">
+                  <Button className="gap-2" onClick={connectCurrentToken} disabled={connectingDeviceID === "__new__"}>
+                    <Play size={15} />
+                    {connectingDeviceID === "__new__" ? copy.connecting : copy.connectNow}
+                  </Button>
+                </div>
+              )}
             </div>
           )}
         </CardContent>
@@ -300,6 +384,17 @@ export default function AdvancedChatDevices() {
                       <div className="mt-1 text-xs text-muted-foreground">{copy.lastSeen}: {formatDateTime(device.last_seen_at) || "-"}</div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end">
+                      {window.veloceDesktop && (
+                        <Button
+                          size="sm"
+                          className="h-8 gap-2"
+                          onClick={() => regenerateAndConnectDevice(device)}
+                          disabled={Boolean(connectingDeviceID) || Boolean(generatingDeviceID) || deletingDeviceID === device.id}
+                        >
+                          <Play size={15} />
+                          {connectingDeviceID === device.id ? copy.connecting : copy.connectNow}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="sm"
@@ -465,6 +560,12 @@ const zhCopy = {
   unixCommand: "macOS / Linux",
   copy: "复制",
   copied: "已复制",
+  connectNow: "立即连接",
+  connecting: "连接中...",
+  connected: "连接器已启动",
+  connectedWithVersion: "连接器已启动（{version}）",
+  connectFailed: "连接失败",
+  desktopOnly: "立即连接仅在桌面应用中可用",
   created: "连接命令已生成",
   createFailed: "生成连接命令失败",
   regenerateCommand: "重新生成连接命令",
@@ -506,6 +607,12 @@ const enCopy: typeof zhCopy = {
   unixCommand: "macOS / Linux",
   copy: "Copy",
   copied: "Copied",
+  connectNow: "Connect now",
+  connecting: "Connecting...",
+  connected: "Connector started",
+  connectedWithVersion: "Connector started ({version})",
+  connectFailed: "Failed to connect",
+  desktopOnly: "Connect now is only available in the desktop app",
   created: "Connector command generated",
   createFailed: "Failed to generate connector command",
   regenerateCommand: "Regenerate command",

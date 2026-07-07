@@ -26,7 +26,7 @@ export default function Setup() {
   })
   const publicSettings = withPublicSettingsDefaults(settings)
   const [siteNameEdited, setSiteNameEdited] = useState(false)
-  const [siteName, setSiteName] = useState("WindyPear API")
+  const [siteName, setSiteName] = useState("Veloce")
   const [username, setUsername] = useState("")
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
@@ -59,9 +59,12 @@ export default function Setup() {
       }
       return body as SetupResponse
     },
-    onSuccess: (result) => {
+    onSuccess: async (result) => {
       setAuthToken(result.token)
       localStorage.removeItem("referral_code")
+      if (isDesktopTarget()) {
+        await api.put("/settings", { system_mode: "personal" }).catch(() => undefined)
+      }
       window.location.href = isDesktopTarget() ? "#/chat" : "/dashboard"
     },
     onError: (err) => error(err instanceof Error ? err.message : copy.failed),
