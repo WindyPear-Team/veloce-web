@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
-import api, { apiURL, isDesktopTarget } from "@/lib/api"
+import api, { apiURL, isDesktopTarget, setAuthToken } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
@@ -60,7 +60,7 @@ export default function Setup() {
       return body as SetupResponse
     },
     onSuccess: (result) => {
-      localStorage.setItem("token", result.token)
+      setAuthToken(result.token)
       localStorage.removeItem("referral_code")
       window.location.href = isDesktopTarget() ? "#/chat" : "/dashboard"
     },

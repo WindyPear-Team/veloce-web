@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Activity, ArrowDown, Bot, Check, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
-import api, { apiURL } from "@/lib/api"
+import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -373,6 +373,7 @@ const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
 
 export default function Chat({ variant = "basic" }: ChatProps) {
   const isAdvanced = variant === "advanced"
+  const isDesktop = isDesktopTarget()
   const storeKeys = chatStoreKeys[variant]
   const queryClient = useQueryClient()
   const navigate = useNavigate()
@@ -1710,7 +1711,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
         let accumulatedText = ""
         try {
-          const token = localStorage.getItem("token") || ""
+          const token = getAuthToken()
           const response = await fetch(apiURL("/api/user/advanced-chat/completions"), {
             method: "POST",
             headers: {
@@ -2434,10 +2435,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       ? null
       : createPortal(
           <>
-            <div className="fixed right-0 top-16 z-20 hidden h-[calc(100vh-4rem)] xl:flex">{sessionsSidebar}</div>
+            <div className={cn("fixed right-0 z-20 hidden xl:flex", isDesktop ? "top-[6.25rem] h-[calc(100vh-6.25rem)]" : "top-16 h-[calc(100vh-4rem)]")}>{sessionsSidebar}</div>
 
             {isSessionsSidebarOpen && (
-              <div className="fixed inset-0 top-16 z-40 xl:hidden">
+              <div className={cn("fixed inset-x-0 bottom-0 z-40 xl:hidden", isDesktop ? "top-[6.25rem]" : "top-16")}>
                 <button
                   type="button"
                   className="absolute inset-0 bg-black/50"
@@ -2452,7 +2453,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         )
 
   return (
-    <div className={cn(isAdvanced ? "flex min-h-[calc(100vh-4rem)] flex-col xl:pr-72" : "space-y-6 xl:pr-72")}>
+    <div className={cn(isAdvanced ? (isDesktop ? "flex min-h-[calc(100vh-6.25rem)] flex-col xl:pr-72" : "flex min-h-[calc(100vh-4rem)] flex-col xl:pr-72") : "space-y-6 xl:pr-72")}>
       {sessionsSidebarPortal}
       <div className="sticky top-0 z-10 -mx-4 flex justify-end border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex items-center gap-2">
@@ -2480,7 +2481,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         {!isAdvanced && basicConfig}
 
         {isAdvanced && currentSession?.messages.length === 0 ? (
-          <div className="flex min-h-[calc(100vh-14rem)] items-center justify-center py-8">
+          <div className={cn("flex items-center justify-center py-8", isDesktop ? "min-h-[calc(100vh-16.25rem)]" : "min-h-[calc(100vh-14rem)]")}>
             <div className="w-full max-w-3xl rounded-2xl border bg-card p-3 shadow-sm">
               <div className="relative">
                 <textarea

@@ -22,7 +22,7 @@ import { Button } from "@/components/ui/button"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
 import { PageTransition } from "@/components/layout/PageTransition"
-import api from "@/lib/api"
+import api, { isDesktopTarget } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { pageKeyFromPathname } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -62,10 +62,11 @@ export default function AdvancedChat() {
   const isChatRoute = location.pathname === "/chat" || location.pathname.startsWith("/chat/session/")
   const transitionKey = isChatRoute ? "/chat" : location.pathname
   const layoutEditorLabel = language === "zh" ? (isLayoutEditing ? "退出编辑" : "可视化编辑") : isLayoutEditing ? "Exit editing" : "Visual editing"
+  const viewportHeightClass = isDesktopTarget() ? "h-full" : "h-screen"
 
   if (isSettingsLoading) {
     return (
-      <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">
+      <div className={cn("flex items-center justify-center bg-background text-sm text-muted-foreground", viewportHeightClass)}>
         {t("common.loading")}
       </div>
     )
@@ -78,7 +79,7 @@ export default function AdvancedChat() {
       pageLayoutsRaw={publicSettings.page_layouts}
       onEditingChange={setIsLayoutEditing}
     >
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className={cn("flex flex-col overflow-hidden bg-background", viewportHeightClass)}>
       <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button

@@ -2,11 +2,17 @@ import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Server } from "lucide-react"
+import { Check, Globe2, Plus, Server } from "lucide-react"
 import Login from "./pages/Login"
 import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
-import api, { desktopServerStorageKey, getDesktopServerURL, normalizeServerURL } from "./lib/api"
+import api, {
+  getAuthToken,
+  getDesktopServerURL,
+  normalizeServerURL,
+  setAuthToken,
+  setDesktopServerURL,
+} from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
 import { ThemeProvider } from "./lib/theme"
 import { ToastProvider } from "./components/ui/toast"
@@ -14,6 +20,8 @@ import { Button } from "./components/ui/button"
 import { Input } from "./components/ui/input"
 
 const queryClient = new QueryClient()
+const desktopServersStorageKey = "veloce.desktop.servers"
+const desktopServerAccountPrefix = "veloce.desktop.server_account."
 
 interface SetupStatus {
   required: boolean
@@ -36,7 +44,26 @@ const getTokenFromURL = () => {
   return new URLSearchParams(window.location.search).get("token")
 }
 
-const hasAuthToken = () => Boolean(localStorage.getItem("token") || getTokenFromURL())
+const hasAuthToken = () => Boolean(getAuthToken() || getTokenFromURL())
+
+function serverAccountKey(serverURL: string) {
+  return `${desktopServerAccountPrefix}${encodeURIComponent(normalizeServerURL(serverURL))}`
+}
+
+function readServerList() {
+  const currentServer = getDesktopServerURL()
+  try {
+    const parsed = JSON.parse(localStorage.getItem(desktopServersStorageKey) || "[]")
+    const values = Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
+    return Array.from(new Set([currentServer, ...values.map(normalizeServerURL)]))
+  } catch {
+    return [currentServer]
+  }
+}
+
+function writeServerList(values: string[]) {
+  localStorage.setItem(desktopServersStorageKey, JSON.stringify(Array.from(new Set(values.map(normalizeServerURL)))))
+}
 
 function TokenBridge() {
   const location = useLocation()
@@ -47,7 +74,7 @@ function TokenBridge() {
     if (!token) {
       return
     }
-    localStorage.setItem("token", token)
+    setAuthToken(token)
     localStorage.removeItem("referral_code")
     navigate("/chat", { replace: true })
   }, [location.key, navigate])
@@ -110,44 +137,140 @@ function DocumentTitle() {
   return null
 }
 
-function DesktopServerSelector() {
+function DesktopTitleBar() {
   const { language } = useI18n()
   const queryClient = useQueryClient()
+  const [isOpen, setIsOpen] = useState(false)
   const [value, setValue] = useState(() => getDesktopServerURL())
+  const [servers, setServers] = useState(readServerList)
+  const currentServer = getDesktopServerURL()
   const copy = language === "zh"
-    ? { label: "服务器", placeholder: "http://localhost:12789", save: "保存" }
-    : { label: "Server", placeholder: "http://localhost:12789", save: "Save" }
+    ? { title: "Veloce", label: "服务器", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录" }
+    : { title: "Veloce", label: "Server", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in" }
+
+  const { data: user } = useQuery<{ username?: string; email?: string }>({
+    queryKey: ["desktop-me", currentServer, getAuthToken()],
+    queryFn: async () => {
+      const res = await api.get("/user/me")
+      return res.data
+    },
+    enabled: Boolean(getAuthToken()),
+    retry: false,
+  })
+
+  useEffect(() => {
+    const label = user?.username || user?.email
+    if (label) {
+      localStorage.setItem(serverAccountKey(currentServer), label)
+    }
+  }, [currentServer, user?.email, user?.username])
 
   const saveServer = () => {
-    const nextURL = normalizeServerURL(value)
-    localStorage.setItem(desktopServerStorageKey, nextURL)
+    const nextURL = setDesktopServerURL(value)
+    writeServerList([nextURL, ...servers])
     setValue(nextURL)
+    setServers(readServerList())
+    queryClient.clear()
+    window.location.reload()
+  }
+
+  const selectServer = (serverURL: string) => {
+    const nextURL = setDesktopServerURL(serverURL)
+    writeServerList([nextURL, ...servers])
+    setValue(nextURL)
+    setServers(readServerList())
     queryClient.clear()
     window.location.reload()
   }
 
   return (
-    <div className="fixed bottom-4 left-4 z-50 flex w-[min(480px,calc(100vw-2rem))] items-center gap-2 rounded-md border bg-background/95 p-2 shadow-lg backdrop-blur">
-      <div className="flex shrink-0 items-center gap-2 px-1 text-xs font-medium text-muted-foreground">
-        <Server size={15} />
-        <span>{copy.label}</span>
+    <div className="fixed inset-x-0 top-0 z-50 h-9 select-none border-b bg-background/95 backdrop-blur [-webkit-app-region:drag]">
+      <div className="flex h-full items-center justify-between pl-3 pr-[138px]">
+        <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+          <img src="/logo.png" alt="" className="h-5 w-5 rounded object-cover" />
+          <span className="truncate">{copy.title}</span>
+        </div>
+        <div className="relative [-webkit-app-region:no-drag]">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            title={copy.label}
+            aria-label={copy.label}
+            onClick={() => setIsOpen((open) => !open)}
+          >
+            <Globe2 size={16} />
+          </Button>
+          {isOpen && (
+            <div className="absolute right-0 top-9 w-[min(360px,calc(100vw-2rem))] rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
+              <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
+                <Server size={14} />
+                <span>{copy.label}</span>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  value={value}
+                  placeholder={copy.placeholder}
+                  className="h-8 min-w-0 text-xs"
+                  onChange={(event) => setValue(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") {
+                      saveServer()
+                    }
+                  }}
+                />
+                <Button className="h-8 shrink-0 px-3 text-xs" onClick={saveServer}>
+                  {copy.save}
+                </Button>
+              </div>
+              <div className="mt-3 max-h-64 space-y-1 overflow-y-auto">
+                {servers.map((serverURL) => {
+                  const selected = normalizeServerURL(serverURL) === currentServer
+                  const account = localStorage.getItem(serverAccountKey(serverURL)) || copy.anonymous
+                  return (
+                    <button
+                      key={serverURL}
+                      type="button"
+                      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-muted"
+                      onClick={() => selectServer(serverURL)}
+                    >
+                      <span className="flex h-5 w-5 shrink-0 items-center justify-center">
+                        {selected ? <Check size={14} /> : null}
+                      </span>
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate font-medium">{serverURL}</span>
+                        <span className="block truncate text-muted-foreground">
+                          {selected ? `${copy.current} · ${account}` : account}
+                        </span>
+                      </span>
+                    </button>
+                  )
+                })}
+              </div>
+              <Button
+                variant="ghost"
+                className="mt-2 h-8 w-full justify-start gap-2 text-xs"
+                onClick={() => {
+                  setValue(defaultServerCandidate(servers))
+                }}
+              >
+                <Plus size={14} />
+                {copy.placeholder}
+              </Button>
+            </div>
+          )}
+        </div>
       </div>
-      <Input
-        value={value}
-        placeholder={copy.placeholder}
-        className="h-8 min-w-0 text-xs"
-        onChange={(event) => setValue(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === "Enter") {
-            saveServer()
-          }
-        }}
-      />
-      <Button className="h-8 shrink-0 px-3 text-xs" onClick={saveServer}>
-        {copy.save}
-      </Button>
     </div>
   )
+}
+
+function defaultServerCandidate(servers: string[]) {
+  const base = "http://localhost:12789"
+  if (!servers.includes(base)) {
+    return base
+  }
+  return "http://"
 }
 
 function DesktopRoutes() {
@@ -155,23 +278,25 @@ function DesktopRoutes() {
     <HashRouter>
       <TokenBridge />
       <DocumentTitle />
-      <DesktopServerSelector />
-      <SetupGate>
-        <Routes>
-          <Route path="/" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/setup" element={<Setup />} />
-          <Route
-            path="/chat/*"
-            element={
-              <ProtectedRoute>
-                <AdvancedChat />
-              </ProtectedRoute>
-            }
-          />
-          <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
-        </Routes>
-      </SetupGate>
+      <DesktopTitleBar />
+      <div className="fixed inset-x-0 bottom-0 top-9 overflow-hidden">
+        <SetupGate>
+          <Routes>
+            <Route path="/" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/setup" element={<Setup />} />
+            <Route
+              path="/chat/*"
+              element={
+                <ProtectedRoute>
+                  <AdvancedChat />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
+          </Routes>
+        </SetupGate>
+      </div>
     </HashRouter>
   )
 }
