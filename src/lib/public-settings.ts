@@ -102,7 +102,7 @@ export const defaultPublicSettings: PublicSettings = {
   chat_page_mode: "basic",
   site_name: "flai",
   base_url: "",
-  icon_url: "",
+  icon_url: "/logo.png",
   footer_text: "",
   about_html: "",
   home_iframe_url: "",
