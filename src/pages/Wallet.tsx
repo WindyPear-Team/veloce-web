@@ -8,7 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import type { PublicSettings } from "@/lib/public-settings"
-import { withPublicSettingsDefaults } from "@/lib/public-settings"
+import { isPersonalMode, withPublicSettingsDefaults } from "@/lib/public-settings"
 
 interface CurrentUser {
   balance: string | number
@@ -88,6 +88,7 @@ export default function Wallet() {
     },
   })
   const publicSettings = withPublicSettingsDefaults(settings)
+  const personalMode = isPersonalMode(publicSettings)
   const currency = publicSettings.payment_currency_display_name
 
   const { data: referralInfo } = useQuery<ReferralInfo>({
@@ -181,8 +182,8 @@ export default function Wallet() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="text-4xl font-semibold">{currency}{user?.balance || 0}</div>
-            <div className="mt-2 text-sm text-muted-foreground">{copy.balanceDescription}</div>
+            <div className="text-4xl font-semibold">{personalMode ? copy.personalModeBalance : `${currency}${user?.balance || 0}`}</div>
+            <div className="mt-2 text-sm text-muted-foreground">{personalMode ? copy.personalModeBalanceDescription : copy.balanceDescription}</div>
           </CardContent>
         </Card>
 
@@ -227,6 +228,7 @@ export default function Wallet() {
 
       <PageInlineSlot slotKey="primary" />
       <div className="grid gap-4 lg:grid-cols-2">
+        {!personalMode && (
         <Card>
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
@@ -244,6 +246,7 @@ export default function Wallet() {
             {redeemStatus && <div className="text-sm text-muted-foreground">{redeemStatus}</div>}
           </CardContent>
         </Card>
+        )}
 
         {publicSettings.checkin_enabled && (
           <Card>
@@ -366,6 +369,8 @@ const zhWalletCopy = {
   subtitle: "查看余额、充值、兑换码、签到奖励和资金明细",
   balance: "当前余额",
   balanceDescription: "余额用于 API 调用计费。",
+  personalModeBalance: "不限额",
+  personalModeBalanceDescription: "当前为自用模式，API 调用不会扣减余额或触发额度限制。",
   rechargeBalance: "余额充值",
   rechargeDescription: "最低充值 {min}，支付按汇率 1 = ¥{rate} 换算人民币。",
   rechargeAmountPlaceholder: "充值金额",
@@ -415,6 +420,8 @@ const enWalletCopy: typeof zhWalletCopy = {
   subtitle: "Manage balance, recharge, redeem codes, check-in rewards, and wallet details",
   balance: "Current balance",
   balanceDescription: "Balance is used for API call billing.",
+  personalModeBalance: "Unlimited",
+  personalModeBalanceDescription: "Personal mode is enabled. API calls do not deduct balance or trigger quota limits.",
   rechargeBalance: "Balance recharge",
   rechargeDescription: "Minimum recharge {min}. Payments are converted to RMB at 1 = ¥{rate}.",
   rechargeAmountPlaceholder: "Recharge amount",

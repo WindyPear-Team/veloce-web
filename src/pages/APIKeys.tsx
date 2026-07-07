@@ -16,6 +16,8 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
+import type { PublicSettings } from "@/lib/public-settings"
+import { isPersonalMode, withPublicSettingsDefaults } from "@/lib/public-settings"
 
 interface UserChannelCatalog {
   id: number
@@ -74,6 +76,15 @@ export default function APIKeys() {
   const [newModels, setNewModels] = useState<string[]>([])
   const [newIPs, setNewIPs] = useState("")
   const [newQuotaLimit, setNewQuotaLimit] = useState("")
+  const { data: settings } = useQuery<PublicSettings>({
+    queryKey: ["public-settings"],
+    queryFn: async () => {
+      const res = await api.get("/public/settings")
+      return res.data
+    },
+  })
+  const publicSettings = withPublicSettingsDefaults(settings)
+  const personalMode = isPersonalMode(publicSettings)
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -97,9 +108,9 @@ export default function APIKeys() {
       const payload: APIKeyPayload = {
         name: newName || "API key",
         allowed_models: newModels,
-        allowed_user_channels: newChannelId ? [newChannelId] : [],
+        allowed_user_channels: personalMode ? [] : newChannelId ? [newChannelId] : [],
         allowed_ips: parseCSV(newIPs),
-        quota_limit: parseQuotaLimit(newQuotaLimit),
+        quota_limit: personalMode ? "0" : parseQuotaLimit(newQuotaLimit),
       }
       const res = await api.post("/user/api-keys", payload)
       return res.data
@@ -220,6 +231,7 @@ export default function APIKeys() {
                 onRotate={(id) => rotateAPIKey.mutate(id)}
                 onResetUsage={(id) => resetAPIKeyUsage.mutate(id)}
                 onCopy={copyValue}
+                personalMode={personalMode}
               />
             ))
           )}
@@ -239,29 +251,33 @@ export default function APIKeys() {
             <FieldLabel label={t("settings.keyName")}>
               <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder={t("settings.keyName")} />
             </FieldLabel>
-            <RestrictionPicker
-              catalog={catalog}
-              channelId={newChannelId}
-              models={newModels}
-              onChannelIdChange={(channelId) => {
-                setNewChannelId(channelId)
-                setNewModels([])
-              }}
-              onModelsChange={setNewModels}
-            />
+            {!personalMode && (
+              <RestrictionPicker
+                catalog={catalog}
+                channelId={newChannelId}
+                models={newModels}
+                onChannelIdChange={(channelId) => {
+                  setNewChannelId(channelId)
+                  setNewModels([])
+                }}
+                onModelsChange={setNewModels}
+              />
+            )}
             <FieldLabel label={t("settings.allowedIPs")}>
               <Input value={newIPs} onChange={(e) => setNewIPs(e.target.value)} placeholder={t("settings.ipsPlaceholder")} />
             </FieldLabel>
-            <FieldLabel label={t("settings.quotaLimit")}>
-              <Input
-                type="number"
-                min="0"
-                step="0.000001"
-                value={newQuotaLimit}
-                onChange={(e) => setNewQuotaLimit(e.target.value)}
-                placeholder={t("settings.quotaPlaceholder")}
-              />
-            </FieldLabel>
+            {!personalMode && (
+              <FieldLabel label={t("settings.quotaLimit")}>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  value={newQuotaLimit}
+                  onChange={(e) => setNewQuotaLimit(e.target.value)}
+                  placeholder={t("settings.quotaPlaceholder")}
+                />
+              </FieldLabel>
+            )}
           </div>
 
           {newRawKey && (
@@ -282,7 +298,7 @@ export default function APIKeys() {
               {newRawKey ? t("common.close") : t("common.cancel")}
             </Button>
             {!newRawKey && (
-              <Button className="gap-2" onClick={() => createAPIKey.mutate()} disabled={createAPIKey.isPending || !newChannelId}>
+              <Button className="gap-2" onClick={() => createAPIKey.mutate()} disabled={createAPIKey.isPending || (!personalMode && !newChannelId)}>
                 <Plus size={16} />
                 {createAPIKey.isPending ? t("settings.creatingKey") : t("settings.createKey")}
               </Button>
@@ -302,6 +318,7 @@ function APIKeyRow({
   onRotate,
   onResetUsage,
   onCopy,
+  personalMode,
 }: {
   apiKey: APIKey
   catalog: UserChannelCatalog[]
@@ -310,6 +327,7 @@ function APIKeyRow({
   onRotate: (id: number) => void
   onResetUsage: (id: number) => void
   onCopy: (value: string) => void
+  personalMode: boolean
 }) {
   const { t } = useI18n()
   const [isConfigOpen, setIsConfigOpen] = useState(false)
@@ -325,9 +343,9 @@ function APIKeyRow({
   const payload = (enabled = apiKey.enabled): APIKeyPayload => ({
     name,
     allowed_models: models,
-    allowed_user_channels: channelId ? [channelId] : [],
+    allowed_user_channels: personalMode ? [] : channelId ? [channelId] : [],
     allowed_ips: parseCSV(ips),
-    quota_limit: parseQuotaLimit(quotaLimit),
+    quota_limit: personalMode ? "0" : parseQuotaLimit(quotaLimit),
     enabled,
   })
 
@@ -388,18 +406,18 @@ function APIKeyRow({
 
       <div className="text-sm text-muted-foreground">
         {t("settings.scopeSummary", {
-          channels: channelName(catalog, allowedChannels[0] || 0) || "-",
+          channels: personalMode ? t("settings.unrestricted") : channelName(catalog, allowedChannels[0] || 0) || "-",
           models: allowedModels.length || t("settings.unrestricted"),
           ips: allowedIPs.length || t("settings.unrestricted"),
         })}
       </div>
 
-      <div className="grid gap-2 text-sm sm:grid-cols-5">
+      <div className="grid gap-2 text-sm sm:grid-cols-4">
         <UsageBox label={t("settings.requests")} value={formatInteger(apiKey.usage.request_count)} />
         <UsageBox label={t("settings.totalTokens")} value={formatInteger(apiKey.usage.total_tokens)} />
         <UsageBox label={t("settings.inputTokens")} value={formatInteger(apiKey.usage.input_tokens)} />
         <UsageBox label={t("settings.totalCost")} value={formatCost(apiKey.usage.total_cost)} />
-        <UsageBox label={t("settings.quotaRemaining")} value={formatQuotaRemaining(apiKey, t("settings.unlimitedQuota"))} />
+        {!personalMode && <UsageBox label={t("settings.quotaRemaining")} value={formatQuotaRemaining(apiKey, t("settings.unlimitedQuota"))} />}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -433,36 +451,40 @@ function APIKeyRow({
             <FieldLabel label={t("settings.keyName")}>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder={t("settings.keyName")} />
             </FieldLabel>
-            <RestrictionPicker
-              catalog={catalog}
-              channelId={channelId}
-              models={models}
-              onChannelIdChange={(nextChannelId) => {
-                setChannelId(nextChannelId)
-                setModels([])
-              }}
-              onModelsChange={setModels}
-            />
+            {!personalMode && (
+              <RestrictionPicker
+                catalog={catalog}
+                channelId={channelId}
+                models={models}
+                onChannelIdChange={(nextChannelId) => {
+                  setChannelId(nextChannelId)
+                  setModels([])
+                }}
+                onModelsChange={setModels}
+              />
+            )}
             <FieldLabel label={t("settings.allowedIPs")}>
               <Input value={ips} onChange={(e) => setIPs(e.target.value)} placeholder={t("settings.ipsPlaceholder")} />
             </FieldLabel>
-            <FieldLabel label={t("settings.quotaLimit")}>
-              <Input
-                type="number"
-                min="0"
-                step="0.000001"
-                value={quotaLimit}
-                onChange={(e) => setQuotaLimit(e.target.value)}
-                placeholder={t("settings.quotaPlaceholder")}
-              />
-            </FieldLabel>
+            {!personalMode && (
+              <FieldLabel label={t("settings.quotaLimit")}>
+                <Input
+                  type="number"
+                  min="0"
+                  step="0.000001"
+                  value={quotaLimit}
+                  onChange={(e) => setQuotaLimit(e.target.value)}
+                  placeholder={t("settings.quotaPlaceholder")}
+                />
+              </FieldLabel>
+            )}
           </div>
 
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsConfigOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button className="gap-2" onClick={saveConfig} disabled={!channelId}>
+            <Button className="gap-2" onClick={saveConfig} disabled={!personalMode && !channelId}>
               <Save size={14} />
               {t("settings.save")}
             </Button>

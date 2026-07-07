@@ -841,6 +841,14 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       {activeTab === "basic" && (
         <SettingsPanel title={copy.basic}>
           <div className="grid gap-4 lg:grid-cols-2">
+            <label className="grid gap-2 text-sm lg:col-span-2">
+              <span className="font-medium">{copy.systemMode}</span>
+              <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.system_mode || "operation"} onChange={(event) => updateField("system_mode", event.target.value)}>
+                <option value="operation">{copy.systemModeOperation}</option>
+                <option value="personal">{copy.systemModePersonal}</option>
+              </select>
+              <span className="text-xs text-muted-foreground">{copy.systemModeHint}</span>
+            </label>
             <TextField label={copy.siteName} value={form.site_name} placeholder={copy.siteNamePlaceholder} onChange={(value) => updateField("site_name", value)} />
             <TextField label={copy.baseURL} value={form.base_url} placeholder={copy.baseURLPlaceholder} onChange={(value) => updateField("base_url", value)} />
             <TextField label={copy.iconURL} value={form.icon_url} placeholder={copy.iconURLPlaceholder} onChange={(value) => updateField("icon_url", value)} />
@@ -3416,6 +3424,10 @@ const zhCopy = {
   overview: "概览",
   systemSubtitle: "配置站点、认证、页面内容、导航、分组和兑换码",
   basic: "基础设置",
+  systemMode: "运行模式",
+  systemModeOperation: "运营模式",
+  systemModePersonal: "自用模式",
+  systemModeHint: "自用模式会在运行时关闭余额扣费、额度限制、用户渠道区分、支付、兑换码和订阅额度功能，底层字段与历史数据不变。",
   theme: "主题设置",
   themeSettings: "网站主题",
   themeSettingsDescription: "配置全站浅色和深色模式下的主题颜色、强调色、背景、文字和边框。",
@@ -3788,6 +3800,10 @@ const enCopy: SystemCopy = {
   overview: "Overview",
   systemSubtitle: "Configure site, auth, content, navigation, groups, and redeem codes",
   basic: "Basic",
+  systemMode: "Run mode",
+  systemModeOperation: "Operation mode",
+  systemModePersonal: "Personal mode",
+  systemModeHint: "Personal mode disables balance charging, quotas, user-channel separation, payment, redeem codes, and subscription quota features at runtime while keeping stored fields and history unchanged.",
   theme: "Theme",
   themeSettings: "Site theme",
   themeSettingsDescription: "Configure site theme colors, accents, backgrounds, text, and borders for light and dark modes.",

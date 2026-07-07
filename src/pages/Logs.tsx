@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
@@ -15,6 +15,8 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useI18n } from "@/lib/i18n"
+import type { PublicSettings } from "@/lib/public-settings"
+import { isPersonalMode, withPublicSettingsDefaults } from "@/lib/public-settings"
 
 interface TokenLog {
   id: number
@@ -73,6 +75,21 @@ export default function Logs() {
   const [callPage, setCallPage] = useState(1)
   const [paymentPage, setPaymentPage] = useState(1)
   const [checkInPage, setCheckInPage] = useState(1)
+  const { data: settings } = useQuery<PublicSettings>({
+    queryKey: ["public-settings"],
+    queryFn: async () => {
+      const res = await api.get("/public/settings")
+      return res.data
+    },
+  })
+  const personalMode = isPersonalMode(withPublicSettingsDefaults(settings))
+  const tabOrder: DetailTab[] = personalMode ? ["calls", "checkIns"] : ["calls", "payments", "checkIns"]
+
+  useEffect(() => {
+    if (personalMode && activeTab === "payments") {
+      setActiveTab("calls")
+    }
+  }, [activeTab, personalMode])
 
   const { data: apiKeys = [] } = useQuery<APIKeyOption[]>({
     queryKey: ["api-keys", "log-filters"],
@@ -94,6 +111,7 @@ export default function Logs() {
       const res = await api.get("/user/payment/orders", { params: pageQueryParams(paymentPage, startDate, endDate) })
       return paginatedResult<PaymentOrder>(res.data, paymentPage)
     },
+    enabled: !personalMode,
   })
   const { data: checkInRecords = emptyPage<CheckInRecord>(checkInPage), isLoading: isCheckInRecordsLoading } = useQuery<PaginatedResult<CheckInRecord>>({
     queryKey: ["check-in-records", "paged", checkInPage, startDate, endDate],
@@ -135,16 +153,18 @@ export default function Logs() {
         <Button variant={activeTab === "calls" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("calls")}>
           {copy.callRecords}
         </Button>
-        <Button variant={activeTab === "payments" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("payments")}>
-          {copy.paymentOrders}
-        </Button>
+        {!personalMode && (
+          <Button variant={activeTab === "payments" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("payments")}>
+            {copy.paymentOrders}
+          </Button>
+        )}
         <Button variant={activeTab === "checkIns" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("checkIns")}>
           {copy.checkInRecords}
         </Button>
       </div>
 
       <PageInlineSlot slotKey="primary" />
-      <TabTransition activeKey={activeTab} order={["calls", "payments", "checkIns"]}>
+      <TabTransition activeKey={activeTab} order={tabOrder}>
         {activeTab === "calls" && (
           <CallRecordsTable
             logs={logs}
@@ -165,7 +185,7 @@ export default function Logs() {
             onPageChange={setCallPage}
           />
         )}
-        {activeTab === "payments" && (
+        {!personalMode && activeTab === "payments" && (
           <PaymentOrdersTable
             orders={paymentOrders}
             loading={isPaymentOrdersLoading}

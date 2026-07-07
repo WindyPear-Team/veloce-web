@@ -1,5 +1,6 @@
 export interface PublicSettings {
   edition: "community" | "premium" | string
+  system_mode: "operation" | "personal" | string
   chat_page_mode: "basic" | "advanced" | string
   site_name: string
   base_url: string
@@ -97,6 +98,7 @@ export interface PublicSettings {
 
 export const defaultPublicSettings: PublicSettings = {
   edition: "community",
+  system_mode: "operation",
   chat_page_mode: "basic",
   site_name: "flai",
   base_url: "",
@@ -198,6 +200,10 @@ export function withPublicSettingsDefaults(settings?: Partial<PublicSettings>): 
 
 export function isPremiumEdition(settings?: Partial<Pick<PublicSettings, "edition">>) {
   return String(settings?.edition ?? defaultPublicSettings.edition).trim().toLowerCase() === "premium"
+}
+
+export function isPersonalMode(settings?: Partial<Pick<PublicSettings, "system_mode">>) {
+  return String(settings?.system_mode ?? defaultPublicSettings.system_mode).trim().toLowerCase() === "personal"
 }
 
 export function isAdvancedChatEnabled(settings?: Partial<PublicSettings>) {
