@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -18,10 +18,20 @@ import { ThemeProvider } from "./lib/theme"
 import { ToastProvider } from "./components/ui/toast"
 import { Button } from "./components/ui/button"
 import { Input } from "./components/ui/input"
+import logoURL from "./assets/logo.png"
 
 const queryClient = new QueryClient()
 const desktopServersStorageKey = "veloce.desktop.servers"
 const desktopServerAccountPrefix = "veloce.desktop.server_account."
+
+interface BuiltinServerStatus {
+  enabled: boolean
+  running: boolean
+  phase: "idle" | "checking" | "downloading" | "starting" | "running" | "error"
+  message: string
+  serverURL: string
+  version: string
+}
 
 interface SetupStatus {
   required: boolean
@@ -140,13 +150,16 @@ function DocumentTitle() {
 function DesktopTitleBar() {
   const { language } = useI18n()
   const queryClient = useQueryClient()
+  const popupRef = useRef<HTMLDivElement | null>(null)
   const [isOpen, setIsOpen] = useState(false)
   const [value, setValue] = useState(() => getDesktopServerURL())
   const [servers, setServers] = useState(readServerList)
+  const [builtinStatus, setBuiltinStatus] = useState<BuiltinServerStatus | null>(null)
+  const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
   const currentServer = getDesktopServerURL()
   const copy = language === "zh"
-    ? { title: "Veloce", label: "服务器", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录" }
-    : { title: "Veloce", label: "Server", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in" }
+    ? { title: "Veloce", label: "服务器", placeholder: "http://localhost:12789", save: "保存", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", builtinStarting: "正在准备内置服务器...", builtinUnavailable: "桌面桥接未就绪" }
+    : { title: "Veloce", label: "Server", placeholder: "http://localhost:12789", save: "Save", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", builtinStarting: "Preparing built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
 
   const { data: user } = useQuery<{ username?: string; email?: string }>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
@@ -164,6 +177,38 @@ function DesktopTitleBar() {
       localStorage.setItem(serverAccountKey(currentServer), label)
     }
   }, [currentServer, user?.email, user?.username])
+
+  useEffect(() => {
+    if (!isOpen) {
+      return
+    }
+    const closeOnOutsidePointer = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && popupRef.current?.contains(target)) {
+        return
+      }
+      setIsOpen(false)
+    }
+    document.addEventListener("pointerdown", closeOnOutsidePointer)
+    return () => document.removeEventListener("pointerdown", closeOnOutsidePointer)
+  }, [isOpen])
+
+  useEffect(() => {
+    let cancelled = false
+    void window.veloceDesktop?.getBuiltinServerStatus().then((status) => {
+      if (!cancelled) {
+        setBuiltinStatus(status)
+      }
+    })
+    const unsubscribe = window.veloceDesktop?.onBuiltinServerStatus((status) => {
+      setBuiltinStatus(status)
+      setIsBuiltinBusy(status.phase === "checking" || status.phase === "downloading" || status.phase === "starting")
+    })
+    return () => {
+      cancelled = true
+      unsubscribe?.()
+    }
+  }, [])
 
   const saveServer = () => {
     const nextURL = setDesktopServerURL(value)
@@ -183,14 +228,31 @@ function DesktopTitleBar() {
     window.location.reload()
   }
 
+  const toggleBuiltinServer = async () => {
+    if (!window.veloceDesktop || isBuiltinBusy) {
+      return
+    }
+    const nextEnabled = !builtinStatus?.enabled
+    setIsBuiltinBusy(true)
+    const status = await window.veloceDesktop.setBuiltinServerEnabled(nextEnabled)
+    setBuiltinStatus(status)
+    setIsBuiltinBusy(status.phase === "checking" || status.phase === "downloading" || status.phase === "starting")
+    if (status.enabled && status.serverURL) {
+      const nextURL = setDesktopServerURL(status.serverURL)
+      writeServerList([nextURL, ...servers])
+      queryClient.clear()
+      window.location.reload()
+    }
+  }
+
   return (
     <div className="fixed inset-x-0 top-0 z-50 h-9 select-none border-b bg-background/95 backdrop-blur [-webkit-app-region:drag]">
       <div className="flex h-full items-center justify-between pl-3 pr-[138px]">
         <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
-          <img src="/logo.png" alt="" className="h-5 w-5 rounded object-cover" />
+          <img src={logoURL} alt="" className="h-5 w-5 rounded object-cover" />
           <span className="truncate">{copy.title}</span>
         </div>
-        <div className="relative [-webkit-app-region:no-drag]">
+        <div ref={popupRef} className="relative [-webkit-app-region:no-drag]">
           <Button
             variant="ghost"
             size="icon"
@@ -257,6 +319,26 @@ function DesktopTitleBar() {
                 <Plus size={14} />
                 {copy.placeholder}
               </Button>
+              <div className="mt-3 border-t pt-3">
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={Boolean(builtinStatus?.enabled)}
+                  className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
+                  disabled={isBuiltinBusy || !window.veloceDesktop}
+                  onClick={toggleBuiltinServer}
+                >
+                  <span className="min-w-0">
+                    <span className="block font-medium">{copy.builtin}</span>
+                    <span className="block truncate text-muted-foreground">
+                      {!window.veloceDesktop ? copy.builtinUnavailable : isBuiltinBusy ? copy.builtinStarting : builtinStatus?.message || builtinStatus?.serverURL || copy.placeholder}
+                    </span>
+                  </span>
+                  <span className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${builtinStatus?.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
+                    <span className={`h-4 w-4 rounded-full bg-background shadow transition-transform ${builtinStatus?.enabled ? "translate-x-4" : ""}`} />
+                  </span>
+                </button>
+              </div>
             </div>
           )}
         </div>
