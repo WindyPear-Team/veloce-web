@@ -155,10 +155,6 @@ interface ChatSkill {
   id: string
   name: string
   description: string
-  prompt: string
-  mcp_server_ids: string[]
-  created_at: string
-  updated_at: string
 }
 
 interface ChatAgentGroupAgent {
@@ -630,16 +626,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     const selectedIDs = new Set(currentSession?.skill_ids || [])
     return skills.filter((skill) => !selectedIDs.has(skill.id))
   }, [currentSession?.skill_ids, skills])
-  const skillMCPServerIDs = useMemo(() => uniqueStrings(selectedSkills.flatMap((skill) => skill.mcp_server_ids || [])), [selectedSkills])
   const sessionMCPServers = useMemo(() => {
     const selectedIDs = new Set(currentSession?.mcp_server_ids || [])
     return enabledMCPServers.filter((server) => selectedIDs.has(server.id))
   }, [currentSession?.mcp_server_ids, enabledMCPServers])
   const availableMCPServersToAdd = useMemo(() => {
     const selectedIDs = new Set(currentSession?.mcp_server_ids || [])
-    const skillSelectedIDs = new Set(skillMCPServerIDs)
-    return enabledMCPServers.filter((server) => !selectedIDs.has(server.id) && !skillSelectedIDs.has(server.id))
-  }, [currentSession?.mcp_server_ids, enabledMCPServers, skillMCPServerIDs])
+    return enabledMCPServers.filter((server) => !selectedIDs.has(server.id))
+  }, [currentSession?.mcp_server_ids, enabledMCPServers])
   const selectedConnectorDevice = useMemo(
     () => connectorDevices.find((device) => device.id === currentSession?.connector_device_id),
     [currentSession?.connector_device_id, connectorDevices]
@@ -1571,7 +1565,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           return
         }
       }
-      if (!currentAdvancedSettings.assistant_mcp_tools_enabled && ((session.mcp_server_ids || []).length > 0 || selectedSkills.some((skill) => (skill.mcp_server_ids || []).length > 0))) {
+      if (!currentAdvancedSettings.assistant_mcp_tools_enabled && (session.mcp_server_ids || []).length > 0) {
         error(copy.assistantMCPToolsDisabled)
         return
       }
@@ -3102,7 +3096,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       <Link to="/chat/mcp">{copy.manageMCP}</Link>
                     </Button>
                   </div>
-                  {sessionMCPServers.length === 0 && skillMCPServerIDs.length === 0 ? (
+                  {sessionMCPServers.length === 0 ? (
                     <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{copy.noMCPServersAdded}</div>
                   ) : (
                     <div className="space-y-2">
@@ -3117,17 +3111,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                           </Button>
                         </div>
                       ))}
-                      {enabledMCPServers
-                        .filter((server) => skillMCPServerIDs.includes(server.id) && !(currentSession?.mcp_server_ids || []).includes(server.id))
-                        .map((server) => (
-                          <div key={`skill-${server.id}`} className="rounded-md border bg-muted/40 p-3">
-                            <div className="flex min-w-0 items-center gap-2">
-                              <span className="truncate text-sm font-medium">{server.name}</span>
-                              <span className="shrink-0 rounded-md bg-background px-1.5 py-0.5 text-[11px] text-muted-foreground">{copy.fromSkill}</span>
-                            </div>
-                            <div className="mt-1 truncate text-xs text-muted-foreground">{server.url}</div>
-                          </div>
-                        ))}
                     </div>
                   )}
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
@@ -5204,10 +5187,6 @@ function normalizeSkill(value: unknown): ChatSkill | null {
     id,
     name: typeof value.name === "string" ? value.name : "",
     description: typeof value.description === "string" ? value.description : "",
-    prompt: typeof value.prompt === "string" ? value.prompt : "",
-    mcp_server_ids: stringArrayFromUnknown(value.mcp_server_ids),
-    created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
-    updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
 }
 

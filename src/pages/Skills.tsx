@@ -1,243 +1,187 @@
-import { useMemo, useState } from "react"
+import { useRef, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Plus, Save, Server, Sparkles, Trash2, Wand2 } from "lucide-react"
+import { PackageOpen, Sparkles, Trash2, Upload } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
-import { useI18n, type TranslationKey } from "@/lib/i18n"
-import { cn } from "@/lib/utils"
+import { useI18n } from "@/lib/i18n"
 
-interface MCPServer {
+interface PackagedSkill {
   id: string
-  name: string
-  url: string
-  enabled: boolean
-  request_mode: "backend" | "frontend" | string
-}
-
-interface AdvancedChatUserSettings {
-  mcp_servers: MCPServer[]
-  builtin_mcp_servers: MCPServer[]
-  custom_mcp_servers: MCPServer[]
-}
-
-interface ChatSkill {
-  id: string
+  package_id: string
   name: string
   description: string
-  prompt: string
-  mcp_server_ids: string[]
+  source: string
+  skill_path: string
+  root_path: string
+  enabled: boolean
+  size: number
+  hash: string
   created_at: string
   updated_at: string
 }
 
-interface PromptTemplate {
+interface SkillPackage {
   id: string
-  title: string
-  description: string
-  prompt: string
+  name: string
+  source_name: string
+  size: number
+  file_count: number
+  hash: string
+  status: string
+  error_text?: string
+  skills: PackagedSkill[]
+  created_at: string
+  updated_at: string
 }
 
 const skillsQueryKey = ["advanced-chat-skills"] as const
-
-const promptTemplateDefinitions = [
-  {
-    id: "code-review",
-    titleKey: "advancedChat.skills.template.codeReview.title",
-    descriptionKey: "advancedChat.skills.template.codeReview.description",
-    promptKey: "advancedChat.skills.template.codeReview.prompt",
-  },
-  {
-    id: "writing",
-    titleKey: "advancedChat.skills.template.writing.title",
-    descriptionKey: "advancedChat.skills.template.writing.description",
-    promptKey: "advancedChat.skills.template.writing.prompt",
-  },
-  {
-    id: "translation",
-    titleKey: "advancedChat.skills.template.translation.title",
-    descriptionKey: "advancedChat.skills.template.translation.description",
-    promptKey: "advancedChat.skills.template.translation.prompt",
-  },
-  {
-    id: "data-analysis",
-    titleKey: "advancedChat.skills.template.dataAnalysis.title",
-    descriptionKey: "advancedChat.skills.template.dataAnalysis.description",
-    promptKey: "advancedChat.skills.template.dataAnalysis.prompt",
-  },
-  {
-    id: "tutor",
-    titleKey: "advancedChat.skills.template.tutor.title",
-    descriptionKey: "advancedChat.skills.template.tutor.description",
-    promptKey: "advancedChat.skills.template.tutor.prompt",
-  },
-  {
-    id: "blank",
-    titleKey: "advancedChat.skills.template.blank.title",
-    descriptionKey: "advancedChat.skills.template.blank.description",
-    promptKey: "advancedChat.skills.template.blank.prompt",
-  },
-] as const satisfies readonly {
-  id: string
-  titleKey: TranslationKey
-  descriptionKey: TranslationKey
-  promptKey: TranslationKey
-}[]
+const skillPackagesQueryKey = ["advanced-chat-skill-packages"] as const
 
 export default function Skills() {
   const queryClient = useQueryClient()
   const { error, success } = useToast()
   const { t } = useI18n()
+  const fileInputRef = useRef<HTMLInputElement | null>(null)
+  const [uploading, setUploading] = useState(false)
+  const [deletingPackageID, setDeletingPackageID] = useState("")
 
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [editingSkillID, setEditingSkillID] = useState("")
-  const [name, setName] = useState("")
-  const [description, setDescription] = useState("")
-  const [prompt, setPrompt] = useState("")
-  const [selectedServerIDs, setSelectedServerIDs] = useState<string[]>([])
-  const [selectedTemplateID, setSelectedTemplateID] = useState("")
-  const [isSaving, setIsSaving] = useState(false)
-  const [deletingSkillID, setDeletingSkillID] = useState("")
-
-  const { data: settings } = useQuery<AdvancedChatUserSettings>({
-    queryKey: ["advanced-chat-user-settings"],
+  const { data: packages = [] } = useQuery<SkillPackage[]>({
+    queryKey: skillPackagesQueryKey,
     queryFn: async () => {
-      const res = await api.get("/user/advanced-chat/settings")
-      return normalizeUserSettings(res.data)
+      const res = await api.get("/user/advanced-chat/skill-packages")
+      const raw = isRecord(res.data) && Array.isArray(res.data.packages) ? res.data.packages : []
+      return raw.map(normalizeSkillPackage).filter((item): item is SkillPackage => Boolean(item))
     },
   })
 
-  const { data: skills = [] } = useQuery<ChatSkill[]>({
-    queryKey: skillsQueryKey,
-    queryFn: async () => {
-      const res = await api.get("/user/advanced-chat/skills")
-      return Array.isArray(res.data)
-        ? res.data.map(normalizeSkill).filter((skill): skill is ChatSkill => Boolean(skill))
-        : []
-    },
-  })
-
-  const mcpServers = useMemo<MCPServer[]>(
-    () => settings?.mcp_servers || mergeMCPServers(settings?.builtin_mcp_servers || [], settings?.custom_mcp_servers || []),
-    [settings?.builtin_mcp_servers, settings?.custom_mcp_servers, settings?.mcp_servers]
-  )
-  const serverName = useMemo(() => {
-    const map = new Map<string, string>()
-    mcpServers.forEach((server) => map.set(server.id, server.name))
-    return map
-  }, [mcpServers])
-  const promptTemplates = useMemo<PromptTemplate[]>(
-    () =>
-      promptTemplateDefinitions.map((template) => ({
-        id: template.id,
-        title: t(template.titleKey),
-        description: t(template.descriptionKey),
-        prompt: t(template.promptKey),
-      })),
-    [t]
-  )
-
-  const resetForm = () => {
-    setEditingSkillID("")
-    setName("")
-    setDescription("")
-    setPrompt("")
-    setSelectedServerIDs([])
-    setSelectedTemplateID("")
-  }
-
-  const openCreateDialog = () => {
-    resetForm()
-    setName(t("advancedChat.skills.defaultName"))
-    setIsEditOpen(true)
-  }
-
-  const openEditDialog = (skill: ChatSkill) => {
-    setEditingSkillID(skill.id)
-    setName(skill.name)
-    setDescription(skill.description)
-    setPrompt(skill.prompt)
-    setSelectedServerIDs(skill.mcp_server_ids)
-    setSelectedTemplateID("")
-    setIsEditOpen(true)
-  }
-
-  const applyTemplate = (templateID: string) => {
-    setSelectedTemplateID(templateID)
-    const template = promptTemplates.find((item) => item.id === templateID)
-    if (template) {
-      setPrompt(template.prompt)
-    }
-  }
-
-  const toggleServer = (id: string) => {
-    setSelectedServerIDs((current) =>
-      current.includes(id) ? current.filter((item) => item !== id) : [...current, id]
-    )
-  }
-
-  const saveSkill = async () => {
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      error(t("advancedChat.skills.nameRequired"))
+  const uploadPackage = async (file: File | undefined) => {
+    if (!file) {
       return
     }
-
-    const payload = {
-      name: trimmedName,
-      description: description.trim(),
-      prompt: prompt.trim(),
-      mcp_server_ids: selectedServerIDs,
+    const lower = file.name.toLowerCase()
+    if (!lower.endsWith(".zip") && !lower.endsWith(".tar.gz") && !lower.endsWith(".tgz")) {
+      error("请上传 zip、tar.gz 或 tgz 格式的 Skill 包")
+      return
     }
-
-    setIsSaving(true)
+    const form = new FormData()
+    form.append("file", file)
+    setUploading(true)
     try {
-      if (editingSkillID) {
-        await api.put(`/user/advanced-chat/skills/${encodeURIComponent(editingSkillID)}`, payload)
-      } else {
-        await api.post("/user/advanced-chat/skills", payload)
+      await api.post("/user/advanced-chat/skill-packages", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+      })
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: skillPackagesQueryKey }),
+        queryClient.invalidateQueries({ queryKey: skillsQueryKey }),
+      ])
+      success("Skill 包已上传")
+    } catch (err) {
+      error(apiErrorMessage(err, "Skill 包上传失败"))
+    } finally {
+      setUploading(false)
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
       }
-      await queryClient.invalidateQueries({ queryKey: skillsQueryKey })
-      setIsEditOpen(false)
-      resetForm()
-      success(editingSkillID ? t("advancedChat.skills.saved") : t("advancedChat.skills.created"))
-    } catch (err) {
-      error(apiErrorMessage(err, t("advancedChat.skills.saveFailed")))
-    } finally {
-      setIsSaving(false)
     }
   }
 
-  const deleteSkill = async (skill: ChatSkill) => {
-    setDeletingSkillID(skill.id)
+  const deletePackage = async (item: SkillPackage) => {
+    setDeletingPackageID(item.id)
     try {
-      await api.delete(`/user/advanced-chat/skills/${encodeURIComponent(skill.id)}`)
-      await queryClient.invalidateQueries({ queryKey: skillsQueryKey })
-      success(t("advancedChat.skills.deleted"))
+      await api.delete(`/user/advanced-chat/skill-packages/${encodeURIComponent(item.id)}`)
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: skillPackagesQueryKey }),
+        queryClient.invalidateQueries({ queryKey: skillsQueryKey }),
+      ])
+      success("Skill 包已删除")
     } catch (err) {
-      error(apiErrorMessage(err, t("advancedChat.skills.deleteFailed")))
+      error(apiErrorMessage(err, "Skill 包删除失败"))
     } finally {
-      setDeletingSkillID("")
+      setDeletingPackageID("")
     }
   }
+
+  const skills = packages.flatMap((item) => item.skills || [])
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{t("nav.skills")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{t("advancedChat.skills.subtitle")}</p>
+          <p className="mt-1 text-sm text-muted-foreground">上传标准 Skill 包，系统会按需读取 SKILL.md 和资源文件。</p>
         </div>
-        <Button className="gap-2" onClick={openCreateDialog}>
-          <Plus size={16} />
-          {t("advancedChat.skills.newSkill")}
-        </Button>
+        <div>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".zip,.tgz,.tar.gz,application/zip,application/gzip"
+            className="hidden"
+            onChange={(event) => uploadPackage(event.target.files?.[0])}
+          />
+          <Button className="gap-2" disabled={uploading} onClick={() => fileInputRef.current?.click()}>
+            <Upload size={16} />
+            {uploading ? "上传中" : "上传 Skill 包"}
+          </Button>
+        </div>
       </div>
 
       <PageTitleSlot />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Skill 包</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {packages.length === 0 ? (
+            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">还没有上传 Skill 包</div>
+          ) : (
+            packages.map((item) => (
+              <div key={item.id} className="rounded-md border p-3">
+                <div className="grid grid-cols-[1fr_auto] gap-3">
+                  <div className="min-w-0">
+                    <div className="flex min-w-0 items-center gap-2">
+                      <PackageOpen className="h-4 w-4 shrink-0 text-muted-foreground" />
+                      <span className="truncate text-sm font-medium">{item.name}</span>
+                      <span className="shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-[11px] text-muted-foreground">{item.status}</span>
+                    </div>
+                    <div className="mt-1 truncate text-xs text-muted-foreground">
+                      {item.source_name} · {formatBytes(item.size)} · {item.file_count} files
+                    </div>
+                    {item.error_text && <div className="mt-2 text-xs text-destructive">{item.error_text}</div>}
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    disabled={deletingPackageID === item.id}
+                    onClick={() => deletePackage(item)}
+                    title={t("common.delete")}
+                  >
+                    <Trash2 size={15} />
+                  </Button>
+                </div>
+                {item.skills.length > 0 && (
+                  <div className="mt-3 grid gap-2">
+                    {item.skills.map((skill) => (
+                      <div key={skill.id} className="rounded-md border bg-muted/30 p-3">
+                        <div className="flex min-w-0 items-center gap-2">
+                          <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
+                          <span className="truncate text-sm font-medium">{skill.name}</span>
+                        </div>
+                        {skill.description && <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{skill.description}</div>}
+                        <div className="mt-2 truncate text-[11px] text-muted-foreground">{skill.skill_path}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ))
+          )}
+        </CardContent>
+      </Card>
+
       <Card>
         <CardHeader>
           <CardTitle>{t("advancedChat.skills.list")}</CardTitle>
@@ -247,41 +191,13 @@ export default function Skills() {
             <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{t("advancedChat.skills.empty")}</div>
           ) : (
             skills.map((skill) => (
-              <div
-                key={skill.id}
-                className="grid grid-cols-[1fr_auto] items-start gap-2 rounded-md border p-3 transition-colors hover:bg-muted/50"
-              >
-                <button type="button" className="min-w-0 w-full text-left" onClick={() => openEditDialog(skill)}>
-                  <div className="flex min-w-0 items-center gap-2">
-                    <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
-                    <span className="truncate text-sm font-medium">{skill.name}</span>
-                  </div>
-                  {skill.description && (
-                    <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{skill.description}</div>
-                  )}
-                  {skill.mcp_server_ids.length > 0 && (
-                    <div className="mt-2 flex flex-wrap gap-1">
-                      {skill.mcp_server_ids.map((id) => (
-                        <span
-                          key={id}
-                          className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"
-                        >
-                          <Server size={11} />
-                          {serverName.get(id) || id}
-                        </span>
-                      ))}
-                    </div>
-                  )}
-                </button>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  disabled={deletingSkillID === skill.id}
-                  onClick={() => deleteSkill(skill)}
-                  title={t("advancedChat.skills.deleteSkill")}
-                >
-                  <Trash2 size={15} />
-                </Button>
+              <div key={skill.id} className="rounded-md border p-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Sparkles className="h-4 w-4 shrink-0 text-muted-foreground" />
+                  <span className="truncate text-sm font-medium">{skill.name}</span>
+                </div>
+                {skill.description && <div className="mt-1 line-clamp-2 text-xs text-muted-foreground">{skill.description}</div>}
+                <div className="mt-2 truncate text-[11px] text-muted-foreground">{skill.id}</div>
               </div>
             ))
           )}
@@ -290,140 +206,11 @@ export default function Skills() {
 
       <PageInlineSlot slotKey="primary" />
       <PageInlineSlot slotKey="secondary" />
-      <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{editingSkillID ? t("advancedChat.skills.editSkill") : t("advancedChat.skills.newSkill")}</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">{t("common.name")}</span>
-              <input
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </label>
-
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">{t("common.description")}</span>
-              <input
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:ring-2 focus:ring-ring"
-                value={description}
-                placeholder={t("advancedChat.skills.descriptionPlaceholder")}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </label>
-
-            <div className="space-y-2 text-sm">
-              <span className="flex items-center gap-1 font-medium">
-                <Wand2 size={14} />
-                {t("advancedChat.skills.promptTemplate")}
-              </span>
-              <div className="flex flex-wrap gap-2">
-                {promptTemplates.map((template) => (
-                  <button
-                    key={template.id}
-                    type="button"
-                    title={template.description}
-                    onClick={() => applyTemplate(template.id)}
-                    className={cn(
-                      "rounded-md border px-3 py-1.5 text-xs transition-colors hover:bg-muted",
-                      selectedTemplateID === template.id && "border-primary bg-primary/5 text-primary"
-                    )}
-                  >
-                    {template.title}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">{t("advancedChat.skills.prompt")}</span>
-              <textarea
-                className="min-h-60 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                value={prompt}
-                placeholder={t("advancedChat.skills.promptPlaceholder")}
-                onChange={(event) => setPrompt(event.target.value)}
-              />
-            </label>
-
-            <div className="space-y-2 text-sm">
-              <span className="flex items-center gap-1 font-medium">
-                <Server size={14} />
-                {t("advancedChat.skills.mcpServers")}
-              </span>
-              {mcpServers.length === 0 ? (
-                <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">
-                  {t("advancedChat.skills.noMCPServersHint")}
-                </div>
-              ) : (
-                <div className="grid gap-2 sm:grid-cols-2">
-                  {mcpServers.map((server) => {
-                    const checked = selectedServerIDs.includes(server.id)
-                    return (
-                      <label
-                        key={server.id}
-                        className={cn(
-                          "flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors hover:bg-muted/50",
-                          checked && "border-primary bg-primary/5"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          className="mt-1"
-                          checked={checked}
-                          onChange={() => toggleServer(server.id)}
-                        />
-                        <span className="min-w-0">
-                          <span className="block truncate text-sm font-medium">{server.name}</span>
-                          <span className="block truncate text-xs text-muted-foreground">{server.url}</span>
-                        </span>
-                      </label>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setIsEditOpen(false)}>
-              {t("common.cancel")}
-            </Button>
-            <Button className="gap-2" disabled={isSaving} onClick={saveSkill}>
-              <Save size={16} />
-              {isSaving ? t("common.saving") : t("common.save")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
 
-function normalizeUserSettings(value: unknown): AdvancedChatUserSettings {
-  const item = isRecord(value) ? value : {}
-  const builtin = Array.isArray(item.builtin_mcp_servers) ? item.builtin_mcp_servers.map(normalizeMCPServer) : []
-  const custom = Array.isArray(item.custom_mcp_servers) ? item.custom_mcp_servers.map(normalizeMCPServer) : []
-  return {
-    mcp_servers: Array.isArray(item.mcp_servers) ? item.mcp_servers.map(normalizeMCPServer) : mergeMCPServers(builtin, custom),
-    builtin_mcp_servers: builtin,
-    custom_mcp_servers: custom,
-  }
-}
-
-function normalizeMCPServer(value: unknown): MCPServer {
-  const item = isRecord(value) ? value : {}
-  return {
-    id: typeof item.id === "string" && item.id ? item.id : "",
-    name: typeof item.name === "string" ? item.name : "",
-    url: typeof item.url === "string" ? item.url : "",
-    enabled: item.enabled !== false,
-    request_mode: typeof item.request_mode === "string" ? item.request_mode : "frontend",
-  }
-}
-
-function normalizeSkill(value: unknown): ChatSkill | null {
+function normalizeSkillPackage(value: unknown): SkillPackage | null {
   if (!isRecord(value)) {
     return null
   }
@@ -434,11 +221,37 @@ function normalizeSkill(value: unknown): ChatSkill | null {
   return {
     id,
     name: typeof value.name === "string" ? value.name : "",
+    source_name: typeof value.source_name === "string" ? value.source_name : "",
+    size: numberFromUnknown(value.size),
+    file_count: numberFromUnknown(value.file_count),
+    hash: typeof value.hash === "string" ? value.hash : "",
+    status: typeof value.status === "string" ? value.status : "",
+    error_text: typeof value.error_text === "string" ? value.error_text : "",
+    skills: Array.isArray(value.skills) ? value.skills.map(normalizePackagedSkill).filter((skill): skill is PackagedSkill => Boolean(skill)) : [],
+    created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
+    updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
+  }
+}
+
+function normalizePackagedSkill(value: unknown): PackagedSkill | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const id = stringFromUnknown(value.id)
+  if (!id) {
+    return null
+  }
+  return {
+    id,
+    package_id: stringFromUnknown(value.package_id) || "",
+    name: typeof value.name === "string" ? value.name : "",
     description: typeof value.description === "string" ? value.description : "",
-    prompt: typeof value.prompt === "string" ? value.prompt : "",
-    mcp_server_ids: Array.isArray(value.mcp_server_ids)
-      ? value.mcp_server_ids.filter((item): item is string => typeof item === "string")
-      : [],
+    source: typeof value.source === "string" ? value.source : "uploaded",
+    skill_path: typeof value.skill_path === "string" ? value.skill_path : "",
+    root_path: typeof value.root_path === "string" ? value.root_path : "",
+    enabled: value.enabled !== false,
+    size: numberFromUnknown(value.size),
+    hash: typeof value.hash === "string" ? value.hash : "",
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
@@ -472,17 +285,18 @@ function stringFromUnknown(value: unknown) {
   return undefined
 }
 
-function mergeMCPServers(...groups: MCPServer[][]) {
-  const servers: MCPServer[] = []
-  const seen = new Set<string>()
-  for (const server of groups.flat()) {
-    if (!server.id || seen.has(server.id)) {
-      continue
-    }
-    seen.add(server.id)
-    servers.push(server)
+function numberFromUnknown(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : 0
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`
   }
-  return servers
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
