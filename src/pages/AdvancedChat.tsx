@@ -1,4 +1,5 @@
-import { BarChart3, Bot, Boxes, CalendarClock, Database, FileText, Globe2, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import { BarChart3, Bot, Boxes, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import type { LucideIcon } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
@@ -40,6 +41,20 @@ interface CurrentUser {
   email?: string
   avatar_url?: string
   is_admin?: boolean
+}
+
+interface AdvancedChatSidebarItem {
+  href: string
+  label: string
+  icon: LucideIcon
+  active: boolean
+  children?: { href: string; label: string }[]
+}
+
+interface AdvancedChatSidebarGroup {
+  id: string
+  label: string
+  items: AdvancedChatSidebarItem[]
 }
 
 export default function AdvancedChat() {
@@ -257,14 +272,10 @@ function AdvancedChatSidebar({
   const agentGroupsLabel = language === "zh" ? "工作室" : "Agent Studios"
   const agentTasksLabel = language === "zh" ? "\u4ee3\u7406\u4efb\u52a1" : "Agent Tasks"
   const sitesLabel = language === "zh" ? "站点" : language === "ja" ? "サイト" : "Sites"
-  const adminItems = [
-    { href: "/chat/admin-overview", label: t("nav.adminOverview"), icon: BarChart3, active: location.pathname === "/chat/admin-overview" },
-    { href: "/chat/admin-logs", label: t("nav.auditLogs"), icon: ScrollText, active: location.pathname === "/chat/admin-logs" },
-    { href: "/chat/admin/general", label: t("nav.system"), icon: Shield, active: location.pathname.startsWith("/chat/admin/") },
-    { href: "/chat/admin-channels", label: t("nav.channels"), icon: Database, active: location.pathname === "/chat/admin-channels" },
-    { href: "/chat/admin-models", label: t("nav.models"), icon: Boxes, active: location.pathname === "/chat/admin-models" },
-    { href: "/chat/admin-users", label: t("nav.users"), icon: Users, active: location.pathname === "/chat/admin-users" },
-  ]
+  const creationLabel = language === "zh" ? "创作" : language === "ja" ? "作成" : "Create"
+  const workflowLabel = language === "zh" ? "工作流" : language === "ja" ? "ワークフロー" : "Workflows"
+  const agentLabel = language === "zh" ? "代理" : language === "ja" ? "エージェント" : "Agents"
+  const adminLabel = language === "zh" ? "管理" : language === "ja" ? "管理" : "Admin"
   const systemSubItems = [
     { href: "/chat/admin/general", label: t("nav.systemGeneral") },
     { href: "/chat/admin/theme", label: t("nav.systemTheme") },
@@ -273,77 +284,145 @@ function AdvancedChatSidebar({
     { href: "/chat/admin/operations", label: t("nav.systemOperations") },
     { href: "/chat/admin/advanced-chat", label: t("nav.systemAdvancedChat") },
   ]
-  const items = [
-    { href: "/chat", label: t("nav.chat"), icon: MessageSquare, active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/") },
-    { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
-    { href: "/chat/videos", label: t("nav.videos"), icon: Video, active: location.pathname === "/chat/videos" },
-    ...(isPremium ? [{ href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" }] : []),
-    ...(isPremium && publicSettings.message_channel_enabled ? [{ href: "/chat/channels", label: messageChannelsLabel, icon: MessageSquare, active: location.pathname.startsWith("/chat/channels") }] : []),
-    ...(isPremium ? [{ href: "/chat/deliveries", label: deliveriesLabel, icon: Send, active: location.pathname === "/chat/deliveries" }] : []),
-    ...(isPremium ? [{ href: "/chat/scheduled-tasks", label: scheduledTasksLabel, icon: CalendarClock, active: location.pathname === "/chat/scheduled-tasks" }] : []),
-    { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
-    { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
-    { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },
-    { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
-    { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
-    { href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" },
-    { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
+  const adminItems: AdvancedChatSidebarItem[] = [
+    { href: "/chat/admin-overview", label: t("nav.adminOverview"), icon: BarChart3, active: location.pathname === "/chat/admin-overview" },
+    { href: "/chat/admin-logs", label: t("nav.auditLogs"), icon: ScrollText, active: location.pathname === "/chat/admin-logs" },
+    { href: "/chat/admin/general", label: t("nav.system"), icon: Shield, active: location.pathname.startsWith("/chat/admin/"), children: systemSubItems },
+    { href: "/chat/admin-channels", label: t("nav.channels"), icon: Database, active: location.pathname === "/chat/admin-channels" },
+    { href: "/chat/admin-models", label: t("nav.models"), icon: Boxes, active: location.pathname === "/chat/admin-models" },
+    { href: "/chat/admin-users", label: t("nav.users"), icon: Users, active: location.pathname === "/chat/admin-users" },
   ]
+  const homeItem: AdvancedChatSidebarItem = {
+    href: "/chat",
+    label: t("nav.chat"),
+    icon: MessageSquare,
+    active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/"),
+  }
+  const groups: AdvancedChatSidebarGroup[] = [
+    {
+      id: "creation",
+      label: creationLabel,
+      items: [
+        { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
+        { href: "/chat/videos", label: t("nav.videos"), icon: Video, active: location.pathname === "/chat/videos" },
+        ...(isPremium ? [{ href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" }] : []),
+      ],
+    },
+    {
+      id: "workflow",
+      label: workflowLabel,
+      items: [
+        ...(isPremium && publicSettings.message_channel_enabled ? [{ href: "/chat/channels", label: messageChannelsLabel, icon: MessageSquare, active: location.pathname.startsWith("/chat/channels") }] : []),
+        ...(isPremium ? [{ href: "/chat/deliveries", label: deliveriesLabel, icon: Send, active: location.pathname === "/chat/deliveries" }] : []),
+        ...(isPremium ? [{ href: "/chat/scheduled-tasks", label: scheduledTasksLabel, icon: CalendarClock, active: location.pathname === "/chat/scheduled-tasks" }] : []),
+      ],
+    },
+    {
+      id: "agents",
+      label: agentLabel,
+      items: [
+        { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
+        { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
+        { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },
+        { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
+        { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
+        { href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" },
+        { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
+      ],
+    },
+    ...(isDesktopTarget() && isAdmin ? [{ id: "admin", label: adminLabel, items: adminItems }] : []),
+  ].filter((group) => group.items.length > 0)
+  const [selectedGroupID, setSelectedGroupID] = useState("")
+  const routeGroup = groups.find((group) => group.items.some((item) => item.active || item.children?.some((child) => location.pathname === child.href)))
+  const activeGroup = groups.find((group) => group.id === selectedGroupID) || routeGroup
+  const showingGroup = Boolean(activeGroup)
+
+  useEffect(() => {
+    if (homeItem.active) {
+      setSelectedGroupID("")
+      return
+    }
+    setSelectedGroupID(routeGroup?.id || "")
+  }, [homeItem.active, location.pathname, routeGroup?.id])
+
+  const renderSidebarLink = (item: AdvancedChatSidebarItem) => (
+    <div key={item.href}>
+      <Link
+        to={item.href}
+        onClick={onNavigate}
+        className={cn(
+          "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+          item.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+        )}
+      >
+        <item.icon size={18} />
+        <span className="flex-1 truncate">{item.label}</span>
+      </Link>
+      {item.children && item.active && (
+        <div className="ml-9 mt-1 flex flex-col gap-1">
+          {item.children.map((child) => (
+            <Link
+              key={child.href}
+              to={child.href}
+              onClick={onNavigate}
+              className={cn(
+                "rounded-md px-3 py-1.5 text-xs transition-colors",
+                location.pathname === child.href ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
+              )}
+            >
+              {child.label}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  )
 
   return (
     <aside className={cn("flex h-full w-64 flex-col border-r bg-card", className)}>
-      <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
-        <div className="flex flex-col gap-1">
-          {items.map((item) => (
-            <Link
-              key={item.href}
-              to={item.href}
-              onClick={onNavigate}
-              className={cn(
-                "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                item.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-              )}
-            >
-              <item.icon size={18} />
-              <span className="flex-1 truncate">{item.label}</span>
-            </Link>
-          ))}
-          {isDesktopTarget() && isAdmin && (
-            <>
-              <div className="my-2 border-t" />
-              {adminItems.map((item) => (
-                <div key={item.href}>
-                  <Link
-                    to={item.href}
-                    onClick={onNavigate}
-                    className={cn(
-                      "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-                      item.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
-                    )}
-                  >
-                    <item.icon size={18} />
-                    <span className="flex-1 truncate">{item.label}</span>
-                  </Link>
-                  {item.href === "/chat/admin/general" && location.pathname.startsWith("/chat/admin/") && (
-                    <div className="ml-9 mt-1 flex flex-col gap-1">
-                      {systemSubItems.map((child) => (
-                        <Link
-                          key={child.href}
-                          to={child.href}
-                          onClick={onNavigate}
-                          className={cn(
-                            "rounded-md px-3 py-1.5 text-xs transition-colors",
-                            location.pathname === child.href ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                          )}
-                        >
-                          {child.label}
-                        </Link>
-                      ))}
-                    </div>
+      <nav className="relative min-h-0 flex-1 overflow-hidden px-4 py-4">
+        <div className={cn("h-full overflow-y-auto transition-transform duration-200 ease-out", showingGroup && "-translate-x-full")}>
+          <div className="flex flex-col gap-1">
+            {renderSidebarLink(homeItem)}
+            <div className="my-2 border-t" />
+            {groups.map((group) => {
+              const firstItem = group.items[0]
+              return (
+                <Link
+                  key={group.id}
+                  to={firstItem.href}
+                  onClick={() => setSelectedGroupID(group.id)}
+                  className={cn(
+                    "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                    group.id === routeGroup?.id ? "bg-muted text-foreground" : "hover:bg-muted"
                   )}
-                </div>
-              ))}
-            </>
+                >
+                  <firstItem.icon size={18} />
+                  <span className="flex-1 truncate">{group.label}</span>
+                  <ChevronRight size={15} className="text-muted-foreground" />
+                </Link>
+              )
+            })}
+          </div>
+        </div>
+        <div className={cn("absolute inset-0 h-full overflow-y-auto px-4 py-4 transition-transform duration-200 ease-out", showingGroup ? "translate-x-0" : "translate-x-full")}>
+          {activeGroup && (
+            <div className="flex flex-col gap-1">
+              <div className="mb-3 flex items-center gap-1 border-b pb-3 text-sm">
+                <Link
+                  to="/chat"
+                  onClick={() => setSelectedGroupID("")}
+                  className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                  aria-label={t("nav.chat")}
+                  title={t("nav.chat")}
+                >
+                  <Home size={16} />
+                </Link>
+                <ChevronRight size={14} className="text-muted-foreground" />
+                <span className="min-w-0 truncate font-medium">{activeGroup.label}</span>
+              </div>
+              {activeGroup.items.map((item) => renderSidebarLink(item))}
+            </div>
           )}
         </div>
       </nav>
