@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, Pencil, Plus, Save, Trash2 } from "lucide-react"
+import { Bot, Pencil, Plus, Save, Terminal, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -13,17 +13,28 @@ import { useToast } from "@/components/ui/toast"
 interface MCPServer {
   id: string
   name: string
-  url: string
+  type?: "http" | "connector" | string
+  url?: string
   headers?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
   enabled: boolean
   request_mode: "backend" | "frontend" | string
 }
 
 interface MCPDraft {
   id?: string
+  type: "http" | "connector"
   name: string
   url: string
   headers: string
+  command: string
+  argsText: string
+  envText: string
+  cwd: string
+  configJSON: string
   enabled: boolean
 }
 
@@ -49,9 +60,15 @@ const defaultAttachmentSettings = {
 }
 
 const emptyDraft: MCPDraft = {
+  type: "http",
   name: "",
   url: "",
   headers: "",
+  command: "",
+  argsText: "",
+  envText: "",
+  cwd: "",
+  configJSON: "",
   enabled: true,
 }
 
@@ -94,7 +111,7 @@ export default function AdvancedChatMCP() {
   const saveServers = useMutation({
     mutationFn: async () => {
       const res = await api.put("/user/advanced-chat/mcp-servers", {
-        custom_mcp_servers: customServers.map((server) => ({ ...server, request_mode: "backend" })),
+        custom_mcp_servers: customServers.map(serverForSave),
       })
       return normalizeAdvancedChatSettings(res.data)
     },
@@ -114,28 +131,53 @@ export default function AdvancedChatMCP() {
   const openEditDialog = (server: MCPServer) => {
     setDraft({
       id: server.id,
+      type: normalizeMCPType(server.type),
       name: server.name,
-      url: server.url,
+      url: server.url || "",
       headers: server.headers || "",
+      command: server.command || "",
+      argsText: Array.isArray(server.args) ? server.args.join("\n") : "",
+      envText: server.env && Object.keys(server.env).length ? JSON.stringify(server.env, null, 2) : "",
+      cwd: server.cwd || "",
+      configJSON: "",
       enabled: server.enabled,
     })
     setIsDialogOpen(true)
   }
 
   const applyDraft = () => {
-    const next: MCPServer = {
-      id: draft.id || createID(),
-      name: draft.name.trim(),
-      url: draft.url.trim(),
-      headers: draft.headers.trim(),
-      enabled: draft.enabled,
-      request_mode: "backend",
+    let nextDraft = draft
+    if (draft.type === "connector" && draft.configJSON.trim()) {
+      const imported = parseMCPConfigJSON(draft.configJSON)
+      if (!imported) {
+        error(t("advancedChat.mcp.configInvalid"))
+        return
+      }
+      nextDraft = { ...draft, ...imported, id: draft.id || imported.id, type: "connector" }
     }
-    if (!next.name || !next.url) {
+    const serverType = normalizeMCPType(nextDraft.type)
+    const next: MCPServer = {
+      id: nextDraft.id || createID(),
+      type: serverType,
+      name: nextDraft.name.trim(),
+      url: serverType === "http" ? nextDraft.url.trim() : "",
+      headers: serverType === "http" ? nextDraft.headers.trim() : "",
+      command: serverType === "connector" ? nextDraft.command.trim() : "",
+      args: serverType === "connector" ? parseArgsText(nextDraft.argsText) : [],
+      env: serverType === "connector" ? parseEnvText(nextDraft.envText) : {},
+      cwd: serverType === "connector" ? nextDraft.cwd.trim() : "",
+      enabled: nextDraft.enabled,
+      request_mode: serverType === "connector" ? "connector" : "backend",
+    }
+    if (serverType === "http" && (!next.name || !next.url)) {
       error(t("advancedChat.mcp.nameURLRequired"))
       return
     }
-    setCustomServers((current) => (draft.id ? current.map((server) => (server.id === draft.id ? next : server)) : [...current, next]))
+    if (serverType === "connector" && (!next.name || !next.command)) {
+      error(t("advancedChat.mcp.nameCommandRequired"))
+      return
+    }
+    setCustomServers((current) => (nextDraft.id ? current.map((server) => (server.id === nextDraft.id ? next : server)) : [...current, next]))
     setIsDialogOpen(false)
   }
 
@@ -175,14 +217,17 @@ export default function AdvancedChatMCP() {
               <div key={`${server.request_mode}-${server.id}`} className="flex items-center justify-between gap-3 rounded-md border p-3">
                 <div className="min-w-0">
                   <div className="flex min-w-0 items-center gap-2">
-                    <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
+                    {normalizeMCPType(server.type) === "connector" ? <Terminal className="h-4 w-4 shrink-0 text-muted-foreground" /> : <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />}
                     <span className="truncate text-sm font-medium">{server.name}</span>
+                    <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
+                      {normalizeMCPType(server.type) === "connector" ? t("advancedChat.mcp.connectorType") : "HTTP"}
+                    </span>
                     <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
                       {server.readonly ? t("advancedChat.mcp.adminBuiltin") : t("common.mine")}
                     </span>
                     {!server.enabled && <span className="shrink-0 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{t("common.disabled")}</span>}
                   </div>
-                  <div className="mt-1 truncate text-xs text-muted-foreground">{server.url}</div>
+                  <div className="mt-1 truncate text-xs text-muted-foreground">{mcpServerSummary(server)}</div>
                 </div>
                 {server.readonly ? (
                   <div className="shrink-0 rounded-md bg-muted px-2 py-1 text-xs text-muted-foreground">{t("common.readOnly")}</div>
@@ -210,23 +255,79 @@ export default function AdvancedChatMCP() {
             <DialogTitle>{draft.id ? t("advancedChat.mcp.editDialogTitle") : t("advancedChat.mcp.addDialogTitle")}</DialogTitle>
           </DialogHeader>
           <div className="grid gap-4">
+            <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-1">
+              {(["http", "connector"] as const).map((type) => (
+                <Button
+                  key={type}
+                  type="button"
+                  variant={draft.type === type ? "default" : "ghost"}
+                  onClick={() => setDraft((current) => ({ ...current, type }))}
+                >
+                  {type === "connector" ? t("advancedChat.mcp.connectorType") : "HTTP"}
+                </Button>
+              ))}
+            </div>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{t("common.name")}</span>
               <Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
             </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">{t("advancedChat.mcp.serverURL")}</span>
-              <Input value={draft.url} placeholder={t("advancedChat.mcp.urlPlaceholder")} onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} />
-            </label>
-            <label className="space-y-1 text-sm">
-              <span className="font-medium">{t("advancedChat.mcp.headers")}</span>
-              <textarea
-                className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
-                value={draft.headers}
-                placeholder={t("advancedChat.mcp.headersPlaceholder")}
-                onChange={(event) => setDraft((current) => ({ ...current, headers: event.target.value }))}
-              />
-            </label>
+            {draft.type === "http" ? (
+              <>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{t("advancedChat.mcp.serverURL")}</span>
+                  <Input value={draft.url} placeholder={t("advancedChat.mcp.urlPlaceholder")} onChange={(event) => setDraft((current) => ({ ...current, url: event.target.value }))} />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{t("advancedChat.mcp.headers")}</span>
+                  <textarea
+                    className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                    value={draft.headers}
+                    placeholder={t("advancedChat.mcp.headersPlaceholder")}
+                    onChange={(event) => setDraft((current) => ({ ...current, headers: event.target.value }))}
+                  />
+                </label>
+              </>
+            ) : (
+              <>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{t("advancedChat.mcp.configJSON")}</span>
+                  <textarea
+                    className="min-h-28 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                    value={draft.configJSON}
+                    placeholder={'{"mcpServers":{"makenotion-notion-mcp-server":{"command":"npx","args":["-y","@notionhq/notion-mcp-server"]}}}'}
+                    onChange={(event) => setDraft((current) => ({ ...current, configJSON: event.target.value }))}
+                  />
+                </label>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">{t("advancedChat.mcp.command")}</span>
+                    <Input value={draft.command} placeholder="npx" onChange={(event) => setDraft((current) => ({ ...current, command: event.target.value }))} />
+                  </label>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">{t("advancedChat.mcp.cwd")}</span>
+                    <Input value={draft.cwd} onChange={(event) => setDraft((current) => ({ ...current, cwd: event.target.value }))} />
+                  </label>
+                </div>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{t("advancedChat.mcp.args")}</span>
+                  <textarea
+                    className="min-h-20 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                    value={draft.argsText}
+                    placeholder={"-y\n@notionhq/notion-mcp-server"}
+                    onChange={(event) => setDraft((current) => ({ ...current, argsText: event.target.value }))}
+                  />
+                </label>
+                <label className="space-y-1 text-sm">
+                  <span className="font-medium">{t("advancedChat.mcp.env")}</span>
+                  <textarea
+                    className="min-h-20 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
+                    value={draft.envText}
+                    placeholder={'{"NOTION_TOKEN":"secret_..."}'}
+                    onChange={(event) => setDraft((current) => ({ ...current, envText: event.target.value }))}
+                  />
+                </label>
+              </>
+            )}
             <label className="flex items-center gap-2 text-sm">
               <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
               {t("advancedChat.mcp.enabledLabel")}
@@ -265,10 +366,107 @@ function normalizeMCPServer(value: unknown): MCPServer {
   return {
     id: typeof item.id === "string" && item.id ? item.id : createID(),
     name: typeof item.name === "string" ? item.name : "",
+    type: typeof item.type === "string" ? item.type : "http",
     url: typeof item.url === "string" ? item.url : "",
     headers: typeof item.headers === "string" ? item.headers : "",
+    command: typeof item.command === "string" ? item.command : "",
+    args: Array.isArray(item.args) ? item.args.filter((value): value is string => typeof value === "string") : [],
+    env: isStringRecord(item.env) ? item.env : {},
+    cwd: typeof item.cwd === "string" ? item.cwd : "",
     enabled: item.enabled !== false,
     request_mode: typeof item.request_mode === "string" ? item.request_mode : "backend",
+  }
+}
+
+function normalizeMCPType(value: unknown): "http" | "connector" {
+  return value === "connector" ? "connector" : "http"
+}
+
+function serverForSave(server: MCPServer): MCPServer {
+  const type = normalizeMCPType(server.type)
+  if (type === "connector") {
+    return {
+      id: server.id,
+      name: server.name,
+      type,
+      command: server.command || "",
+      args: Array.isArray(server.args) ? server.args : [],
+      env: server.env || {},
+      cwd: server.cwd || "",
+      enabled: server.enabled,
+      request_mode: "connector",
+    }
+  }
+  return {
+    id: server.id,
+    name: server.name,
+    type,
+    url: server.url || "",
+    headers: server.headers || "",
+    enabled: server.enabled,
+    request_mode: "backend",
+  }
+}
+
+function mcpServerSummary(server: MCPServer) {
+  if (normalizeMCPType(server.type) === "connector") {
+    return [server.command, ...(Array.isArray(server.args) ? server.args : [])].filter(Boolean).join(" ")
+  }
+  return server.url || ""
+}
+
+function parseMCPConfigJSON(raw: string): Partial<MCPDraft> | null {
+  try {
+    const parsed = JSON.parse(raw)
+    const root = isRecord(parsed) ? parsed : {}
+    const servers = isRecord(root.mcpServers) ? root.mcpServers : {}
+    const [id, value] = Object.entries(servers)[0] || []
+    if (!id || !isRecord(value)) {
+      return null
+    }
+    const command = typeof value.command === "string" ? value.command : ""
+    if (!command) {
+      return null
+    }
+    return {
+      id,
+      name: typeof value.name === "string" && value.name ? value.name : id,
+      command,
+      argsText: Array.isArray(value.args) ? value.args.filter((item): item is string => typeof item === "string").join("\n") : "",
+      envText: isStringRecord(value.env) ? JSON.stringify(value.env, null, 2) : "",
+      cwd: typeof value.cwd === "string" ? value.cwd : "",
+    }
+  } catch {
+    return null
+  }
+}
+
+function parseArgsText(raw: string) {
+  const value = raw.trim()
+  if (!value) {
+    return []
+  }
+  if (value.startsWith("[")) {
+    try {
+      const parsed = JSON.parse(value)
+      return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string") : []
+    } catch {
+      return []
+    }
+  }
+  return raw.split(/\r?\n/).map((item) => item.trim()).filter(Boolean)
+}
+
+function parseEnvText(raw: string): Record<string, string> {
+  const value = raw.trim()
+  if (!value) {
+    return {}
+  }
+  try {
+    const parsed = JSON.parse(value)
+    return isStringRecord(parsed) ? parsed : {}
+  } catch {
+    return {}
   }
 }
 
@@ -307,4 +505,11 @@ function mergeMCPServers(...groups: Array<Array<MCPServer | null | undefined> | 
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!isRecord(value)) {
+    return false
+  }
+  return Object.values(value).every((item) => typeof item === "string")
 }

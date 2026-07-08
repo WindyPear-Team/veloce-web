@@ -39,7 +39,12 @@ interface ChatSkill {
 interface MCPServer {
   id: string
   name: string
-  url: string
+  type?: "http" | "connector" | string
+  url?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
   enabled: boolean
 }
 
@@ -422,7 +427,7 @@ export default function Agents() {
                 icon={<Server size={14} />}
                 empty={t("chat.noMCPServers")}
                 selected={mcpServerIDs}
-                items={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: server.url }))}
+                items={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) }))}
                 onToggle={(id) => setMCPServerIDs((current) => toggleString(current, id))}
               />
             </div>
@@ -519,7 +524,7 @@ export default function Agents() {
                 icon={<Server size={14} />}
                 empty={t("chat.noMCPServers")}
                 selected={createMCPServerIDs}
-                items={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: server.url }))}
+                items={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) }))}
                 onToggle={(id) => setCreateMCPServerIDs((current) => toggleString(current, id))}
               />
             </div>
@@ -673,9 +678,21 @@ function normalizeMCPServer(value: unknown): MCPServer {
   return {
     id,
     name: typeof item.name === "string" && item.name ? item.name : id,
+    type: typeof item.type === "string" ? item.type : "http",
     url: typeof item.url === "string" ? item.url : "",
+    command: typeof item.command === "string" ? item.command : "",
+    args: Array.isArray(item.args) ? item.args.filter((value): value is string => typeof value === "string") : [],
+    env: isStringRecord(item.env) ? item.env : {},
+    cwd: typeof item.cwd === "string" ? item.cwd : "",
     enabled: item.enabled !== false,
   }
+}
+
+function mcpServerSummary(server: MCPServer) {
+  if (server.type === "connector") {
+    return [server.command, ...(Array.isArray(server.args) ? server.args : [])].filter(Boolean).join(" ")
+  }
+  return server.url || ""
 }
 
 function toggleString(values: string[], value: string) {
@@ -733,4 +750,11 @@ function stringFromUnknown(value: unknown) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!isRecord(value)) {
+    return false
+  }
+  return Object.values(value).every((item) => typeof item === "string")
 }

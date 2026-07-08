@@ -179,7 +179,12 @@ interface AgentMentionState {
 interface MCPServer {
   id: string
   name: string
-  url: string
+  type?: "http" | "connector" | string
+  url?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  cwd?: string
   enabled: boolean
   request_mode: "backend" | "frontend" | string
 }
@@ -3107,7 +3112,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         <div key={server.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-md border p-3">
                           <div className="min-w-0">
                             <div className="truncate text-sm font-medium">{server.name}</div>
-                            <div className="mt-1 truncate text-xs text-muted-foreground">{server.url}</div>
+                            <div className="mt-1 truncate text-xs text-muted-foreground">{mcpServerSummary(server)}</div>
                           </div>
                           <Button variant="ghost" size="sm" onClick={() => removeSessionMCPServer(server.id)} title={copy.remove}>
                             <X size={15} />
@@ -4588,10 +4593,22 @@ function normalizeMCPServer(value: unknown): MCPServer {
   return {
     id: typeof item.id === "string" && item.id ? item.id : createID(),
     name: typeof item.name === "string" ? item.name : "",
+    type: typeof item.type === "string" ? item.type : "http",
     url: typeof item.url === "string" ? item.url : "",
+    command: typeof item.command === "string" ? item.command : "",
+    args: Array.isArray(item.args) ? item.args.filter((value): value is string => typeof value === "string") : [],
+    env: isStringRecord(item.env) ? item.env : {},
+    cwd: typeof item.cwd === "string" ? item.cwd : "",
     enabled: item.enabled !== false,
     request_mode: typeof item.request_mode === "string" ? item.request_mode : "frontend",
   }
+}
+
+function mcpServerSummary(server: MCPServer) {
+  if (server.type === "connector") {
+    return [server.command, ...(Array.isArray(server.args) ? server.args : [])].filter(Boolean).join(" ")
+  }
+  return server.url || ""
 }
 
 function normalizeConnectorDevice(value: unknown): ConnectorDevice | null {
@@ -5812,6 +5829,13 @@ function apiErrorMessage(err: unknown, fallback: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null
+}
+
+function isStringRecord(value: unknown): value is Record<string, string> {
+  if (!isRecord(value)) {
+    return false
+  }
+  return Object.values(value).every((item) => typeof item === "string")
 }
 
 const chatCopyKeys = {
