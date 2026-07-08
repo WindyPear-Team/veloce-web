@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, Pencil, Plus, Save, Terminal, Trash2 } from "lucide-react"
+import { Bot, Pencil, Plus, Terminal, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -95,32 +95,39 @@ export default function AdvancedChatMCP() {
   }, [settings])
 
   const builtinServers = Array.isArray(settings?.builtin_mcp_servers) ? settings.builtin_mcp_servers : []
-  const settingsServers = Array.isArray(settings?.mcp_servers) ? settings.mcp_servers : []
   const builtinServerIDs = useMemo(() => new Set(builtinServers.filter(Boolean).map((server) => server.id)), [builtinServers])
   const allServers = useMemo(() => {
-    const merged = settingsServers.length
-      ? settingsServers
-      : mergeMCPServers(builtinServers, customServers)
+    const merged = mergeMCPServers(builtinServers, customServers)
     const customByID = new Map((Array.isArray(customServers) ? customServers : []).filter(Boolean).map((server) => [server.id, server]))
     return merged.filter(Boolean).map((server) => ({
       ...(customByID.get(server.id) || server),
       readonly: builtinServerIDs.has(server.id),
     }))
-  }, [builtinServerIDs, builtinServers, customServers, settingsServers])
+  }, [builtinServerIDs, builtinServers, customServers])
 
   const saveServers = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (nextServers: MCPServer[]) => {
       const res = await api.put("/user/advanced-chat/mcp-servers", {
-        custom_mcp_servers: customServers.map(serverForSave),
+        custom_mcp_servers: nextServers.map(serverForSave),
       })
       return normalizeAdvancedChatSettings(res.data)
+    },
+    onMutate: (nextServers) => {
+      const previous = customServers
+      setCustomServers(nextServers)
+      return { previous }
     },
     onSuccess: (saved) => {
       setCustomServers(saved.custom_mcp_servers)
       success(t("advancedChat.mcp.saved"))
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
     },
-    onError: (err) => error(apiErrorMessage(err, t("advancedChat.mcp.saveFailed"))),
+    onError: (err, _nextServers, context) => {
+      if (context?.previous) {
+        setCustomServers(context.previous)
+      }
+      error(apiErrorMessage(err, t("advancedChat.mcp.saveFailed")))
+    },
   })
 
   const openCreateDialog = () => {
@@ -177,12 +184,30 @@ export default function AdvancedChatMCP() {
       error(t("advancedChat.mcp.nameCommandRequired"))
       return
     }
-    setCustomServers((current) => (nextDraft.id ? current.map((server) => (server.id === nextDraft.id ? next : server)) : [...current, next]))
+    const serverExists = customServers.some((server) => server.id === next.id)
+    const nextServers = serverExists ? customServers.map((server) => (server.id === next.id ? next : server)) : [...customServers, next]
+    saveServers.mutate(nextServers)
     setIsDialogOpen(false)
   }
 
   const removeServer = (id: string) => {
-    setCustomServers((current) => current.filter((server) => server.id !== id))
+    saveServers.mutate(customServers.filter((server) => server.id !== id))
+  }
+
+  const setDraftWithConfigJSON = (value: string) => {
+    const imported = parseMCPConfigJSON(value)
+    setDraft((current) => {
+      if (!imported) {
+        return { ...current, configJSON: value }
+      }
+      return {
+        ...current,
+        ...imported,
+        id: current.id || imported.id,
+        type: "connector",
+        configJSON: value,
+      }
+    })
   }
 
   return (
@@ -196,10 +221,6 @@ export default function AdvancedChatMCP() {
           <Button variant="outline" className="gap-2" onClick={openCreateDialog}>
             <Plus size={16} />
             {t("common.add")}
-          </Button>
-          <Button className="gap-2" disabled={saveServers.isPending} onClick={() => saveServers.mutate()}>
-            <Save size={16} />
-            {saveServers.isPending ? t("common.saving") : t("common.save")}
           </Button>
         </div>
       </div>
@@ -236,7 +257,7 @@ export default function AdvancedChatMCP() {
                     <Button variant="outline" size="icon" onClick={() => openEditDialog(server)} aria-label={t("advancedChat.mcp.editServer")} title={t("advancedChat.mcp.editServer")}>
                       <Pencil size={16} />
                     </Button>
-                    <Button variant="outline" size="icon" onClick={() => removeServer(server.id)} aria-label={t("advancedChat.mcp.deleteServer")} title={t("advancedChat.mcp.deleteServer")}>
+                    <Button variant="outline" size="icon" disabled={saveServers.isPending} onClick={() => removeServer(server.id)} aria-label={t("advancedChat.mcp.deleteServer")} title={t("advancedChat.mcp.deleteServer")}>
                       <Trash2 size={16} />
                     </Button>
                   </div>
@@ -250,11 +271,11 @@ export default function AdvancedChatMCP() {
       <PageInlineSlot slotKey="primary" />
       <PageInlineSlot slotKey="secondary" />
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent className="max-w-2xl">
-          <DialogHeader>
+        <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col">
+          <DialogHeader className="shrink-0">
             <DialogTitle>{draft.id ? t("advancedChat.mcp.editDialogTitle") : t("advancedChat.mcp.addDialogTitle")}</DialogTitle>
           </DialogHeader>
-          <div className="grid gap-4">
+          <div className="grid min-h-0 gap-4 overflow-y-auto pr-1">
             <div className="grid grid-cols-2 gap-2 rounded-md border bg-muted/30 p-1">
               {(["http", "connector"] as const).map((type) => (
                 <Button
@@ -295,7 +316,7 @@ export default function AdvancedChatMCP() {
                     className="min-h-28 w-full rounded-md border bg-background px-3 py-2 font-mono text-xs outline-none focus:ring-2 focus:ring-ring"
                     value={draft.configJSON}
                     placeholder={'{"mcpServers":{"makenotion-notion-mcp-server":{"command":"npx","args":["-y","@notionhq/notion-mcp-server"]}}}'}
-                    onChange={(event) => setDraft((current) => ({ ...current, configJSON: event.target.value }))}
+                    onChange={(event) => setDraftWithConfigJSON(event.target.value)}
                   />
                 </label>
                 <div className="grid gap-4 sm:grid-cols-2">
@@ -334,11 +355,11 @@ export default function AdvancedChatMCP() {
             </label>
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{t("advancedChat.mcp.hint")}</div>
           </div>
-          <DialogFooter>
+          <DialogFooter className="shrink-0">
             <Button variant="ghost" onClick={() => setIsDialogOpen(false)}>
               {t("common.cancel")}
             </Button>
-            <Button onClick={applyDraft}>{t("common.confirm")}</Button>
+            <Button onClick={applyDraft} disabled={saveServers.isPending}>{saveServers.isPending ? t("common.saving") : t("common.confirm")}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
@@ -419,14 +440,22 @@ function parseMCPConfigJSON(raw: string): Partial<MCPDraft> | null {
   try {
     const parsed = JSON.parse(raw)
     const root = isRecord(parsed) ? parsed : {}
-    const servers = isRecord(root.mcpServers) ? root.mcpServers : {}
-    const [id, value] = Object.entries(servers)[0] || []
-    if (!id || !isRecord(value)) {
+    let id = typeof root.id === "string" && root.id ? root.id : ""
+    let value: unknown = root
+    if (isRecord(root.mcpServers)) {
+      const entry = Object.entries(root.mcpServers)[0]
+      id = entry?.[0] || id
+      value = entry?.[1]
+    }
+    if (!isRecord(value)) {
       return null
     }
     const command = typeof value.command === "string" ? value.command : ""
     if (!command) {
       return null
+    }
+    if (!id) {
+      id = createID()
     }
     return {
       id,

@@ -10,7 +10,7 @@ import AdvancedChatMCP from "./AdvancedChatMCP"
 import AdvancedChatFiles from "./AdvancedChatFiles"
 import Images from "./Images"
 import Videos from "./Videos"
-import AdvancedChatDevices from "./AdvancedChatDevices"
+import AdvancedChatDevices, { AdvancedChatDeviceDetail } from "./AdvancedChatDevices"
 import AdvancedChatSites from "./AdvancedChatSites"
 import MessageChannels from "./MessageChannelsWorkspace"
 import AdvancedChatDeliveries from "./AdvancedChatDeliveries"
@@ -187,6 +187,7 @@ export default function AdvancedChat() {
                     <Route path="skills" element={<Skills />} />
                     <Route path="mcp" element={<AdvancedChatMCP />} />
                     <Route path="devices" element={<AdvancedChatDevices />} />
+                    <Route path="devices/:id" element={<AdvancedChatDeviceDetail />} />
                     <Route path="sites" element={<AdvancedChatSites />} />
                     <Route path="agent-groups/*" element={<AgentGroupsPage />} />
                     <Route path="agent-tasks" element={<AgentTasks />} />
@@ -237,7 +238,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/scheduled-tasks") return zh ? "计划任务" : "Scheduled Tasks"
   if (pathname === "/chat/agents") return zh ? "助理" : "Agents"
   if (pathname === "/chat/skills") return zh ? "技能" : "Skills"
-  if (pathname === "/chat/devices") return zh ? "设备" : "Devices"
+  if (pathname === "/chat/devices" || pathname.startsWith("/chat/devices/")) return zh ? "设备" : "Devices"
   if (pathname === "/chat/sites") return zh ? "站点" : "Sites"
   if (pathname.startsWith("/chat/agent-groups")) return zh ? "工作室" : "Agent Studios"
   if (pathname === "/chat/agent-tasks") return zh ? "代理任务" : "Agent Tasks"
@@ -323,7 +324,7 @@ function AdvancedChatSidebar({
       items: [
         { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
         { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
-        { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" },
+        { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" || location.pathname.startsWith("/chat/devices/") },
         { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
         { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
         { href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" },
