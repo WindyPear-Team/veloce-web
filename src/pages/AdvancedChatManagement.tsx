@@ -36,6 +36,8 @@ interface AdvancedChatSettings {
   file_storage_auto_save_videos_enabled: boolean
   builtin_mcp_servers: MCPServer[]
   assistant_mode_enabled: boolean
+  assistant_run_timeout_seconds: number
+  agent_group_run_timeout_seconds: number
   assistant_mcp_tools_enabled: boolean
   assistant_connector_list_files_enabled: boolean
   assistant_connector_read_file_enabled: boolean
@@ -59,6 +61,8 @@ const defaultAdvancedChatSettings: AdvancedChatSettings = {
   file_storage_auto_save_videos_enabled: false,
   builtin_mcp_servers: [],
   assistant_mode_enabled: true,
+  assistant_run_timeout_seconds: 1800,
+  agent_group_run_timeout_seconds: 3600,
   assistant_mcp_tools_enabled: true,
   assistant_connector_list_files_enabled: true,
   assistant_connector_read_file_enabled: true,
@@ -149,6 +153,8 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
     mutationFn: async () => {
       const res = await api.put("/advanced-chat/settings", {
         assistant_mode_enabled: form.assistant_mode_enabled,
+        assistant_run_timeout_seconds: Number(form.assistant_run_timeout_seconds) || defaultAdvancedChatSettings.assistant_run_timeout_seconds,
+        agent_group_run_timeout_seconds: Number(form.agent_group_run_timeout_seconds) || defaultAdvancedChatSettings.agent_group_run_timeout_seconds,
         assistant_mcp_tools_enabled: form.assistant_mcp_tools_enabled,
         assistant_connector_list_files_enabled: form.assistant_connector_list_files_enabled,
         assistant_connector_read_file_enabled: form.assistant_connector_read_file_enabled,
@@ -361,6 +367,32 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                   checked={form.assistant_mode_enabled}
                   onChange={(checked) => setForm((current) => ({ ...current, assistant_mode_enabled: checked }))}
                 />
+                <div className="grid gap-3 lg:grid-cols-2">
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium">助理运行超时（秒）</span>
+                    <Input
+                      type="number"
+                      min={300}
+                      max={86400}
+                      step={60}
+                      value={form.assistant_run_timeout_seconds}
+                      onChange={(event) => setForm((current) => ({ ...current, assistant_run_timeout_seconds: Number(event.target.value) }))}
+                    />
+                    <span className="block text-xs leading-5 text-muted-foreground">普通助理模式单次后台运行的总时限，默认 1800 秒。</span>
+                  </label>
+                  <label className="space-y-2 text-sm">
+                    <span className="font-medium">工作室运行超时（秒）</span>
+                    <Input
+                      type="number"
+                      min={300}
+                      max={86400}
+                      step={60}
+                      value={form.agent_group_run_timeout_seconds}
+                      onChange={(event) => setForm((current) => ({ ...current, agent_group_run_timeout_seconds: Number(event.target.value) }))}
+                    />
+                    <span className="block text-xs leading-5 text-muted-foreground">工作室模式单次后台运行的总时限，默认 3600 秒。</span>
+                  </label>
+                </div>
                 <div className="grid gap-3 lg:grid-cols-3">
                   <ToggleRow
                     title="启用计划任务"
@@ -582,6 +614,8 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     file_storage_auto_save_videos_enabled: item.file_storage_auto_save_videos_enabled === true,
     builtin_mcp_servers: Array.isArray(item.builtin_mcp_servers) ? item.builtin_mcp_servers.map(normalizeMCPServer) : [],
     assistant_mode_enabled: item.assistant_mode_enabled !== false,
+    assistant_run_timeout_seconds: Number(item.assistant_run_timeout_seconds || defaultAdvancedChatSettings.assistant_run_timeout_seconds),
+    agent_group_run_timeout_seconds: Number(item.agent_group_run_timeout_seconds || defaultAdvancedChatSettings.agent_group_run_timeout_seconds),
     assistant_mcp_tools_enabled: item.assistant_mcp_tools_enabled !== false,
     assistant_connector_list_files_enabled: item.assistant_connector_list_files_enabled !== false,
     assistant_connector_read_file_enabled: item.assistant_connector_read_file_enabled !== false,

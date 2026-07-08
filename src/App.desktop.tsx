@@ -8,9 +8,11 @@ import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
 import api, {
   getAuthToken,
+  getDesktopTabID,
   getDesktopServerURL,
   normalizeServerURL,
   setAuthToken,
+  setDesktopTabServerURL,
   setDesktopServerURL,
 } from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
@@ -23,6 +25,14 @@ import logoURL from "./assets/logo.png"
 const queryClient = new QueryClient()
 const desktopServersStorageKey = "veloce.desktop.servers"
 const desktopServerAccountPrefix = "veloce.desktop.server_account."
+const desktopTabsStorageKey = "veloce.desktop.tabs"
+const desktopActiveTabStorageKey = "veloce.desktop.active_tab"
+
+interface DesktopTab {
+  id: string
+  title: string
+  serverURL: string
+}
 
 interface BuiltinServerStatus {
   enabled: boolean
@@ -82,6 +92,51 @@ function readServerList() {
 
 function writeServerList(values: string[]) {
   localStorage.setItem(desktopServersStorageKey, JSON.stringify(Array.from(new Set(values.map(normalizeServerURL)))))
+}
+
+function newDesktopTab(serverURL = getDesktopServerURL()): DesktopTab {
+  return {
+    id: `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
+    title: "Chat",
+    serverURL: normalizeServerURL(serverURL),
+  }
+}
+
+function readDesktopTabs(): DesktopTab[] {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(desktopTabsStorageKey) || "[]")
+    const tabs = Array.isArray(parsed)
+      ? parsed
+        .map((item): DesktopTab | null => {
+          if (!item || typeof item !== "object") {
+            return null
+          }
+          const raw = item as Record<string, unknown>
+          const id = typeof raw.id === "string" && raw.id ? raw.id : ""
+          if (!/^[a-zA-Z0-9_-]{1,80}$/.test(id)) {
+            return null
+          }
+          return {
+            id,
+            title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 40) : "Chat",
+            serverURL: normalizeServerURL(typeof raw.serverURL === "string" ? raw.serverURL : getDesktopServerURL()),
+          }
+        })
+        .filter((item): item is DesktopTab => Boolean(item))
+      : []
+    return tabs.length ? tabs : [newDesktopTab()]
+  } catch {
+    return [newDesktopTab()]
+  }
+}
+
+function writeDesktopTabs(tabs: DesktopTab[]) {
+  localStorage.setItem(desktopTabsStorageKey, JSON.stringify(tabs))
+}
+
+function readActiveDesktopTabID(tabs: DesktopTab[]) {
+  const stored = localStorage.getItem(desktopActiveTabStorageKey) || ""
+  return tabs.some((tab) => tab.id === stored) ? stored : tabs[0]?.id || ""
 }
 
 function TokenBridge() {
@@ -156,7 +211,21 @@ function DocumentTitle() {
   return null
 }
 
-function DesktopTitleBar() {
+function DesktopTitleBar({
+  tabs,
+  activeTabID,
+  onSelectTab,
+  onAddTab,
+  onCloseTab,
+  onUpdateTabServer,
+}: {
+  tabs: DesktopTab[]
+  activeTabID: string
+  onSelectTab: (tabID: string) => void
+  onAddTab: () => void
+  onCloseTab: (tabID: string) => void
+  onUpdateTabServer: (tabID: string, serverURL: string) => void
+}) {
   const { language } = useI18n()
   const queryClient = useQueryClient()
   const serverPopupRef = useRef<HTMLDivElement | null>(null)
@@ -173,10 +242,11 @@ function DesktopTitleBar() {
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
-  const currentServer = getDesktopServerURL()
+  const activeTab = tabs.find((tab) => tab.id === activeTabID) || tabs[0]
+  const currentServer = normalizeServerURL(activeTab?.serverURL || getDesktopServerURL())
   const copy = language === "zh"
-    ? { title: "Veloce", label: "服务器", settings: "设置", status: "服务状态", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪" }
-    : { title: "Veloce", label: "Server", settings: "Settings", status: "Service status", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready" }
+    ? { title: "Veloce", label: "服务器", settings: "设置", status: "服务状态", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪", newTab: "新标签页", closeTab: "关闭标签页" }
+    : { title: "Veloce", label: "Server", settings: "Settings", status: "Service status", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready", newTab: "New tab", closeTab: "Close tab" }
 
   const { data: user } = useQuery<{ username?: string; email?: string }>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
@@ -187,6 +257,10 @@ function DesktopTitleBar() {
     enabled: Boolean(getAuthToken()),
     retry: false,
   })
+
+  useEffect(() => {
+    setValue(currentServer)
+  }, [currentServer])
 
   useEffect(() => {
     const label = user?.username || user?.email
@@ -266,21 +340,27 @@ function DesktopTitleBar() {
   }, [copy.updateReady, isSettingsOpen])
 
   const saveServer = () => {
-    const nextURL = setDesktopServerURL(value)
+    const nextURL = normalizeServerURL(value)
     writeServerList([nextURL, ...servers])
     setValue(nextURL)
     setServers(readServerList())
+    if (activeTab) {
+      onUpdateTabServer(activeTab.id, nextURL)
+    }
     queryClient.clear()
-    window.location.reload()
+    setIsServerOpen(false)
   }
 
   const selectServer = (serverURL: string) => {
-    const nextURL = setDesktopServerURL(serverURL)
+    const nextURL = normalizeServerURL(serverURL)
     writeServerList([nextURL, ...servers])
     setValue(nextURL)
     setServers(readServerList())
+    if (activeTab) {
+      onUpdateTabServer(activeTab.id, nextURL)
+    }
     queryClient.clear()
-    window.location.reload()
+    setIsServerOpen(false)
   }
 
   const toggleBuiltinServer = async () => {
@@ -293,16 +373,19 @@ function DesktopTitleBar() {
     setBuiltinStatus(status)
     setIsBuiltinBusy(status.phase === "checking" || status.phase === "downloading" || status.phase === "starting")
     if (status.enabled && status.serverURL) {
-      const nextURL = setDesktopServerURL(status.serverURL)
+      const nextURL = normalizeServerURL(status.serverURL)
       writeServerList([nextURL, ...servers])
       setBuiltinStatus({ ...status, message: copy.builtinWaiting })
       const setupStatus = await waitForSetupStatus(nextURL)
+      if (activeTab) {
+        onUpdateTabServer(activeTab.id, nextURL)
+        setDesktopServerURL(nextURL, activeTab.id)
+      }
       if (!setupStatus?.required && hasAuthToken()) {
         await api.put("/settings", { system_mode: "personal" }).catch(() => undefined)
       }
       queryClient.clear()
-      window.location.hash = setupStatus?.required ? "/setup" : hasAuthToken() ? "/chat" : "/login"
-      window.location.reload()
+      setIsServerOpen(false)
     }
   }
 
@@ -342,9 +425,42 @@ function DesktopTitleBar() {
     <>
     <div className="fixed inset-x-0 top-0 z-50 h-9 select-none border-b bg-background/95 backdrop-blur [-webkit-app-region:drag]">
       <div className="flex h-full items-center justify-between pl-3 pr-[138px]">
-        <div className="flex min-w-0 items-center gap-2 text-xs font-semibold">
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold">
           <img src={logoURL} alt="" className="h-5 w-5 rounded object-cover" />
-          <span className="truncate">{copy.title}</span>
+          <span className="shrink-0 truncate">{copy.title}</span>
+          <div className="ml-1 flex min-w-0 max-w-[55vw] items-center gap-1 overflow-hidden [-webkit-app-region:no-drag]">
+            {tabs.map((tab) => {
+              const active = tab.id === activeTabID
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  className={`flex min-w-0 max-w-44 items-center gap-1 border px-2 text-left text-[11px] ${active ? "h-8 self-end rounded-t-md rounded-b-none border-border border-b-background bg-background text-foreground shadow-sm" : "h-7 rounded-md border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                  onClick={() => onSelectTab(tab.id)}
+                  title={`${tab.title} · ${tab.serverURL}`}
+                >
+                  <span className="truncate">{tab.title}</span>
+                  {tabs.length > 1 && (
+                    <span
+                      role="button"
+                      tabIndex={-1}
+                      className="ml-1 flex h-4 w-4 shrink-0 items-center justify-center rounded hover:bg-background/80"
+                      title={copy.closeTab}
+                      onClick={(event) => {
+                        event.stopPropagation()
+                        onCloseTab(tab.id)
+                      }}
+                    >
+                      x
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+            <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title={copy.newTab} aria-label={copy.newTab} onClick={onAddTab}>
+              <Plus size={14} />
+            </Button>
+          </div>
         </div>
         <div className="flex items-center gap-1 [-webkit-app-region:no-drag]">
         <Button
@@ -713,30 +829,156 @@ function delay(ms: number) {
 }
 
 function DesktopRoutes() {
+  const embeddedTabID = getDesktopTabID()
+  if (embeddedTabID) {
+    mirrorDesktopBridge()
+    return (
+      <HashRouter>
+        <TokenBridge />
+        <DocumentTitle />
+        <div className="fixed inset-0 overflow-hidden">
+          <SetupGate>
+            <Routes>
+              <Route path="/" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
+              <Route path="/login" element={<Login />} />
+              <Route path="/setup" element={<Setup />} />
+              <Route
+                path="/chat/*"
+                element={
+                  <ProtectedRoute>
+                    <AdvancedChat />
+                  </ProtectedRoute>
+                }
+              />
+              <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
+            </Routes>
+          </SetupGate>
+        </div>
+      </HashRouter>
+    )
+  }
+
+  return <DesktopTabbedShell />
+}
+
+function mirrorDesktopBridge() {
+  if (!window.veloceDesktop && window.parent && window.parent !== window && window.parent.veloceDesktop) {
+    window.veloceDesktop = window.parent.veloceDesktop
+  }
+}
+
+function DesktopTabbedShell() {
+  const queryClient = useQueryClient()
+  const initialTabsRef = useRef<DesktopTab[] | null>(null)
+  if (!initialTabsRef.current) {
+    initialTabsRef.current = readDesktopTabs()
+  }
+  const [tabs, setTabs] = useState<DesktopTab[]>(() => initialTabsRef.current || [newDesktopTab()])
+  const [activeTabID, setActiveTabID] = useState(() => readActiveDesktopTabID(initialTabsRef.current || []))
+
+  useEffect(() => {
+    writeDesktopTabs(tabs)
+    for (const tab of tabs) {
+      setDesktopTabServerURL(tab.id, tab.serverURL)
+    }
+    if (!tabs.some((tab) => tab.id === activeTabID) && tabs[0]) {
+      setActiveTabID(tabs[0].id)
+      localStorage.setItem(desktopActiveTabStorageKey, tabs[0].id)
+    }
+  }, [activeTabID, tabs])
+
+  useEffect(() => {
+    const activeTab = tabs.find((tab) => tab.id === activeTabID)
+    if (activeTab) {
+      setDesktopServerURL(activeTab.serverURL)
+    }
+  }, [activeTabID, tabs])
+
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data
+      if (!data || typeof data !== "object" || data.type !== "veloce-desktop-tab-title") {
+        return
+      }
+      const frame = Array.from(document.querySelectorAll<HTMLIFrameElement>("iframe[data-tab-id]"))
+        .find((item) => item.contentWindow === event.source)
+      const tabID = frame?.dataset.tabId
+      if (!tabID) {
+        return
+      }
+      const title = typeof data.title === "string" && data.title.trim() ? data.title.trim().slice(0, 40) : "Chat"
+      setTabs((current) => current.map((tab) => tab.id === tabID ? { ...tab, title } : tab))
+    }
+    window.addEventListener("message", handleMessage)
+    return () => window.removeEventListener("message", handleMessage)
+  }, [])
+
+  const selectTab = (tabID: string) => {
+    const tab = tabs.find((item) => item.id === tabID)
+    if (tab) {
+      setDesktopServerURL(tab.serverURL)
+      queryClient.clear()
+    }
+    setActiveTabID(tabID)
+    localStorage.setItem(desktopActiveTabStorageKey, tabID)
+  }
+
+  const addTab = () => {
+    const tab = newDesktopTab(tabs.find((item) => item.id === activeTabID)?.serverURL || getDesktopServerURL())
+    setDesktopTabServerURL(tab.id, tab.serverURL)
+    setTabs((current) => [...current, tab])
+    selectTab(tab.id)
+  }
+
+  const closeTab = (tabID: string) => {
+    setTabs((current) => {
+      if (current.length <= 1) {
+        return current
+      }
+      const next = current.filter((tab) => tab.id !== tabID)
+      if (activeTabID === tabID) {
+        const fallback = next[Math.max(0, current.findIndex((tab) => tab.id === tabID) - 1)] || next[0]
+        if (fallback) {
+          setActiveTabID(fallback.id)
+          localStorage.setItem(desktopActiveTabStorageKey, fallback.id)
+        }
+      }
+      return next
+    })
+  }
+
+  const updateTabServer = (tabID: string, serverURL: string) => {
+    const nextURL = normalizeServerURL(serverURL)
+    setDesktopTabServerURL(tabID, nextURL)
+    if (tabID === activeTabID) {
+      setDesktopServerURL(nextURL)
+      queryClient.clear()
+    }
+    setTabs((current) => current.map((tab) => tab.id === tabID ? { ...tab, serverURL: nextURL } : tab))
+  }
+
   return (
-    <HashRouter>
-      <TokenBridge />
-      <DocumentTitle />
-      <DesktopTitleBar />
-      <div className="fixed inset-x-0 bottom-0 top-9 overflow-hidden">
-        <SetupGate>
-          <Routes>
-            <Route path="/" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
-            <Route path="/login" element={<Login />} />
-            <Route path="/setup" element={<Setup />} />
-            <Route
-              path="/chat/*"
-              element={
-                <ProtectedRoute>
-                  <AdvancedChat />
-                </ProtectedRoute>
-              }
-            />
-            <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
-          </Routes>
-        </SetupGate>
+    <>
+      <DesktopTitleBar
+        tabs={tabs}
+        activeTabID={activeTabID}
+        onSelectTab={selectTab}
+        onAddTab={addTab}
+        onCloseTab={closeTab}
+        onUpdateTabServer={updateTabServer}
+      />
+      <div className="fixed inset-x-0 bottom-0 top-9 overflow-hidden bg-background">
+        {tabs.map((tab) => (
+          <iframe
+            key={`${tab.id}:${tab.serverURL}`}
+            title={tab.title}
+            data-tab-id={tab.id}
+            src={`./index.html?desktop_tab_id=${encodeURIComponent(tab.id)}#/chat`}
+            className={`h-full w-full border-0 ${tab.id === activeTabID ? "block" : "hidden"}`}
+          />
+        ))}
       </div>
-    </HashRouter>
+    </>
   )
 }
 

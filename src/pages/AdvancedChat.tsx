@@ -1,7 +1,7 @@
 import { BarChart3, Bot, Boxes, CalendarClock, Database, FileText, Globe2, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import Chat from "./Chat"
 import Agents from "./Agents"
 import Skills from "./Skills"
@@ -69,6 +69,13 @@ export default function AdvancedChat() {
   const transitionKey = isChatRoute ? "/chat" : location.pathname
   const layoutEditorLabel = language === "zh" ? (isLayoutEditing ? "退出编辑" : "可视化编辑") : isLayoutEditing ? "Exit editing" : "Visual editing"
   const viewportHeightClass = isDesktopTarget() ? "h-full" : "h-screen"
+
+  useEffect(() => {
+    if (!isDesktopTarget()) {
+      return
+    }
+    window.parent?.postMessage({ type: "veloce-desktop-tab-title", title: desktopPageTitle(location.pathname, language) }, "*")
+  }, [language, location.pathname])
 
   if (isSettingsLoading) {
     return (
@@ -202,6 +209,31 @@ export default function AdvancedChat() {
     </div>
     </PageLayoutEditorProvider>
   )
+}
+
+function desktopPageTitle(pathname: string, language: string) {
+  const zh = language === "zh"
+  if (pathname === "/chat" || pathname.startsWith("/chat/session/")) return zh ? "聊天" : "Chat"
+  if (pathname === "/chat/images") return zh ? "图像" : "Images"
+  if (pathname === "/chat/videos") return zh ? "视频" : "Videos"
+  if (pathname === "/chat/files") return zh ? "文件库" : "Files"
+  if (pathname.startsWith("/chat/channels")) return zh ? "消息通道" : "Message Channels"
+  if (pathname === "/chat/deliveries") return zh ? "结果投递" : "Result Delivery"
+  if (pathname === "/chat/scheduled-tasks") return zh ? "计划任务" : "Scheduled Tasks"
+  if (pathname === "/chat/agents") return zh ? "助理" : "Agents"
+  if (pathname === "/chat/skills") return zh ? "技能" : "Skills"
+  if (pathname === "/chat/devices") return zh ? "设备" : "Devices"
+  if (pathname === "/chat/sites") return zh ? "站点" : "Sites"
+  if (pathname.startsWith("/chat/agent-groups")) return zh ? "工作室" : "Agent Studios"
+  if (pathname === "/chat/agent-tasks") return zh ? "代理任务" : "Agent Tasks"
+  if (pathname === "/chat/mcp") return zh ? "MCP" : "MCP"
+  if (pathname === "/chat/admin-overview") return zh ? "管理概览" : "Admin Overview"
+  if (pathname === "/chat/admin-logs") return zh ? "审计日志" : "Audit Logs"
+  if (pathname.startsWith("/chat/admin/")) return zh ? "系统设置" : "System"
+  if (pathname === "/chat/admin-channels") return zh ? "渠道" : "Channels"
+  if (pathname === "/chat/admin-models") return zh ? "模型" : "Models"
+  if (pathname === "/chat/admin-users") return zh ? "用户" : "Users"
+  return zh ? "聊天" : "Chat"
 }
 
 function AdvancedChatSidebar({

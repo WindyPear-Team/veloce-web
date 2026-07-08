@@ -3,8 +3,21 @@ import axios from 'axios';
 export const desktopServerStorageKey = "veloce.desktop.server_url";
 export const defaultDesktopServerURL = "http://localhost:8080";
 const desktopServerTokenPrefix = "veloce.desktop.server_token.";
+const desktopTabServerPrefix = "veloce.desktop.tab_server.";
 
 export const isDesktopTarget = () => import.meta.env.VITE_APP_TARGET === "desktop";
+
+export const getDesktopTabID = () => {
+  if (typeof window === "undefined") {
+    return "";
+  }
+  const value = new URLSearchParams(window.location.search).get("desktop_tab_id") || "";
+  return /^[a-zA-Z0-9_-]{1,80}$/.test(value) ? value : "";
+};
+
+const desktopTabServerStorageKey = (tabID = getDesktopTabID()) => {
+  return tabID ? `${desktopTabServerPrefix}${tabID}` : desktopServerStorageKey;
+};
 
 export const normalizeServerURL = (value: string | null | undefined) => {
   const trimmed = (value || "").trim();
@@ -22,11 +35,11 @@ export const normalizeServerURL = (value: string | null | undefined) => {
   }
 };
 
-export const getDesktopServerURL = () => {
+export const getDesktopServerURL = (tabID = getDesktopTabID()) => {
   if (typeof window === "undefined") {
     return defaultDesktopServerURL;
   }
-  return normalizeServerURL(localStorage.getItem(desktopServerStorageKey));
+  return normalizeServerURL(localStorage.getItem(desktopTabServerStorageKey(tabID)) || localStorage.getItem(desktopServerStorageKey));
 };
 
 export const desktopServerTokenKey = (serverURL = getDesktopServerURL()) => {
@@ -63,7 +76,7 @@ export const clearAuthToken = () => {
   }
 };
 
-export const setDesktopServerURL = (serverURL: string) => {
+export const setDesktopServerURL = (serverURL: string, tabID = getDesktopTabID()) => {
   if (typeof window === "undefined") {
     return defaultDesktopServerURL;
   }
@@ -72,13 +85,25 @@ export const setDesktopServerURL = (serverURL: string) => {
     localStorage.setItem(desktopServerTokenKey(), currentToken);
   }
   const nextURL = normalizeServerURL(serverURL);
-  localStorage.setItem(desktopServerStorageKey, nextURL);
+  localStorage.setItem(desktopTabServerStorageKey(tabID), nextURL);
+  if (!tabID) {
+    localStorage.setItem(desktopServerStorageKey, nextURL);
+  }
   const nextToken = localStorage.getItem(desktopServerTokenKey(nextURL));
   if (nextToken) {
     localStorage.setItem("token", nextToken);
   } else {
     localStorage.removeItem("token");
   }
+  return nextURL;
+};
+
+export const setDesktopTabServerURL = (tabID: string, serverURL: string) => {
+  if (typeof window === "undefined" || !tabID) {
+    return normalizeServerURL(serverURL);
+  }
+  const nextURL = normalizeServerURL(serverURL);
+  localStorage.setItem(desktopTabServerStorageKey(tabID), nextURL);
   return nextURL;
 };
 

@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, Bot, Check, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
+import { Activity, ArrowDown, Bot, Check, Copy, FileText, Menu, MessageSquarePlus, Paperclip, Pencil, Plus, Send, Server, Settings, Sparkles, Trash2, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -380,7 +380,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const copy = useMemo(() => buildChatCopy(t), [t])
   const fileCopy = useMemo(() => (language === "zh" ? zhFileAttachmentCopy : enFileAttachmentCopy), [language])
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
-  const { error } = useToast()
+  const { error, success } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [] : readStoredSessions(storeKeys.sessions, true)))
   const [draftSession, setDraftSession] = useState<ChatSession>(() => createSession())
   const [storedActiveSessionID, setStoredActiveSessionID] = useState(() => localStorage.getItem(storeKeys.selectedSession) || "")
@@ -519,6 +519,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const currentSession = currentSessionRaw ? normalizeRuntimeSession(currentSessionRaw) : undefined
   const currentMessages = currentSession?.messages || []
   const latestMessage = currentMessages[currentMessages.length - 1]
+
+  useEffect(() => {
+    if (!isDesktopTarget()) {
+      return
+    }
+    const title = (currentSession?.title || copy.untitledSession).trim()
+    window.parent?.postMessage({ type: "veloce-desktop-tab-title", title }, "*")
+  }, [copy.untitledSession, currentSession?.title])
+
   const latestMessageSignal = useMemo(
     () => [
       currentSession?.id || "",
@@ -794,7 +803,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const scrollMessagesToLatest = (behavior: ScrollBehavior = "smooth") => {
-    messagesEndRef.current?.scrollIntoView({ block: "end", behavior })
+    const container = messagesScrollElement()
+    if (container === document.scrollingElement || container === document.documentElement) {
+      window.scrollTo({ top: document.documentElement.scrollHeight, behavior })
+    } else {
+      container.scrollTo({ top: container.scrollHeight, behavior })
+    }
     setShowJumpToLatest(false)
   }
 
@@ -1890,6 +1904,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
+  const copyMessage = async (message: ChatMessage) => {
+    try {
+      await navigator.clipboard.writeText(messageDisplayContent(message, activeRun, copy))
+      success(copy.messageCopied)
+    } catch {
+      error(copy.copyFailed)
+    }
+  }
+
   const handleAttachmentFiles = async (files: FileList | null, target: AttachmentTarget = "composer") => {
     if (!isAdvanced || !files?.length) {
       return
@@ -2463,7 +2486,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   className="min-h-36 w-full resize-none rounded-xl border-0 bg-transparent px-3 py-3 text-base outline-none placeholder:text-muted-foreground focus:ring-0"
                   value={prompt}
                   placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
-                  disabled={isActiveRunRunning}
                   onChange={handleComposerPromptChange}
                   onKeyDown={handleComposerPromptKeyDown}
                   onClick={(event) => updateAgentMention(prompt, event.currentTarget.selectionStart)}
@@ -2593,6 +2615,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                             approvalTasks={pendingConnectorApprovals}
                             decidingTaskID={decidingConnectorTaskID}
                             onDecide={decideConnectorApproval}
+                            onCopy={() => copyMessage(message)}
                             onEdit={() => beginEditMessage(message)}
                             onDelete={() => deleteMessage(message.id)}
                             editLabel={copy.editMessage}
@@ -2602,9 +2625,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         )
                       }
                       return (
-                        <div key={message.id} className="space-y-1.5">
+                        <div key={message.id} className="group space-y-1.5">
                           <div className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                            <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                            <div className="w-fit max-w-full rounded-md border bg-background p-3 text-sm">
                               <div className="flex items-start gap-2">
                                 {message.role === "user" ? (
                                   <User className="mt-0.5 h-4 w-4 shrink-0" />
@@ -2645,34 +2668,38 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                   )}
                                 </div>
                               </div>
-                              <div
-                                className={cn(
-                                  "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                                  editingMessageID === message.id && "opacity-100",
-                                  message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
-                                )}
-                              >
-                                {editingMessageID === message.id ? (
-                                  <>
-                                    <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
-                                      <Check size={15} />
-                                    </Button>
-                                    <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
-                                      <X size={15} />
-                                    </Button>
-                                  </>
-                                ) : (
-                                  <>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
-                                      <Pencil size={14} />
-                                    </Button>
-                                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
-                                      <Trash2 size={14} />
-                                    </Button>
-                                  </>
-                                )}
-                              </div>
                             </div>
+                          </div>
+                          <div
+                            className={cn(
+                              "flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                              message.role === "user" ? "justify-end" : "justify-start",
+                              editingMessageID === message.id && "opacity-100",
+                              message.role === "assistant" && isActiveRunRunning && activeRun?.assistant_message_id === message.id && "pointer-events-none opacity-0"
+                            )}
+                          >
+                            {editingMessageID === message.id ? (
+                              <>
+                                <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
+                                  <Check size={15} />
+                                </Button>
+                                <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
+                                  <X size={15} />
+                                </Button>
+                              </>
+                            ) : (
+                              <>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyMessage(message)} title={copy.copyMessage}>
+                                  <Copy size={14} />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
+                                  <Pencil size={14} />
+                                </Button>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                  <Trash2 size={14} />
+                                </Button>
+                              </>
+                            )}
                           </div>
                         </div>
                       )
@@ -2717,7 +2744,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         rows={1}
                         value={prompt}
                         placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
-                        disabled={isActiveRunRunning}
                         onChange={handleComposerPromptChange}
                         onKeyDown={handleComposerPromptKeyDown}
                         onClick={(event) => updateAgentMention(prompt, event.currentTarget.selectionStart)}
@@ -3380,6 +3406,7 @@ function AssistantMessageSequence({
   approvalTasks,
   decidingTaskID,
   onDecide,
+  onCopy,
   onEdit,
   onDelete,
   editLabel,
@@ -3392,6 +3419,7 @@ function AssistantMessageSequence({
   approvalTasks: ConnectorApprovalTask[]
   decidingTaskID: string
   onDecide: (taskID: string, approved: boolean) => void
+  onCopy: () => void
   onEdit: () => void
   onDelete: () => void
   editLabel: string
@@ -3413,27 +3441,32 @@ function AssistantMessageSequence({
         return (
           <div key={round} className="space-y-1.5">
             {roundParts.map((part, index) => (
-              <div key={`${round}-part-${index}`} className="flex justify-start">
-                <div className="group w-fit max-w-full rounded-md border bg-background p-3 text-sm">
-                  <div className="flex items-start gap-2">
-                    <Bot className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div className="min-w-0 flex-1">
-                      <MarkdownContent content={part.content} />
+              <div key={`${round}-part-${index}`} className="group space-y-1.5">
+                <div className="flex justify-start">
+                  <div className="w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                    <div className="flex items-start gap-2">
+                      <Bot className="mt-0.5 h-4 w-4 shrink-0" />
+                      <div className="min-w-0 flex-1">
+                        <MarkdownContent content={part.content} />
+                      </div>
                     </div>
                   </div>
-                  <div
-                    className={cn(
-                      "mt-2 flex justify-end gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
-                      controlsHidden && "pointer-events-none opacity-0"
-                    )}
-                  >
-                    <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title={editLabel}>
-                      <Pencil size={14} />
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={onDelete} title={deleteLabel}>
-                      <Trash2 size={14} />
-                    </Button>
-                  </div>
+                </div>
+                <div
+                  className={cn(
+                    "flex justify-start gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100",
+                    controlsHidden && "pointer-events-none opacity-0"
+                  )}
+                >
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onCopy} title={copy.copyMessage}>
+                    <Copy size={14} />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title={editLabel}>
+                    <Pencil size={14} />
+                  </Button>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={onDelete} title={deleteLabel}>
+                    <Trash2 size={14} />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -5922,6 +5955,9 @@ const chatCopyKeys = {
   runningAssistant: "chat.runningAssistant",
   editMessage: "chat.editMessage",
   deleteMessage: "chat.deleteMessage",
+  copyMessage: "chat.copyMessage",
+  messageCopied: "chat.messageCopied",
+  copyFailed: "chat.copyFailed",
   saveMessage: "chat.saveMessage",
   cancelEdit: "chat.cancelEdit",
   keyRequired: "chat.keyRequired",
