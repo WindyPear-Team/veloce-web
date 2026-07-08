@@ -1655,10 +1655,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           return
         }
 
-        const assistantMessage = createMessage("assistant", "", [])
-        const assistantMessageID = assistantMessage.id
         if (selectedAgent?.stream !== true) {
-          updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
           try {
             const res = await api.post("/user/advanced-chat/completions", {
               session_id: session.id,
@@ -1683,28 +1680,34 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             const content = typeof res.data?.message?.content === "string" ? res.data.message.content : ""
             const finalParts = normalizeContentParts(res.data?.message?.content_parts, content)
             const finalToolCalls = normalizeToolCalls(res.data?.tool_call_details)
+            const assistantMessage = createMessage("assistant", content || copy.emptyResponse, finalToolCalls)
             updateSession(session.id, (current) => ({
               ...current,
-              messages: current.messages.map((message) =>
-                message.id === assistantMessageID
-                  ? { ...message, content: content || copy.emptyResponse, content_parts: finalParts, tool_calls: finalToolCalls }
-                  : message
-              ),
+              messages: [...current.messages, { ...assistantMessage, content_parts: finalParts }],
             }))
           } catch (err) {
-            updateSession(session.id, (current) => ({
-              ...current,
-              messages: current.messages.filter((message) => message.id !== assistantMessageID),
-            }))
             throw err
           }
           void refetchAdvancedSessions()
           return
         }
+        const assistantMessage = createMessage("assistant", "", [])
+        const assistantMessageID = assistantMessage.id
         const controller = new AbortController()
         abortControllerRef.current = controller
         setIsStreamActive(true)
-        updateSession(session.id, (current) => ({ ...current, messages: [...current.messages, assistantMessage] }))
+        const upsertAssistantMessage = (updater: (message: ChatMessage) => ChatMessage) => {
+          updateSession(session.id, (current) => {
+            const existing = current.messages.find((message) => message.id === assistantMessageID)
+            const nextMessage = updater(existing || assistantMessage)
+            return {
+              ...current,
+              messages: existing
+                ? current.messages.map((message) => message.id === assistantMessageID ? nextMessage : message)
+                : [...current.messages, nextMessage],
+            }
+          })
+        }
 
         let accumulatedText = ""
         try {
@@ -1758,50 +1761,24 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               }
               const round = typeof event.payload.round === "number" && Number.isFinite(event.payload.round) ? event.payload.round : 1
               accumulatedText += delta
-              updateSession(session.id, (current) => ({
-                ...current,
-                messages: current.messages.map((message) =>
-                  message.id === assistantMessageID
-                    ? { ...message, content: accumulatedText, content_parts: appendContentPart(message.content_parts || [], round, delta) }
-                    : message
-                ),
-              }))
+              upsertAssistantMessage((message) => ({ ...message, content: accumulatedText, content_parts: appendContentPart(message.content_parts || [], round, delta) }))
             } else if (event.type === "status") {
               const statusText = streamStatusText(event.payload, copy)
               if (!statusText || accumulatedText) {
                 return
               }
-              updateSession(session.id, (current) => ({
-                ...current,
-                messages: current.messages.map((message) =>
-                  message.id === assistantMessageID ? { ...message, content: statusText } : message
-                ),
-              }))
+              upsertAssistantMessage((message) => ({ ...message, content: statusText }))
             } else if (event.type === "tool_call") {
               const nextToolCalls = normalizeToolCalls([event.payload])
               if (nextToolCalls.length === 0) {
                 return
               }
-              updateSession(session.id, (current) => ({
-                ...current,
-                messages: current.messages.map((message) =>
-                  message.id === assistantMessageID
-                    ? { ...message, tool_calls: mergeToolCalls(message.tool_calls || [], nextToolCalls) }
-                    : message
-                ),
-              }))
+              upsertAssistantMessage((message) => ({ ...message, tool_calls: mergeToolCalls(message.tool_calls || [], nextToolCalls) }))
             } else if (event.type === "done") {
               const finalContent = typeof event.payload.message?.content === "string" ? event.payload.message.content : accumulatedText
               const finalParts = normalizeContentParts(event.payload.message?.content_parts, finalContent)
               const finalToolCalls = normalizeToolCalls(event.payload.tool_call_details)
-              updateSession(session.id, (current) => ({
-                ...current,
-                messages: current.messages.map((message) =>
-                  message.id === assistantMessageID
-                    ? { ...message, content: finalContent, content_parts: finalParts, tool_calls: finalToolCalls }
-                    : message
-                ),
-              }))
+              upsertAssistantMessage((message) => ({ ...message, content: finalContent || copy.emptyResponse, content_parts: finalParts, tool_calls: finalToolCalls }))
             } else if (event.type === "error") {
               throw new Error(typeof event.payload.error === "string" ? event.payload.error : copy.sendFailed)
             }
