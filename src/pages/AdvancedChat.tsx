@@ -185,6 +185,7 @@ export default function AdvancedChat() {
                   <Routes>
                     <Route path="agents" element={<Agents />} />
                     <Route path="skills" element={<Skills />} />
+                    <Route path="skills/:id" element={<Skills />} />
                     <Route path="mcp" element={<AdvancedChatMCP />} />
                     <Route path="devices" element={<AdvancedChatDevices />} />
                     <Route path="devices/:id" element={<AdvancedChatDeviceDetail />} />
@@ -237,7 +238,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/deliveries") return zh ? "结果投递" : "Result Delivery"
   if (pathname === "/chat/scheduled-tasks") return zh ? "计划任务" : "Scheduled Tasks"
   if (pathname === "/chat/agents") return zh ? "助理" : "Agents"
-  if (pathname === "/chat/skills") return zh ? "技能" : "Skills"
+  if (pathname === "/chat/skills" || pathname.startsWith("/chat/skills/")) return zh ? "技能" : "Skills"
   if (pathname === "/chat/devices" || pathname.startsWith("/chat/devices/")) return zh ? "设备" : "Devices"
   if (pathname === "/chat/sites") return zh ? "站点" : "Sites"
   if (pathname.startsWith("/chat/agent-groups")) return zh ? "工作室" : "Agent Studios"
@@ -323,7 +324,7 @@ function AdvancedChatSidebar({
       label: agentLabel,
       items: [
         { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
-        { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" },
+        { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" || location.pathname.startsWith("/chat/skills/") },
         { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" || location.pathname.startsWith("/chat/devices/") },
         { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
         { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
