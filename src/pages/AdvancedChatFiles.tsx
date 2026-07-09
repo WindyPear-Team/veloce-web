@@ -310,7 +310,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const zhCopy = {
   title: "文件库",
-  subtitle: "管理高级聊天可复用的附件和自动保存的生成结果。",
+  subtitle: "管理助理聊天可复用的附件和自动保存的生成结果。",
   storage: "存储空间",
   files: "文件",
   upload: "上传文件",
@@ -331,7 +331,7 @@ const zhCopy = {
 
 const enCopy: typeof zhCopy = {
   title: "Files",
-  subtitle: "Manage reusable attachments and auto-saved generation results for advanced chat.",
+  subtitle: "Manage reusable attachments and auto-saved generation results for agent chat.",
   storage: "Storage",
   files: "Files",
   upload: "Upload files",

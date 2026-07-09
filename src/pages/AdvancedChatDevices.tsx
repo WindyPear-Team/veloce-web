@@ -915,7 +915,7 @@ function apiErrorMessage(err: unknown, fallback: string) {
 
 const zhCopy = {
   title: "设备",
-  subtitle: "管理连接到高级聊天的本地设备，并生成本地连接器启动命令。",
+  subtitle: "管理连接到助理聊天的本地设备，并生成本地连接器启动命令。",
   commandTitle: "添加设备",
   deviceName: "设备名称",
   deviceType: "设备类型",
@@ -998,7 +998,7 @@ const zhCopy = {
 
 const enCopy: typeof zhCopy = {
   title: "Devices",
-  subtitle: "Manage local devices connected to advanced chat and generate connector start commands.",
+  subtitle: "Manage local devices connected to agent chat and generate connector start commands.",
   commandTitle: "Add device",
   deviceName: "Device name",
   deviceType: "Device type",

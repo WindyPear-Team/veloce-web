@@ -563,7 +563,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const zhCopy = {
   title: "计划任务",
-  subtitle: "按手动、一次性或间隔运行高级聊天任务，并通过结果投递配置发送输出。",
+  subtitle: "按手动、一次性或间隔运行助理聊天任务，并通过结果投递配置发送输出。",
   list: "任务列表",
   empty: "暂无计划任务",
   create: "新建任务",
@@ -630,7 +630,7 @@ const zhCopy = {
 
 const enCopy: typeof zhCopy = {
   title: "Scheduled Tasks",
-  subtitle: "Run advanced chat tasks manually, once, or on an interval, then deliver results through a configured destination.",
+  subtitle: "Run agent chat tasks manually, once, or on an interval, then deliver results through a configured destination.",
   list: "Task list",
   empty: "No scheduled tasks",
   create: "New task",

@@ -246,7 +246,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
         <div>
-          <h1 className="text-3xl font-bold">高级聊天管理</h1>
+          <h1 className="text-3xl font-bold">助理聊天管理</h1>
           <div className="mt-2 text-sm text-muted-foreground">管理独立聊天的助理模式、可用工具、附件限制和内置 MCP 服务器。</div>
         </div>
       </div>
@@ -299,7 +299,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                 <div className="grid gap-3 lg:grid-cols-3">
                   <ToggleRow
                     title="启用文件存储"
-                    description="关闭后，独立高级聊天文件库、上传附件和选择已有文件都会被禁用。"
+                    description="关闭后，独立助理聊天文件库、上传附件和选择已有文件都会被禁用。"
                     checked={form.file_storage_enabled}
                     onChange={updateFeatureToggle("file_storage_enabled")}
                   />
@@ -367,7 +367,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                 <div className="grid gap-3 lg:grid-cols-3">
                   <ToggleRow
                     title="启用计划任务"
-                    description="关闭后，用户不能创建、编辑或运行高级聊天计划任务，后台调度器也不会执行到期任务。"
+                    description="关闭后，用户不能创建、编辑或运行助理聊天计划任务，后台调度器也不会执行到期任务。"
                     checked={form.scheduled_tasks_enabled}
                     onChange={updateFeatureToggle("scheduled_tasks_enabled")}
                   />
