@@ -6,8 +6,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import api from "@/lib/api"
-import type { PublicSettings } from "@/lib/public-settings"
-import { isPremiumEdition, withPublicSettingsDefaults } from "@/lib/public-settings"
 import { useToast } from "@/components/ui/toast"
 
 interface MCPServer {
@@ -91,17 +89,6 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
   const [typesText, setTypesText] = useState(defaultAdvancedChatSettings.attachment_allowed_types.join("\n"))
   const [draft, setDraft] = useState<MCPDraft>(emptyDraft)
   const [isServerDialogOpen, setIsServerDialogOpen] = useState(false)
-  const [isBlockedOpen, setIsBlockedOpen] = useState(false)
-
-  const { data: publicSettings, isLoading: isPublicSettingsLoading } = useQuery<PublicSettings>({
-    queryKey: ["public-settings"],
-    queryFn: async () => {
-      const res = await api.get("/public/settings")
-      return res.data
-    },
-  })
-  const settings = withPublicSettingsDefaults(publicSettings)
-  const isPremium = isPremiumEdition(settings)
 
   const advancedSettings = useQuery<AdvancedChatSettings>({
     queryKey: ["advanced-chat-admin-settings"],
@@ -115,10 +102,10 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
     if (!advancedSettings.data) {
       return
     }
-    const next = normalizeAdvancedChatSettingsForEdition(advancedSettings.data, isPremium)
+    const next = advancedSettings.data
     setForm(next)
     setTypesText(next.attachment_allowed_types.join("\n"))
-  }, [advancedSettings.data, isPremium])
+  }, [advancedSettings.data])
 
   const allowedTypes = useMemo(() => parseAllowedTypes(typesText), [typesText])
 
@@ -128,13 +115,9 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
         attachment_max_mb: Number(form.attachment_max_mb) || 10,
         attachment_allowed_types: allowedTypes,
         file_storage_total_mb: Number(form.file_storage_total_mb) || 100,
-        ...(isPremium
-          ? {
-              file_storage_enabled: form.file_storage_enabled,
-              file_storage_auto_save_images_enabled: form.file_storage_auto_save_images_enabled,
-              file_storage_auto_save_videos_enabled: form.file_storage_auto_save_videos_enabled,
-            }
-          : {}),
+        file_storage_enabled: form.file_storage_enabled,
+        file_storage_auto_save_images_enabled: form.file_storage_auto_save_images_enabled,
+        file_storage_auto_save_videos_enabled: form.file_storage_auto_save_videos_enabled,
       })
       return normalizeAdvancedChatSettings(res.data)
     },
@@ -163,14 +146,10 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
         assistant_connector_run_command_enabled: form.assistant_connector_run_command_enabled,
         assistant_connector_web_search_enabled: form.assistant_connector_web_search_enabled,
         assistant_connector_static_site_enabled: form.assistant_connector_static_site_enabled,
-        ...(isPremium
-          ? {
-              scheduled_tasks_enabled: form.scheduled_tasks_enabled,
-              message_channel_enabled: form.message_channel_enabled,
-              message_delivery_enabled: form.message_delivery_enabled,
-              delivery_system_smtp_enabled: form.delivery_system_smtp_enabled,
-            }
-          : {}),
+        scheduled_tasks_enabled: form.scheduled_tasks_enabled,
+        message_channel_enabled: form.message_channel_enabled,
+        message_delivery_enabled: form.message_delivery_enabled,
+        delivery_system_smtp_enabled: form.delivery_system_smtp_enabled,
       })
       return normalizeAdvancedChatSettings(res.data)
     },
@@ -255,19 +234,11 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
     })
   }
 
-  const requirePremium = () => setIsBlockedOpen(true)
-  const updatePremiumToggle =
+  const updateFeatureToggle =
     (key: "file_storage_enabled" | "file_storage_auto_save_images_enabled" | "file_storage_auto_save_videos_enabled" | "scheduled_tasks_enabled" | "message_channel_enabled" | "message_delivery_enabled" | "delivery_system_smtp_enabled") =>
-    (checked: boolean) => {
-      if (checked && !isPremium) {
-        setForm((current) => ({ ...current, [key]: false }))
-        requirePremium()
-        return
-      }
-      setForm((current) => ({ ...current, [key]: checked }))
-    }
+    (checked: boolean) => setForm((current) => ({ ...current, [key]: checked }))
 
-  if (advancedSettings.isLoading || isPublicSettingsLoading) {
+  if (advancedSettings.isLoading) {
     return <div className="text-sm text-muted-foreground">Loading...</div>
   }
 
@@ -329,20 +300,20 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                   <ToggleRow
                     title="启用文件存储"
                     description="关闭后，独立高级聊天文件库、上传附件和选择已有文件都会被禁用。"
-                    checked={isPremium && form.file_storage_enabled}
-                    onChange={updatePremiumToggle("file_storage_enabled")}
+                    checked={form.file_storage_enabled}
+                    onChange={updateFeatureToggle("file_storage_enabled")}
                   />
                   <ToggleRow
                     title="图片生成自动入库"
                     description="开启后，图片生成或编辑返回的图片会在用户剩余空间足够时保存到文件库。"
-                    checked={isPremium && form.file_storage_auto_save_images_enabled}
-                    onChange={updatePremiumToggle("file_storage_auto_save_images_enabled")}
+                    checked={form.file_storage_auto_save_images_enabled}
+                    onChange={updateFeatureToggle("file_storage_auto_save_images_enabled")}
                   />
                   <ToggleRow
                     title="视频生成自动入库"
                     description="开启后，视频生成完成并返回视频时会在用户剩余空间足够时保存到文件库。"
-                    checked={isPremium && form.file_storage_auto_save_videos_enabled}
-                    onChange={updatePremiumToggle("file_storage_auto_save_videos_enabled")}
+                    checked={form.file_storage_auto_save_videos_enabled}
+                    onChange={updateFeatureToggle("file_storage_auto_save_videos_enabled")}
                   />
                 </div>
               </CardContent>
@@ -397,26 +368,26 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
                   <ToggleRow
                     title="启用计划任务"
                     description="关闭后，用户不能创建、编辑或运行高级聊天计划任务，后台调度器也不会执行到期任务。"
-                    checked={isPremium && form.scheduled_tasks_enabled}
-                    onChange={updatePremiumToggle("scheduled_tasks_enabled")}
+                    checked={form.scheduled_tasks_enabled}
+                    onChange={updateFeatureToggle("scheduled_tasks_enabled")}
                   />
                   <ToggleRow
                     title="启用消息通道"
                     description="开启后，用户可以在独立聊天页面配置 Telegram、QQ、Discord 等消息通道。"
-                    checked={isPremium && form.message_channel_enabled}
-                    onChange={updatePremiumToggle("message_channel_enabled")}
+                    checked={form.message_channel_enabled}
+                    onChange={updateFeatureToggle("message_channel_enabled")}
                   />
                   <ToggleRow
                     title="启用消息投递"
                     description="关闭后，计划任务仍可运行，但不会向 AI 暴露结果投递工具，也不能管理投递配置。"
-                    checked={isPremium && form.message_delivery_enabled}
-                    onChange={updatePremiumToggle("message_delivery_enabled")}
+                    checked={form.message_delivery_enabled}
+                    onChange={updateFeatureToggle("message_delivery_enabled")}
                   />
                   <ToggleRow
                     title="允许使用系统 SMTP"
                     description="开启后，邮箱投递可使用后台认证邮件的 SMTP；关闭后，用户必须在投递配置中填写自己的 SMTP。"
-                    checked={isPremium && form.delivery_system_smtp_enabled}
-                    onChange={updatePremiumToggle("delivery_system_smtp_enabled")}
+                    checked={form.delivery_system_smtp_enabled}
+                    onChange={updateFeatureToggle("delivery_system_smtp_enabled")}
                   />
                 </div>
                 <div className="rounded-md border p-3">
@@ -559,17 +530,6 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
         </DialogContent>
       </Dialog>
 
-      <Dialog open={isBlockedOpen} onOpenChange={setIsBlockedOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>需要高级版</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">该设置属于高级版功能。社区版仍可配置附件限制、助手模式、工具开关和内置 MCP。</div>
-          <DialogFooter>
-            <Button onClick={() => setIsBlockedOpen(false)}>知道了</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
@@ -628,22 +588,6 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     message_channel_enabled: item.message_channel_enabled === true,
     message_delivery_enabled: item.message_delivery_enabled !== false,
     delivery_system_smtp_enabled: item.delivery_system_smtp_enabled !== false,
-  }
-}
-
-function normalizeAdvancedChatSettingsForEdition(settings: AdvancedChatSettings, isPremium: boolean): AdvancedChatSettings {
-  if (isPremium) {
-    return settings
-  }
-  return {
-    ...settings,
-    file_storage_enabled: false,
-    file_storage_auto_save_images_enabled: false,
-    file_storage_auto_save_videos_enabled: false,
-    scheduled_tasks_enabled: false,
-    message_channel_enabled: false,
-    message_delivery_enabled: false,
-    delivery_system_smtp_enabled: false,
   }
 }
 

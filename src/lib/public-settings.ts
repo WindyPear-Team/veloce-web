@@ -198,10 +198,6 @@ export function withPublicSettingsDefaults(settings?: Partial<PublicSettings>): 
   return { ...defaultPublicSettings, ...(settings || {}) }
 }
 
-export function isPremiumEdition(settings?: Partial<Pick<PublicSettings, "edition">>) {
-  return String(settings?.edition ?? defaultPublicSettings.edition).trim().toLowerCase() === "premium"
-}
-
 export function isPersonalMode(settings?: Partial<Pick<PublicSettings, "system_mode">>) {
   return String(settings?.system_mode ?? defaultPublicSettings.system_mode).trim().toLowerCase() === "personal"
 }

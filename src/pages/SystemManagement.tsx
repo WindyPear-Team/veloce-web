@@ -42,7 +42,7 @@ import {
 import api from "@/lib/api"
 import AdvancedChatManagement from "./AdvancedChatManagement"
 import { useI18n } from "@/lib/i18n"
-import { defaultPublicSettings, isPremiumEdition, parseTopNavItems } from "@/lib/public-settings"
+import { defaultPublicSettings, parseTopNavItems } from "@/lib/public-settings"
 import type { PublicSettings } from "@/lib/public-settings"
 import { normalizeHexColor } from "@/lib/theme"
 
@@ -295,8 +295,6 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   redeemCodes: ["redeemCodes"],
 }
 
-const premiumOnlySystemTabs: SystemTab[] = ["payment", "metaModels", "subscriptionPlans", "redeemCodes"]
-
 interface NavRow {
   id: string
   label: string
@@ -433,7 +431,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const [isStatusMonitorDialogOpen, setIsStatusMonitorDialogOpen] = useState(false)
   const [announcementDraft, setAnnouncementDraft] = useState<AnnouncementDraft>(defaultAnnouncementDraft)
   const [isAnnouncementDialogOpen, setIsAnnouncementDialogOpen] = useState(false)
-  const [isPremiumNoticeOpen, setIsPremiumNoticeOpen] = useState(false)
   const { success, error } = useToast()
 
   const { data: settings } = useQuery<SystemSettings>({
@@ -452,7 +449,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   })
   const { data: redeemCodes = [] } = useQuery<RedeemCode[]>({
     queryKey: ["redeem-codes"],
-    enabled: isPremiumEdition(settings),
     queryFn: async () => {
       const res = await api.get("/redeem-codes")
       return Array.isArray(res.data) ? res.data : []
@@ -460,7 +456,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   })
   const { data: subscriptionPlans = [] } = useQuery<SubscriptionPlan[]>({
     queryKey: ["subscription-plans"],
-    enabled: isPremiumEdition(settings),
     queryFn: async () => {
       const res = await api.get("/subscription-plans")
       return Array.isArray(res.data) ? res.data : []
@@ -468,7 +463,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   })
   const { data: metaModels = [] } = useQuery<MetaModel[]>({
     queryKey: ["meta-models"],
-    enabled: isPremiumEdition(settings),
     queryFn: async () => {
       const res = await api.get("/meta-models")
       return Array.isArray(res.data) ? res.data : []
@@ -503,19 +497,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     }
   }, [settings])
 
-  const isPremium = settings ? isPremiumEdition(settings) : isPremiumEdition(form)
-
   useEffect(() => {
     if (!allowedTabs.includes(activeTab)) {
       setActiveTab(defaultTab)
     }
   }, [activeTab, allowedTabs, defaultTab])
-
-  useEffect(() => {
-    if (settings && !isPremium && premiumOnlySystemTabs.includes(activeTab)) {
-      setIsPremiumNoticeOpen(true)
-    }
-  }, [activeTab, isPremium, settings])
 
   const saveSettings = useMutation({
     mutationFn: async (checkInStreakRewards: string) => {
@@ -822,13 +808,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             key={tab.id}
             variant={activeTab === tab.id ? "default" : "outline"}
             className="shrink-0 gap-2"
-            onClick={() => {
-              if (settings && (tab.id === "security" || premiumOnlySystemTabs.includes(tab.id)) && !isPremium) {
-                setIsPremiumNoticeOpen(true)
-                return
-              }
-              setActiveTab(tab.id)
-            }}
+            onClick={() => setActiveTab(tab.id)}
           >
             <tab.icon size={16} />
             {tab.label}
@@ -936,7 +916,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
-      {isPremium && activeTab === "payment" && (
+      {activeTab === "payment" && (
         <SettingsPanel title={copy.paymentInterface}>
           <div className="space-y-4">
             <SectionTitle title={copy.paymentSettings} description={copy.paymentSettingsDescription} />
@@ -997,7 +977,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
-      {isPremium && activeTab === "security" && (
+      {activeTab === "security" && (
         <SettingsPanel title={copy.security}>
           <div className="grid gap-5">
             <div className="grid gap-4 lg:grid-cols-2">
@@ -1024,18 +1004,6 @@ export default function SystemManagement({ section = "general", initialTab }: { 
           </div>
         </SettingsPanel>
       )}
-
-      <Dialog open={isPremiumNoticeOpen} onOpenChange={setIsPremiumNoticeOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{copy.premiumRequiredTitle}</DialogTitle>
-          </DialogHeader>
-          <div className="text-sm text-muted-foreground">{copy.premiumRequiredDescription}</div>
-          <DialogFooter>
-            <Button onClick={() => setIsPremiumNoticeOpen(false)}>{copy.premiumRequiredAction}</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
 
       {activeTab === "auth" && (
         <SettingsPanel title={copy.auth}>
@@ -1484,7 +1452,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         <AdvancedChatManagement mode="mcp" />
       )}
 
-      {isPremium && activeTab === "subscriptionPlans" && (
+      {activeTab === "subscriptionPlans" && (
         <SettingsPanel title={copy.subscriptionPlans}>
           <div className="space-y-5">
             <div className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1565,7 +1533,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
-      {isPremium && activeTab === "metaModels" && (
+      {activeTab === "metaModels" && (
         <SettingsPanel title={copy.metaModels}>
           <div className="space-y-5">
             <div className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
@@ -1656,7 +1624,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
-      {isPremium && activeTab === "redeemCodes" && (
+      {activeTab === "redeemCodes" && (
         <SettingsPanel title={copy.redeemCodes}>
           <div className="space-y-5">
             <div className="flex flex-col gap-3 rounded-md border p-3">
@@ -3515,8 +3483,8 @@ const zhCopy = {
   ssrfAllowPrivateNetworks: "允许访问私有网络",
   ssrfAllowedHosts: "SSRF 允许主机",
   ssrfAllowedHostsPlaceholder: "每行或用逗号分隔，例如：internal-api.example.com\n192.168.1.10",
-  premiumRequiredTitle: "需要高级版",
-  premiumRequiredDescription: "该功能属于高级版功能。升级到高级版后可以使用支付接口、安全策略、订阅套餐和兑换码等高级能力。",
+  premiumRequiredTitle: "功能已可用",
+  premiumRequiredDescription: "该功能已集成到当前版本。",
   premiumRequiredAction: "知道了",
   auth: "登录认证",
   email: "邮件配置",
@@ -3675,8 +3643,8 @@ const zhCopy = {
   chatPageMode: "聊天页面",
   chatPageModeBasic: "基础聊天（控制台内）",
   chatPageModeAdvanced: "高级聊天（独立页面）",
-  chatPageModeHint: "高级聊天会打开独立 /chat 页面，需要高级版；非高级版会使用基础聊天。",
-  messageChannelEnabled: "启用消息通道（高级版）",
+  chatPageModeHint: "高级聊天会打开独立 /chat 页面。",
+  messageChannelEnabled: "启用消息通道",
   sidebarImages: "侧边栏：AI 绘画",
   sidebarSettings: "侧边栏：设置",
   sidebarSystem: "侧边栏：系统管理",
@@ -3891,8 +3859,8 @@ const enCopy: SystemCopy = {
   ssrfAllowPrivateNetworks: "Allow private networks",
   ssrfAllowedHosts: "SSRF allowed hosts",
   ssrfAllowedHostsPlaceholder: "One per line or comma-separated, e.g. internal-api.example.com\n192.168.1.10",
-  premiumRequiredTitle: "Premium edition required",
-  premiumRequiredDescription: "This is a premium feature. Upgrade to use payment gateways, Security Policy, subscription plans, redeem codes, and other premium capabilities.",
+  premiumRequiredTitle: "Feature available",
+  premiumRequiredDescription: "This feature is integrated into the current edition.",
   premiumRequiredAction: "Got it",
   auth: "Authentication",
   email: "Email",
@@ -4051,8 +4019,8 @@ const enCopy: SystemCopy = {
   chatPageMode: "Chat page",
   chatPageModeBasic: "Basic chat (inside dashboard)",
   chatPageModeAdvanced: "Advanced chat (standalone page)",
-  chatPageModeHint: "Advanced chat opens the standalone /chat page and requires premium edition. Non-premium editions use basic chat.",
-  messageChannelEnabled: "Enable Message Channels (Premium)",
+  chatPageModeHint: "Advanced chat opens the standalone /chat page.",
+  messageChannelEnabled: "Enable Message Channels",
   sidebarImages: "Sidebar: AI Images",
   sidebarSettings: "Sidebar: Settings",
   sidebarSystem: "Sidebar: System",
