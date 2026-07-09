@@ -555,34 +555,37 @@ function ConnectionSettings({
         )}
 
         {draft.provider === "qq" && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <SelectField label={copy.qqConnectionMode} value={qqConnectionMode} onChange={(value) => updateConfig("connection_mode", value)}>
-              <option value="webhook">{copy.qqConnectionWebhook}</option>
-              <option value="websocket">{copy.qqConnectionWebSocket}</option>
-            </SelectField>
-            <Field label={copy.qqBotID}>
-              <Input value={config.bot_id || ""} placeholder="1020..." onChange={(event) => updateConfig("bot_id", event.target.value)} />
-            </Field>
-            <Field label={copy.qqBotSecret}>
-              <Input type="password" value={config.bot_secret || ""} placeholder={copy.qqBotSecretPlaceholder} onChange={(event) => updateConfig("bot_secret", event.target.value)} />
-            </Field>
-            <Field label={copy.qqBaseURL}>
-              <Input value={config.base_url || ""} placeholder="https://api.sgroup.qq.com" onChange={(event) => updateConfig("base_url", event.target.value)} />
-            </Field>
-            <Field label={copy.qqTokenURL}>
-              <Input value={config.token_url || ""} placeholder="https://bots.qq.com/app/getAppAccessToken" onChange={(event) => updateConfig("token_url", event.target.value)} />
-            </Field>
-            <QQIntentsPicker copy={copy} value={config.intents || ""} onChange={(value) => updateConfig("intents", value)} />
-            <Field label={copy.qqShard}>
-              <div className="grid grid-cols-2 gap-2">
-                <Input value={config.shard_index || ""} placeholder="0" onChange={(event) => updateConfig("shard_index", event.target.value)} />
-                <Input value={config.shard_total || ""} placeholder="1" onChange={(event) => updateConfig("shard_total", event.target.value)} />
-              </div>
-            </Field>
-            <SelectField label={copy.qqMsgType} value={config.msg_type || "2"} onChange={(value) => updateConfig("msg_type", value)}>
-              <option value="0">{copy.qqMsgTypeText}</option>
-              <option value="2">{copy.qqMsgTypeMarkdown}</option>
-            </SelectField>
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField label={copy.qqConnectionMode} value={qqConnectionMode} onChange={(value) => updateConfig("connection_mode", value)}>
+                <option value="webhook">{copy.qqConnectionWebhook}</option>
+                <option value="websocket">{copy.qqConnectionWebSocket}</option>
+              </SelectField>
+              <Field label={copy.qqBotID}>
+                <Input value={config.bot_id || ""} placeholder="1020..." onChange={(event) => updateConfig("bot_id", event.target.value)} />
+              </Field>
+              <Field label={copy.qqBotSecret}>
+                <Input type="password" value={config.bot_secret || ""} placeholder={copy.qqBotSecretPlaceholder} onChange={(event) => updateConfig("bot_secret", event.target.value)} />
+              </Field>
+              <Field label={copy.qqBaseURL}>
+                <Input value={config.base_url || ""} placeholder="https://api.sgroup.qq.com" onChange={(event) => updateConfig("base_url", event.target.value)} />
+              </Field>
+              <Field label={copy.qqTokenURL}>
+                <Input value={config.token_url || ""} placeholder="https://bots.qq.com/app/getAppAccessToken" onChange={(event) => updateConfig("token_url", event.target.value)} />
+              </Field>
+              <QQIntentsPicker copy={copy} value={config.intents || ""} onChange={(value) => updateConfig("intents", value)} />
+              <Field label={copy.qqShard}>
+                <div className="grid grid-cols-2 gap-2">
+                  <Input value={config.shard_index || ""} placeholder="0" onChange={(event) => updateConfig("shard_index", event.target.value)} />
+                  <Input value={config.shard_total || ""} placeholder="1" onChange={(event) => updateConfig("shard_total", event.target.value)} />
+                </div>
+              </Field>
+              <SelectField label={copy.qqMsgType} value={config.msg_type || "2"} onChange={(value) => updateConfig("msg_type", value)}>
+                <option value="0">{copy.qqMsgTypeText}</option>
+                <option value="2">{copy.qqMsgTypeMarkdown}</option>
+              </SelectField>
+            </div>
+            <QQLoginPanel copy={copy} current={current} />
           </div>
         )}
 
@@ -678,6 +681,87 @@ interface WeixinLoginState {
   status: string
   message: string
   connected: boolean
+}
+
+interface QQLoginState {
+  session_key: string
+  qrcode_url: string
+  qr_data_url: string
+  status: string
+  connected: boolean
+}
+
+function QQLoginPanel({ copy, current }: { copy: CopyText; current?: MessageChannel }) {
+  const queryClient = useQueryClient()
+  const { success, error } = useToast()
+  const [loginState, setLoginState] = useState<QQLoginState | null>(null)
+  const [polling, setPolling] = useState(false)
+
+  const startLogin = useMutation({
+    mutationFn: async () => {
+      if (!current?.id) throw new Error(copy.qqSaveFirst)
+      const res = await api.post(`/user/message-channels/${current.id}/qq/login/start`)
+      return normalizeQQLoginState(res.data)
+    },
+    onSuccess: (state) => {
+      setLoginState(state)
+      setPolling(true)
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.qqLoginFailed)),
+  })
+
+  useEffect(() => {
+    if (!current?.id || !loginState?.session_key || loginState.connected || !polling) {
+      return
+    }
+    const timer = window.setInterval(async () => {
+      try {
+        const res = await api.post(`/user/message-channels/${current.id}/qq/login/wait`, {
+          session_key: loginState.session_key,
+        })
+        const state = normalizeQQLoginState({ ...loginState, ...res.data })
+        setLoginState(state)
+        if (state.connected) {
+          setPolling(false)
+          success(copy.qqConnected)
+          queryClient.invalidateQueries({ queryKey: channelQueryKey })
+        } else if (state.status === "expired") {
+          setPolling(false)
+          error(copy.qqLoginExpired)
+        }
+      } catch (err) {
+        setPolling(false)
+        error(apiErrorMessage(err, copy.qqLoginFailed))
+      }
+    }, 2000)
+    return () => window.clearInterval(timer)
+  }, [copy.qqConnected, copy.qqLoginExpired, copy.qqLoginFailed, current?.id, error, loginState, polling, queryClient, success])
+
+  return (
+    <div className="rounded-md border bg-muted/20 p-4">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <div className="text-sm font-medium">{copy.qqQrLogin}</div>
+          <div className="mt-1 text-xs text-muted-foreground">
+            {current?.bot_token_configured ? copy.qqConfigured : copy.qqNotConfigured}
+          </div>
+        </div>
+        <Button type="button" variant="outline" className="gap-2" disabled={startLogin.isPending || !current?.id} onClick={() => startLogin.mutate()}>
+          <QrCode size={16} />
+          {startLogin.isPending ? copy.qqStarting : copy.qqStartLogin}
+        </Button>
+      </div>
+      {loginState?.qr_data_url && (
+        <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center">
+          <img src={loginState.qr_data_url} alt={copy.qqQrLogin} className="h-40 w-40 rounded-md border bg-white p-2" />
+          <div className="space-y-2 text-sm">
+            <div>{loginState.connected ? copy.qqConnected : copy.qqWaiting}</div>
+            {loginState.qrcode_url && <div className="break-all font-mono text-xs text-muted-foreground">{loginState.qrcode_url}</div>}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }
 
 function WeixinLoginPanel({ copy, current }: { copy: CopyText; current?: MessageChannel }) {
@@ -1499,6 +1583,17 @@ function normalizeWeixinLoginState(value: unknown): WeixinLoginState {
   }
 }
 
+function normalizeQQLoginState(value: unknown): QQLoginState {
+  const item = isRecord(value) ? value : {}
+  return {
+    session_key: stringValue(item.session_key),
+    qrcode_url: stringValue(item.qrcode_url),
+    qr_data_url: stringValue(item.qr_data_url),
+    status: stringValue(item.status),
+    connected: item.connected === true,
+  }
+}
+
 function uniqueModels(catalog: UserChannelCatalog[]) {
   return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
 }
@@ -1677,6 +1772,16 @@ const zhCopy = {
   qqMsgType: "QQ 消息类型",
   qqMsgTypeText: "文本",
   qqMsgTypeMarkdown: "Markdown",
+  qqQrLogin: "QQ 扫码绑定",
+  qqConfigured: "已保存 QQ Bot 凭据，可重新扫码换绑。",
+  qqNotConfigured: "尚未配置 QQ Bot，可扫码自动绑定，也可手动填写 AppID 和 Secret。",
+  qqSaveFirst: "请先保存 QQ 官方通道，再生成二维码。",
+  qqStartLogin: "生成二维码",
+  qqStarting: "生成中...",
+  qqWaiting: "等待手机 QQ 扫码确认。",
+  qqConnected: "QQ Bot 已绑定",
+  qqLoginExpired: "QQ 二维码已过期",
+  qqLoginFailed: "QQ 扫码绑定失败",
   oneBotBaseURL: "OneBot HTTP 地址",
   oneBotAccessToken: "OneBot Access Token",
   oneBotAction: "OneBot 发送 action",
@@ -1833,6 +1938,16 @@ const enCopy: CopyText = {
   qqMsgType: "QQ message type",
   qqMsgTypeText: "Text",
   qqMsgTypeMarkdown: "Markdown",
+  qqQrLogin: "QQ QR binding",
+  qqConfigured: "QQ Bot credentials are saved. Scan again to relink.",
+  qqNotConfigured: "QQ Bot is not configured. Scan to bind automatically or enter AppID and Secret manually.",
+  qqSaveFirst: "Save this QQ channel before generating a QR code.",
+  qqStartLogin: "Generate QR",
+  qqStarting: "Generating...",
+  qqWaiting: "Waiting for QQ scan confirmation.",
+  qqConnected: "QQ Bot connected",
+  qqLoginExpired: "QQ QR code expired",
+  qqLoginFailed: "QQ QR binding failed",
   oneBotBaseURL: "OneBot HTTP URL",
   oneBotAccessToken: "OneBot access token",
   oneBotAction: "OneBot send action",
