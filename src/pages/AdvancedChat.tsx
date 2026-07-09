@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Boxes, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import { BarChart3, Bot, Boxes, Brain, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -8,6 +8,7 @@ import Agents from "./Agents"
 import Skills from "./Skills"
 import AdvancedChatMCP from "./AdvancedChatMCP"
 import AdvancedChatFiles from "./AdvancedChatFiles"
+import AdvancedChatMemories from "./AdvancedChatMemories"
 import Images from "./Images"
 import Videos from "./Videos"
 import AdvancedChatDevices, { AdvancedChatDeviceDetail } from "./AdvancedChatDevices"
@@ -198,6 +199,7 @@ export default function AdvancedChat() {
                     <Route path="images" element={<Images />} />
                     <Route path="videos" element={<Videos />} />
                     {isPremium && <Route path="files" element={<AdvancedChatFiles />} />}
+                    {isPremium && <Route path="memories" element={<AdvancedChatMemories />} />}
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-overview" element={<AdminOverview />} />}
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-logs" element={<AdminAuditLogs />} />}
                     {isDesktopTarget() && user?.is_admin && <Route path="admin/general" element={<SystemManagement section="general" />} />}
@@ -234,6 +236,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/images") return zh ? "图像" : "Images"
   if (pathname === "/chat/videos") return zh ? "视频" : "Videos"
   if (pathname === "/chat/files") return zh ? "文件库" : "Files"
+  if (pathname === "/chat/memories") return zh ? "记忆" : "Memory"
   if (pathname.startsWith("/chat/channels")) return zh ? "消息通道" : "Message Channels"
   if (pathname === "/chat/deliveries") return zh ? "结果投递" : "Result Delivery"
   if (pathname === "/chat/scheduled-tasks") return zh ? "计划任务" : "Scheduled Tasks"
@@ -268,6 +271,7 @@ function AdvancedChatSidebar({
   const { language, t } = useI18n()
   const isPremium = isPremiumEdition(publicSettings)
   const filesLabel = language === "zh" ? "文件库" : "Files"
+  const memoriesLabel = language === "zh" ? "记忆" : "Memory"
   const messageChannelsLabel = language === "zh" ? "消息通道" : "Message Channels"
   const deliveriesLabel = language === "zh" ? "结果投递" : "Result Delivery"
   const scheduledTasksLabel = language === "zh" ? "计划任务" : "Scheduled Tasks"
@@ -324,6 +328,7 @@ function AdvancedChatSidebar({
       label: agentLabel,
       items: [
         { href: "/chat/agents", label: t("nav.agents"), icon: Bot, active: location.pathname === "/chat/agents" },
+        ...(isPremium ? [{ href: "/chat/memories", label: memoriesLabel, icon: Brain, active: location.pathname === "/chat/memories" }] : []),
         { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" || location.pathname.startsWith("/chat/skills/") },
         { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" || location.pathname.startsWith("/chat/devices/") },
         { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
