@@ -2,10 +2,11 @@ import { useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Copy, MessageSquare, Plus, Power, Save, Trash2 } from "lucide-react"
+import { ArrowLeft, Copy, MessageSquare, Plus, Power, QrCode, Save, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 import { useI18n } from "@/lib/i18n"
@@ -18,8 +19,17 @@ interface UserChannelCatalog {
 }
 
 interface IDName {
-  id: number
+  id: string
   name: string
+  description: string
+}
+
+interface ChatAgentOption {
+  id: string
+  name: string
+  default_model: string
+  user_channel_id?: number
+  skill_ids: string[]
 }
 
 interface StudioOption {
@@ -45,8 +55,9 @@ interface GroupConfig {
   user_channel_id?: number | null
   model: string
   agent_id?: number | null
+  agent_key: string
   agent_group_id: string
-  skill_ids: number[]
+  skill_ids: string[]
   context_message_count: number
   reply_mode: string
   trigger_mode: string
@@ -85,8 +96,9 @@ interface MessageChannel {
   default_user_channel_id?: number | null
   default_model: string
   default_agent_id?: number | null
+  default_agent_key: string
   default_agent_group_id: string
-  default_skill_ids: number[]
+  default_skill_ids: string[]
   default_context_message_count: number
   reply_mode: string
   trigger_mode: string
@@ -123,7 +135,7 @@ interface Draft {
   default_model: string
   default_agent_id: string
   default_agent_group_id: string
-  default_skill_ids: number[]
+  default_skill_ids: string[]
   default_context_message_count: string
   reply_mode: string
   trigger_mode: string
@@ -133,12 +145,13 @@ interface Draft {
 }
 
 const channelQueryKey = ["message-channels"] as const
-type ChannelProvider = "telegram" | "discord" | "qq" | "onebot"
+type ChannelProvider = "telegram" | "discord" | "qq" | "onebot" | "weixin"
 const providerOptions: Array<{ value: ChannelProvider; label: string }> = [
   { value: "telegram", label: "Telegram" },
   { value: "discord", label: "Discord" },
   { value: "qq", label: "QQ 官方机器人" },
   { value: "onebot", label: "OneBot" },
+  { value: "weixin", label: "微信 Bot" },
 ]
 const emptyAdvancedOptions: AdvancedOptions = {
   temperature: null,
@@ -586,9 +599,140 @@ function ConnectionSettings({
           </div>
         )}
 
+        {draft.provider === "weixin" && (
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-2">
+              <Field label={copy.weixinBaseURL}>
+                <Input value={config.base_url || ""} placeholder="https://ilinkai.weixin.qq.com" onChange={(event) => updateConfig("base_url", event.target.value)} />
+              </Field>
+              <Field label={copy.weixinCDNBaseURL}>
+                <Input value={config.cdn_base_url || ""} placeholder="https://novac2c.cdn.weixin.qq.com/c2c" onChange={(event) => updateConfig("cdn_base_url", event.target.value)} />
+              </Field>
+              <Field label={copy.weixinAccountID}>
+                <Input value={config.account_id || ""} readOnly placeholder={copy.weixinAccountPending} />
+              </Field>
+              <Field label={copy.weixinUserID}>
+                <Input value={config.user_id || ""} readOnly placeholder={copy.weixinAccountPending} />
+              </Field>
+            </div>
+            <WeixinLoginPanel copy={copy} current={current} />
+          </div>
+        )}
+
         <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
           {copy.connectionHint}
         </div>
+    </div>
+  )
+}
+
+interface WeixinLoginState {
+  session_key: string
+  qrcode_url: string
+  qr_data_url: string
+  status: string
+  message: string
+  connected: boolean
+}
+
+function WeixinLoginPanel({ copy, current }: { copy: CopyText; current?: MessageChannel }) {
+  const queryClient = useQueryClient()
+  const { success, error } = useToast()
+  const [loginState, setLoginState] = useState<WeixinLoginState | null>(null)
+  const [polling, setPolling] = useState(false)
+
+  const startLogin = useMutation({
+    mutationFn: async () => {
+      if (!current?.id) throw new Error(copy.weixinSaveFirst)
+      const res = await api.post(`/user/message-channels/${current.id}/weixin/login/start`)
+      return normalizeWeixinLoginState(res.data)
+    },
+    onSuccess: (state) => {
+      setLoginState(state)
+      setPolling(true)
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.weixinLoginFailed)),
+  })
+
+  useEffect(() => {
+    if (!current?.id || !loginState?.session_key || loginState.connected || !polling) {
+      return
+    }
+    let cancelled = false
+    let timer: ReturnType<typeof setTimeout> | undefined
+    const poll = async () => {
+      try {
+        const res = await api.post(`/user/message-channels/${current.id}/weixin/login/wait`, {
+          session_key: loginState.session_key,
+          timeout_ms: 10000,
+        })
+        if (cancelled) return
+        const next = normalizeWeixinLoginState({ ...res.data, session_key: loginState.session_key, qrcode_url: loginState.qrcode_url, qr_data_url: loginState.qr_data_url })
+        setLoginState(next)
+        if (next.connected) {
+          setPolling(false)
+          success(copy.weixinConnected)
+          queryClient.invalidateQueries({ queryKey: channelQueryKey })
+          return
+        }
+        if (next.status === "expired") {
+          setPolling(false)
+          return
+        }
+        timer = setTimeout(poll, 1200)
+      } catch (err) {
+        if (cancelled) return
+        setLoginState((state) => state ? { ...state, message: apiErrorMessage(err, copy.weixinLoginFailed) } : state)
+        timer = setTimeout(poll, 2500)
+      }
+    }
+    timer = setTimeout(poll, 300)
+    return () => {
+      cancelled = true
+      if (timer) clearTimeout(timer)
+    }
+  }, [copy.weixinConnected, copy.weixinLoginFailed, current?.id, error, loginState?.connected, loginState?.qr_data_url, loginState?.qrcode_url, loginState?.session_key, polling, queryClient, success])
+
+  if (!current?.id) {
+    return (
+      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        {copy.weixinSaveFirst}
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-md border p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="font-medium">{copy.weixinQrLogin}</div>
+          <div className="mt-1 text-sm text-muted-foreground">
+            {current.bot_token_configured ? copy.weixinConfigured : copy.weixinNotConfigured}
+          </div>
+        </div>
+        <Button variant="outline" className="gap-2" disabled={startLogin.isPending} onClick={() => startLogin.mutate()}>
+          <QrCode size={16} />
+          {startLogin.isPending ? copy.weixinStarting : copy.weixinStartLogin}
+        </Button>
+      </div>
+      {loginState && (
+        <div className="mt-4 grid gap-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+          {loginState.qr_data_url ? (
+            <img src={loginState.qr_data_url} alt={copy.weixinQrLogin} className="h-48 w-48 rounded-md border bg-white p-2" />
+          ) : (
+            <div className="flex h-48 w-48 items-center justify-center rounded-md border text-sm text-muted-foreground">QR</div>
+          )}
+          <div className="min-w-0 space-y-2 text-sm">
+            <div className="font-medium">{loginState.connected ? copy.weixinConnected : (loginState.message || copy.weixinWaiting)}</div>
+            <div className="text-muted-foreground">{copy.status}: {loginState.status || "wait"}</div>
+            {loginState.qrcode_url && (
+              <a className="block break-all text-primary underline-offset-4 hover:underline" href={loginState.qrcode_url} target="_blank" rel="noreferrer">
+                {loginState.qrcode_url}
+              </a>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }
@@ -608,6 +752,20 @@ function RoutingTab({
   defaultModelOptions: string[]
   onDraftChange: (patch: Partial<Draft>) => void
 }) {
+  const applyAgentDefaults = (agentID: string) => {
+    const agent = lookups.agents.find((item) => item.id === agentID)
+    if (!agent) {
+      onDraftChange({ default_agent_id: agentID })
+      return
+    }
+    onDraftChange({
+      default_agent_id: agentID,
+      default_user_channel_id: agent.user_channel_id ? String(agent.user_channel_id) : "",
+      default_model: agent.default_model || "",
+      default_skill_ids: skillIDsFromAgent(agent),
+    })
+  }
+
   return (
     <Card>
       <CardHeader><CardTitle className="text-base">{copy.tabRouting}</CardTitle></CardHeader>
@@ -639,7 +797,7 @@ function RoutingTab({
             <option value="">{copy.inheritNone}</option>
             {(defaultModelOptions.length ? defaultModelOptions : modelOptions).map((model) => <option key={model} value={model}>{model}</option>)}
           </SelectField>
-          <SelectField label={copy.agent} value={draft.default_agent_id} onChange={(value) => onDraftChange({ default_agent_id: value })}>
+          <SelectField label={copy.agent} value={draft.default_agent_id} onChange={applyAgentDefaults}>
             <option value="">{copy.inheritNone}</option>
             {lookups.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
           </SelectField>
@@ -661,7 +819,7 @@ function RoutingTab({
           <Field label={copy.contextCount}>
             <Input type="number" min={0} max={100} value={draft.default_context_message_count} onChange={(event) => onDraftChange({ default_context_message_count: event.target.value })} />
           </Field>
-          <SkillPicker label={copy.skills} skills={lookups.skills} selected={draft.default_skill_ids} onChange={(ids) => onDraftChange({ default_skill_ids: ids })} />
+          <SkillPicker copy={copy} label={copy.skills} skills={lookups.skills} selected={draft.default_skill_ids} onChange={(ids) => onDraftChange({ default_skill_ids: ids })} />
         </div>
         <Field label={copy.systemPrompt}>
           <textarea className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm" value={draft.system_prompt} onChange={(event) => onDraftChange({ system_prompt: event.target.value })} />
@@ -674,6 +832,20 @@ function RoutingTab({
 function GroupsTab({ copy, draft, lookups, modelOptions, onDraftChange }: { copy: CopyText; draft: Draft; lookups: LookupData; modelOptions: string[]; onDraftChange: (patch: Partial<Draft>) => void }) {
   const updateGroup = (index: number, patch: Partial<GroupConfig>) => {
     onDraftChange({ group_configs: draft.group_configs.map((group, groupIndex) => groupIndex === index ? { ...group, ...patch } : group) })
+  }
+  const applyGroupAgentDefaults = (index: number, agentID: string) => {
+    const agent = lookups.agents.find((item) => item.id === agentID)
+    if (!agent) {
+      updateGroup(index, { agent_key: agentID, agent_id: nullableNumber(agentID) })
+      return
+    }
+    updateGroup(index, {
+      agent_key: agentID,
+      agent_id: nullableNumber(agentID),
+      user_channel_id: agent.user_channel_id || null,
+      model: agent.default_model || "",
+      skill_ids: skillIDsFromAgent(agent),
+    })
   }
   const addGroup = () => {
     onDraftChange({
@@ -689,6 +861,7 @@ function GroupsTab({ copy, draft, lookups, modelOptions, onDraftChange }: { copy
         user_channel_id: null,
         model: "",
         agent_id: null,
+        agent_key: "",
         agent_group_id: "",
         skill_ids: [],
         context_message_count: Number(draft.default_context_message_count) || 12,
@@ -748,7 +921,7 @@ function GroupsTab({ copy, draft, lookups, modelOptions, onDraftChange }: { copy
                     <option value="">{copy.inheritDefault}</option>
                     {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
                   </SelectField>
-                  <SelectField label={copy.agent} value={group.agent_id ? String(group.agent_id) : ""} onChange={(value) => updateGroup(index, { agent_id: value ? Number(value) : null })}>
+                  <SelectField label={copy.agent} value={group.agent_key || (group.agent_id ? String(group.agent_id) : "")} onChange={(value) => applyGroupAgentDefaults(index, value)}>
                     <option value="">{copy.inheritDefault}</option>
                     {lookups.agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
                   </SelectField>
@@ -761,7 +934,7 @@ function GroupsTab({ copy, draft, lookups, modelOptions, onDraftChange }: { copy
                     <input type="checkbox" checked={group.enabled} onChange={(event) => updateGroup(index, { enabled: event.target.checked })} />
                     {group.enabled ? copy.enabled : copy.disabledState}
                   </label>
-                  <SkillPicker label={copy.skills} skills={lookups.skills} selected={group.skill_ids} onChange={(ids) => updateGroup(index, { skill_ids: ids })} />
+                  <SkillPicker copy={copy} label={copy.skills} skills={lookups.skills} selected={group.skill_ids} onChange={(ids) => updateGroup(index, { skill_ids: ids })} />
                 </div>
                 <Field label={copy.systemPromptOverride}>
                   <textarea className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm" value={group.system_prompt_override} onChange={(event) => updateGroup(index, { system_prompt_override: event.target.value })} />
@@ -866,20 +1039,73 @@ function SelectField({ label, value, onChange, children }: { label: string; valu
   )
 }
 
-function SkillPicker({ label, skills, selected, onChange }: { label: string; skills: IDName[]; selected: number[]; onChange: (ids: number[]) => void }) {
+function SkillPicker({ copy, label, skills, selected, onChange }: { copy: CopyText; label: string; skills: IDName[]; selected: string[]; onChange: (ids: string[]) => void }) {
+  const [open, setOpen] = useState(false)
+  const selectedSet = useMemo(() => new Set(selected), [selected])
+  const selectedSkills = skills.filter((skill) => selectedSet.has(skill.id))
+  const availableSkills = skills.filter((skill) => !selectedSet.has(skill.id))
+  const toggleSkill = (skillID: string) => {
+    onChange(selectedSet.has(skillID) ? selected.filter((id) => id !== skillID) : [...selected, skillID])
+  }
+  const addSkill = (skillID: string) => {
+    if (!selectedSet.has(skillID)) {
+      onChange([...selected, skillID])
+    }
+    setOpen(false)
+  }
+
   return (
     <div className="space-y-2 text-sm md:col-span-2">
-      <div className="font-medium">{label}</div>
-      <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
-        {skills.length === 0 ? (
-          <div className="text-sm text-muted-foreground">-</div>
-        ) : skills.map((skill) => (
-          <label key={skill.id} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={selected.includes(skill.id)} onChange={(event) => onChange(event.target.checked ? [...selected, skill.id] : selected.filter((id) => id !== skill.id))} />
-            <span className="truncate">{skill.name}</span>
-          </label>
-        ))}
+      <div className="flex items-center justify-between gap-3">
+        <div className="font-medium">{label}</div>
+        <Button type="button" variant="outline" size="sm" className="h-8 gap-2" onClick={() => setOpen(true)}>
+          <Plus size={14} />
+          {copy.addSkills}
+        </Button>
       </div>
+      <div className="min-h-10 rounded-md border p-2">
+        {selectedSkills.length === 0 ? (
+          <div className="px-1 py-1 text-sm text-muted-foreground">{copy.noSelectedSkills}</div>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {selectedSkills.map((skill) => (
+              <button key={skill.id} type="button" className="rounded border bg-muted px-2 py-1 text-xs hover:bg-muted/80" onClick={() => toggleSkill(skill.id)}>
+                {skill.name}
+              </button>
+            ))}
+          </div>
+        )}
+      </div>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-h-[80vh] overflow-hidden sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{label}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[55vh] space-y-2 overflow-y-auto pr-1">
+            {availableSkills.length === 0 ? (
+              <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">-</div>
+            ) : availableSkills.map((skill) => {
+              return (
+                <button
+                  key={skill.id}
+                  type="button"
+                  className="flex w-full items-start justify-between gap-3 rounded-md border px-3 py-2 text-left text-sm hover:bg-muted"
+                  onClick={() => addSkill(skill.id)}
+                >
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-medium">{skill.name}</span>
+                    {skill.description && <span className="mt-1 block line-clamp-2 text-xs leading-5 text-muted-foreground">{skill.description}</span>}
+                  </span>
+                  <span className="shrink-0 rounded bg-muted px-2 py-0.5 text-xs text-muted-foreground">{copy.add}</span>
+                </button>
+              )
+            })}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setOpen(false)}>{copy.close}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -913,7 +1139,7 @@ function Badge({ children, muted }: { children: ReactNode; muted?: boolean }) {
 
 interface LookupData {
   catalog: UserChannelCatalog[]
-  agents: IDName[]
+  agents: ChatAgentOption[]
   studios: StudioOption[]
   skills: IDName[]
   devices: Device[]
@@ -937,11 +1163,11 @@ function useLookups(): LookupData {
       return Array.isArray(res.data) ? res.data.map(normalizeCatalogItem) : []
     },
   })
-  const { data: agents = [] } = useQuery<IDName[]>({
+  const { data: agents = [] } = useQuery<ChatAgentOption[]>({
     queryKey: ["advanced-chat-agents"],
     queryFn: async () => {
       const res = await api.get("/user/advanced-chat/agents")
-      return Array.isArray(res.data) ? res.data.map(normalizeIDName).filter(Boolean) as IDName[] : []
+      return Array.isArray(res.data) ? res.data.map(normalizeAgentOption).filter(Boolean) as ChatAgentOption[] : []
     },
   })
   const { data: studios = [] } = useQuery<StudioOption[]>({
@@ -983,14 +1209,19 @@ function draftToPayload(draft: Draft) {
     default_connector_command_prefixes: commandPrefixesFromText(draft.default_connector_command_prefixes),
     default_user_channel_id: draft.default_user_channel_id ? Number(draft.default_user_channel_id) : null,
     default_model: draft.default_model,
-    default_agent_id: draft.default_agent_id ? Number(draft.default_agent_id) : null,
+    default_agent_id: numericAgentID(draft.default_agent_id),
+    default_agent_key: draft.default_agent_id,
     default_agent_group_id: draft.default_agent_group_id,
     default_skill_ids: draft.default_skill_ids,
     default_context_message_count: Number(draft.default_context_message_count) || 0,
     reply_mode: draft.reply_mode,
     trigger_mode: draft.trigger_mode,
     system_prompt: draft.system_prompt,
-    group_configs: draft.group_configs,
+    group_configs: draft.group_configs.map((group) => ({
+      ...group,
+      agent_id: numericAgentID(group.agent_key || (group.agent_id ? String(group.agent_id) : "")),
+      agent_key: group.agent_key || (group.agent_id ? String(group.agent_id) : ""),
+    })),
     advanced_options: advancedOptionsForPayload(draft),
   }
 }
@@ -1040,7 +1271,7 @@ function channelToDraft(channel: MessageChannel): Draft {
     default_connector_command_prefixes: (channel.default_connector_command_prefixes || []).join(", "),
     default_user_channel_id: channel.default_user_channel_id ? String(channel.default_user_channel_id) : "",
     default_model: channel.default_model || "",
-    default_agent_id: channel.default_agent_id ? String(channel.default_agent_id) : "",
+    default_agent_id: channel.default_agent_key || (channel.default_agent_id ? String(channel.default_agent_id) : ""),
     default_agent_group_id: channel.default_agent_group_id || "",
     default_skill_ids: channel.default_skill_ids || [],
     default_context_message_count: String(channel.default_context_message_count || 12),
@@ -1070,8 +1301,9 @@ function normalizeChannel(value: unknown): MessageChannel | null {
     default_user_channel_id: nullableNumber(value.default_user_channel_id),
     default_model: stringValue(value.default_model),
     default_agent_id: nullableNumber(value.default_agent_id),
+    default_agent_key: stringValue(value.default_agent_key),
     default_agent_group_id: stringValue(value.default_agent_group_id),
-    default_skill_ids: numberArray(value.default_skill_ids),
+    default_skill_ids: skillIDArray(value.default_skill_ids),
     default_context_message_count: Number(value.default_context_message_count || 12),
     reply_mode: stringValue(value.reply_mode) || "mention",
     trigger_mode: stringValue(value.trigger_mode) || "mention",
@@ -1096,6 +1328,11 @@ function normalizeProviderValue(value: unknown): ChannelProvider {
     case "one-bot":
     case "one_bot":
       return "onebot"
+    case "weixin":
+    case "wechat":
+    case "we-chat":
+    case "we_chat":
+      return "weixin"
     default:
       return "telegram"
   }
@@ -1135,8 +1372,9 @@ function normalizeGroup(value: unknown): GroupConfig | null {
     user_channel_id: nullableNumber(value.user_channel_id),
     model: stringValue(value.model),
     agent_id: nullableNumber(value.agent_id),
+    agent_key: stringValue(value.agent_key) || (nullableNumber(value.agent_id) ? String(nullableNumber(value.agent_id)) : ""),
     agent_group_id: stringValue(value.agent_group_id),
-    skill_ids: numberArray(value.skill_ids),
+    skill_ids: skillIDArray(value.skill_ids),
     context_message_count: Number(value.context_message_count || 0),
     reply_mode: stringValue(value.reply_mode),
     trigger_mode: stringValue(value.trigger_mode),
@@ -1154,8 +1392,23 @@ function normalizeCatalogItem(value: unknown): UserChannelCatalog {
 }
 
 function normalizeIDName(value: unknown): IDName | null {
-  if (!isRecord(value) || !Number(value.id)) return null
-  return { id: Number(value.id), name: stringValue(value.name) }
+  if (!isRecord(value)) return null
+  const id = stringValue(value.id) || (Number(value.id) ? String(Number(value.id)) : "")
+  if (!id) return null
+  return { id, name: stringValue(value.name) || id, description: stringValue(value.description) }
+}
+
+function normalizeAgentOption(value: unknown): ChatAgentOption | null {
+  if (!isRecord(value)) return null
+  const id = stringValue(value.id) || (Number(value.id) ? String(Number(value.id)) : "")
+  if (!id) return null
+  return {
+    id,
+    name: stringValue(value.name) || id,
+    default_model: stringValue(value.default_model),
+    user_channel_id: nullableNumber(value.user_channel_id) || undefined,
+    skill_ids: stringArray(value.skill_ids),
+  }
 }
 
 function normalizeStudioOption(value: unknown): StudioOption | null {
@@ -1184,6 +1437,18 @@ function normalizeMessage(value: unknown): MessageRecord | null {
   }
 }
 
+function normalizeWeixinLoginState(value: unknown): WeixinLoginState {
+  const item = isRecord(value) ? value : {}
+  return {
+    session_key: stringValue(item.session_key),
+    qrcode_url: stringValue(item.qrcode_url),
+    qr_data_url: stringValue(item.qr_data_url),
+    status: stringValue(item.status),
+    message: stringValue(item.message) || stringValue(item.error),
+    connected: item.connected === true,
+  }
+}
+
 function uniqueModels(catalog: UserChannelCatalog[]) {
   return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
 }
@@ -1193,8 +1458,17 @@ function nullableNumber(value: unknown) {
   return Number.isFinite(next) && next > 0 ? next : null
 }
 
-function numberArray(value: unknown) {
-  return Array.isArray(value) ? value.map((item) => Number(item)).filter((item) => Number.isFinite(item) && item > 0) : []
+function skillIDArray(value: unknown) {
+  return Array.isArray(value) ? value.map((item) => String(item ?? "").trim()).filter(Boolean) : []
+}
+
+function numericAgentID(value: string) {
+  const id = Number(value || 0)
+  return Number.isFinite(id) && id > 0 ? id : null
+}
+
+function skillIDsFromAgent(agent: ChatAgentOption) {
+  return skillIDArray(agent.skill_ids)
 }
 
 function stringArray(value: unknown) {
@@ -1296,6 +1570,11 @@ const zhCopy = {
   modeDirect: "私聊/直接消息",
   modeCommand: "命令触发",
   systemPrompt: "系统提示词",
+  add: "添加",
+  added: "已添加",
+  addSkills: "添加技能",
+  noSelectedSkills: "未添加技能",
+  close: "关闭",
   addGroup: "添加群配置",
   noGroups: "暂无群级覆盖配置。",
   group: "群",
@@ -1351,6 +1630,20 @@ const zhCopy = {
   oneBotBaseURL: "OneBot HTTP 地址",
   oneBotAccessToken: "OneBot Access Token",
   oneBotAction: "OneBot 发送 action",
+  weixinBaseURL: "微信 iLink API 地址",
+  weixinCDNBaseURL: "微信 CDN 地址",
+  weixinAccountID: "微信 Bot 账号",
+  weixinUserID: "扫码用户",
+  weixinAccountPending: "扫码连接后自动填充",
+  weixinQrLogin: "微信扫码登录",
+  weixinConfigured: "已保存微信 Bot token，可重新扫码换绑。",
+  weixinNotConfigured: "尚未连接微信，请生成二维码并用手机微信扫码。",
+  weixinSaveFirst: "请先保存微信通道，再生成二维码登录。",
+  weixinStartLogin: "生成二维码",
+  weixinStarting: "生成中...",
+  weixinWaiting: "等待扫码确认。",
+  weixinConnected: "微信已连接",
+  weixinLoginFailed: "微信登录失败",
   connectionHint: "这些连接设置会自动保存到渠道扩展配置中，并由对应渠道发送消息时读取。",
   noMessages: "暂无消息记录。",
   save: "保存",
@@ -1418,6 +1711,11 @@ const enCopy: CopyText = {
   modeDirect: "Direct messages",
   modeCommand: "Command",
   systemPrompt: "System prompt",
+  add: "Add",
+  added: "Added",
+  addSkills: "Add skills",
+  noSelectedSkills: "No skills selected",
+  close: "Close",
   addGroup: "Add group",
   noGroups: "No per-group overrides.",
   group: "Group",
@@ -1473,6 +1771,20 @@ const enCopy: CopyText = {
   oneBotBaseURL: "OneBot HTTP URL",
   oneBotAccessToken: "OneBot access token",
   oneBotAction: "OneBot send action",
+  weixinBaseURL: "Weixin iLink API URL",
+  weixinCDNBaseURL: "Weixin CDN URL",
+  weixinAccountID: "Weixin bot account",
+  weixinUserID: "Scan user",
+  weixinAccountPending: "Filled after QR login",
+  weixinQrLogin: "Weixin QR login",
+  weixinConfigured: "Weixin bot token is saved. Scan again to relink.",
+  weixinNotConfigured: "Weixin is not connected. Generate a QR code and scan it in WeChat.",
+  weixinSaveFirst: "Save this Weixin channel before generating a QR code.",
+  weixinStartLogin: "Generate QR",
+  weixinStarting: "Generating...",
+  weixinWaiting: "Waiting for scan confirmation.",
+  weixinConnected: "Weixin connected",
+  weixinLoginFailed: "Weixin login failed",
   connectionHint: "These connection settings are saved into the provider extension config and used by the selected provider when sending messages.",
   noMessages: "No messages yet.",
   save: "Save",
