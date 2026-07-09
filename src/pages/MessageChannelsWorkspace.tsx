@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
-import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
+import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, Copy, MessageSquare, Plus, Power, QrCode, Save, Trash2 } from "lucide-react"
 import api from "@/lib/api"
@@ -294,12 +294,14 @@ function ChannelList({ copy }: { copy: CopyText }) {
 
 function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit" }) {
   const navigate = useNavigate()
+  const location = useLocation()
   const queryClient = useQueryClient()
   const { success, error } = useToast()
   const { id = "" } = useParams()
   const numericID = Number(id)
   const [activeTab, setActiveTab] = useState("basic")
   const [draft, setDraft] = useState<Draft>(() => ({ ...emptyDraft, name: copy.defaultName, advanced_options: { ...emptyAdvancedOptions } }))
+  const [tencentLoginAutoKey, setTencentLoginAutoKey] = useState(0)
 
   const { data: channels = [] } = useChannels()
   const current = mode === "edit" ? channels.find((channel) => channel.id === numericID) : undefined
@@ -330,6 +332,16 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
       success(copy.saved)
       queryClient.invalidateQueries({ queryKey: channelQueryKey })
       if (saved) {
+        if (saved.provider === "tencent_channel") {
+          setActiveTab("basic")
+          if (mode === "create") {
+            navigate(`/chat/channels/${saved.id}?login=tencent`, { replace: true })
+          } else {
+            setTencentLoginAutoKey(Date.now())
+            navigate(`/chat/channels/${saved.id}`, { replace: true })
+          }
+          return
+        }
         navigate(`/chat/channels/${saved.id}`, { replace: mode === "create" })
       }
     },
@@ -361,6 +373,9 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
   if (mode === "edit" && channels.length > 0 && !current) {
     return <Navigate to="/chat/channels" replace />
   }
+
+  const locationTencentLoginKey = new URLSearchParams(location.search).get("login") === "tencent" ? `route-${numericID}` : ""
+  const tencentLoginAutoStartKey = tencentLoginAutoKey || locationTencentLoginKey
 
   const tabs = [
     { id: "basic", label: copy.tabBasic },
@@ -416,7 +431,7 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
       </div>
 
       {activeTab === "basic" && (
-        <BasicTab copy={copy} draft={draft} current={current} onDraftChange={updateDraft} onAdvancedChange={updateAdvanced} />
+        <BasicTab copy={copy} draft={draft} current={current} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={updateDraft} onAdvancedChange={updateAdvanced} />
       )}
       {activeTab === "routing" && (
         <RoutingTab copy={copy} draft={draft} lookups={lookups} modelOptions={modelOptions} defaultModelOptions={defaultModelOptions} onDraftChange={updateDraft} />
@@ -438,12 +453,16 @@ function BasicTab({
   copy,
   draft,
   current,
+  lookups,
+  tencentLoginAutoStartKey,
   onDraftChange,
   onAdvancedChange,
 }: {
   copy: CopyText
   draft: Draft
   current?: MessageChannel
+  lookups: LookupData
+  tencentLoginAutoStartKey: string | number
   onDraftChange: (patch: Partial<Draft>) => void
   onAdvancedChange: (patch: Partial<AdvancedOptions>) => void
 }) {
@@ -490,7 +509,7 @@ function BasicTab({
             </Button>
           </div>
         )}
-        <ConnectionSettings copy={copy} draft={draft} current={current} onDraftChange={onDraftChange} onAdvancedChange={onAdvancedChange} />
+        <ConnectionSettings copy={copy} draft={draft} current={current} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={onDraftChange} onAdvancedChange={onAdvancedChange} />
       </CardContent>
     </Card>
   )
@@ -500,12 +519,16 @@ function ConnectionSettings({
   copy,
   draft,
   current,
+  lookups,
+  tencentLoginAutoStartKey,
   onDraftChange,
   onAdvancedChange,
 }: {
   copy: CopyText
   draft: Draft
   current?: MessageChannel
+  lookups: LookupData
+  tencentLoginAutoStartKey: string | number
   onDraftChange: (patch: Partial<Draft>) => void
   onAdvancedChange: (patch: Partial<AdvancedOptions>) => void
 }) {
@@ -624,46 +647,64 @@ function ConnectionSettings({
         )}
 
         {draft.provider === "tencent_channel" && (
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={copy.tencentGuildID}>
-              <Input value={config.guild_id || ""} placeholder="guild_id" onChange={(event) => updateConfig("guild_id", event.target.value)} />
-            </Field>
-            <Field label={copy.tencentChannelID}>
-              <Input value={config.channel_id || ""} placeholder="channel_id" onChange={(event) => updateConfig("channel_id", event.target.value)} />
-            </Field>
-            <Field label={copy.tencentCLIProfile}>
-              <Input value={config.cli_profile || ""} placeholder="default" onChange={(event) => updateConfig("cli_profile", event.target.value)} />
-            </Field>
-            <SelectField label={copy.tencentGatewayEnabled} value={config.gateway_enabled || "true"} onChange={(value) => updateConfig("gateway_enabled", value)}>
-              <option value="true">{copy.enabled}</option>
-              <option value="false">{copy.disabledState}</option>
-            </SelectField>
-            <SelectField label={copy.tencentPollMentions} value={config.poll_mentions || "true"} onChange={(value) => updateConfig("poll_mentions", value)}>
-              <option value="true">{copy.enabled}</option>
-              <option value="false">{copy.disabledState}</option>
-            </SelectField>
-            <SelectField label={copy.tencentPollPosts} value={config.poll_posts || "false"} onChange={(value) => updateConfig("poll_posts", value)}>
-              <option value="false">{copy.disabledState}</option>
-              <option value="true">{copy.enabled}</option>
-            </SelectField>
-            <SelectField label={copy.tencentAutoReplyMentions} value={config.auto_reply_mentions || "true"} onChange={(value) => updateConfig("auto_reply_mentions", value)}>
-              <option value="true">{copy.enabled}</option>
-              <option value="false">{copy.disabledState}</option>
-            </SelectField>
-            <SelectField label={copy.tencentReplyMode} value={config.reply_mode || "comment"} onChange={(value) => updateConfig("reply_mode", value)}>
-              <option value="comment">{copy.tencentReplyCommentPost}</option>
-              <option value="reply">{copy.tencentReplyExistingComment}</option>
-            </SelectField>
-            <Field label={copy.tencentPollInterval}>
-              <Input value={config.poll_interval_seconds || "30"} placeholder="30" onChange={(event) => updateConfig("poll_interval_seconds", event.target.value)} />
-            </Field>
-            <Field label={copy.tencentMaxEvents}>
-              <Input value={config.max_events || "20"} placeholder="20" onChange={(event) => updateConfig("max_events", event.target.value)} />
-            </Field>
-            <SelectField label={copy.tencentDefaultGetType} value={config.default_get_type || "2"} onChange={(value) => updateConfig("default_get_type", value)}>
-              <option value="2">{copy.tencentNewest}</option>
-              <option value="1">{copy.tencentHot}</option>
-            </SelectField>
+          <div className="space-y-4">
+            <div className="rounded-md border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900 dark:border-amber-900/60 dark:bg-amber-950/30 dark:text-amber-100">
+              {copy.tencentConnectorRequired}
+              <div className="mt-2 rounded bg-background/70 px-2 py-1 font-mono">npm i -g tencent-channel-cli</div>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <SelectField label={copy.tencentConnectorDevice} value={draft.default_device_id} onChange={(value) => onDraftChange({ default_device_id: value })}>
+                <option value="">{copy.tencentSelectConnector}</option>
+                {lookups.devices.map((device) => <option key={device.id} value={device.id}>{device.name}{device.online ? "" : ` (${copy.offline})`}</option>)}
+              </SelectField>
+              <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
+                <input type="checkbox" checked={draft.default_workspace_unrestricted} onChange={(event) => onDraftChange({ default_workspace_unrestricted: event.target.checked, default_workspace_path: event.target.checked ? "" : draft.default_workspace_path })} />
+                {copy.unrestrictedWorkspace}
+              </label>
+              <Field label={copy.workspacePath}>
+                <Input disabled={draft.default_workspace_unrestricted} value={draft.default_workspace_path} placeholder={draft.default_workspace_unrestricted ? copy.unrestrictedWorkspace : copy.workspacePathPlaceholder} onChange={(event) => onDraftChange({ default_workspace_path: event.target.value })} />
+              </Field>
+              <Field label={copy.tencentGuildID}>
+                <Input value={config.guild_id || ""} placeholder="guild_id" onChange={(event) => updateConfig("guild_id", event.target.value)} />
+              </Field>
+              <Field label={copy.tencentChannelID}>
+                <Input value={config.channel_id || ""} placeholder="channel_id" onChange={(event) => updateConfig("channel_id", event.target.value)} />
+              </Field>
+              <Field label={copy.tencentCLIProfile}>
+                <Input value={config.cli_profile || ""} placeholder="default" onChange={(event) => updateConfig("cli_profile", event.target.value)} />
+              </Field>
+              <SelectField label={copy.tencentGatewayEnabled} value={config.gateway_enabled || "true"} onChange={(value) => updateConfig("gateway_enabled", value)}>
+                <option value="true">{copy.enabled}</option>
+                <option value="false">{copy.disabledState}</option>
+              </SelectField>
+              <SelectField label={copy.tencentPollMentions} value={config.poll_mentions || "true"} onChange={(value) => updateConfig("poll_mentions", value)}>
+                <option value="true">{copy.enabled}</option>
+                <option value="false">{copy.disabledState}</option>
+              </SelectField>
+              <SelectField label={copy.tencentPollPosts} value={config.poll_posts || "false"} onChange={(value) => updateConfig("poll_posts", value)}>
+                <option value="false">{copy.disabledState}</option>
+                <option value="true">{copy.enabled}</option>
+              </SelectField>
+              <SelectField label={copy.tencentAutoReplyMentions} value={config.auto_reply_mentions || "true"} onChange={(value) => updateConfig("auto_reply_mentions", value)}>
+                <option value="true">{copy.enabled}</option>
+                <option value="false">{copy.disabledState}</option>
+              </SelectField>
+              <SelectField label={copy.tencentReplyMode} value={config.reply_mode || "comment"} onChange={(value) => updateConfig("reply_mode", value)}>
+                <option value="comment">{copy.tencentReplyCommentPost}</option>
+                <option value="reply">{copy.tencentReplyExistingComment}</option>
+              </SelectField>
+              <Field label={copy.tencentPollInterval}>
+                <Input value={config.poll_interval_seconds || "30"} placeholder="30" onChange={(event) => updateConfig("poll_interval_seconds", event.target.value)} />
+              </Field>
+              <Field label={copy.tencentMaxEvents}>
+                <Input value={config.max_events || "20"} placeholder="20" onChange={(event) => updateConfig("max_events", event.target.value)} />
+              </Field>
+              <SelectField label={copy.tencentDefaultGetType} value={config.default_get_type || "2"} onChange={(value) => updateConfig("default_get_type", value)}>
+                <option value="2">{copy.tencentNewest}</option>
+                <option value="1">{copy.tencentHot}</option>
+              </SelectField>
+            </div>
+            <TencentChannelLoginPanel copy={copy} current={current} autoStartKey={tencentLoginAutoStartKey} />
           </div>
         )}
 
@@ -689,6 +730,20 @@ interface QQLoginState {
   qr_data_url: string
   status: string
   connected: boolean
+}
+
+interface TencentChannelLoginState {
+  qrcode_url: string
+  verification_uri: string
+  qr_data_url: string
+  qrcode_path: string
+  status: string
+  message: string
+  connected: boolean
+  cli_version: string
+  connectivity: string
+  expires_in_s: number
+  setup_hint?: unknown
 }
 
 function QQLoginPanel({ copy, current }: { copy: CopyText; current?: MessageChannel }) {
@@ -858,6 +913,100 @@ function WeixinLoginPanel({ copy, current }: { copy: CopyText; current?: Message
               <a className="block break-all text-primary underline-offset-4 hover:underline" href={loginState.qrcode_url} target="_blank" rel="noreferrer">
                 {loginState.qrcode_url}
               </a>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TencentChannelLoginPanel({ copy, current, autoStartKey }: { copy: CopyText; current?: MessageChannel; autoStartKey: string | number }) {
+  const queryClient = useQueryClient()
+  const { success, error } = useToast()
+  const [loginState, setLoginState] = useState<TencentChannelLoginState | null>(null)
+  const startedAutoKey = useRef<string | number>("")
+
+  const startLogin = useMutation({
+    mutationFn: async () => {
+      if (!current?.id) throw new Error(copy.tencentSaveFirst)
+      const res = await api.post(`/user/message-channels/${current.id}/tencent-channel/login/start`)
+      return normalizeTencentChannelLoginState(res.data)
+    },
+    onSuccess: (state) => setLoginState(state),
+    onError: (err) => error(apiErrorMessage(err, copy.tencentLoginFailed)),
+  })
+
+  const finishLogin = useMutation({
+    mutationFn: async () => {
+      if (!current?.id) throw new Error(copy.tencentSaveFirst)
+      const res = await api.post(`/user/message-channels/${current.id}/tencent-channel/login/wait`)
+      return normalizeTencentChannelLoginState({ ...loginState, ...res.data })
+    },
+    onSuccess: (state) => {
+      setLoginState(state)
+      if (state.connected) {
+        success(copy.tencentConnected)
+        queryClient.invalidateQueries({ queryKey: channelQueryKey })
+      }
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.tencentLoginFailed)),
+  })
+
+  useEffect(() => {
+    if (!current?.id || !autoStartKey || startedAutoKey.current === autoStartKey) {
+      return
+    }
+    startedAutoKey.current = autoStartKey
+    startLogin.mutate()
+  }, [autoStartKey, current?.id])
+
+  if (!current?.id) {
+    return (
+      <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">
+        {copy.tencentSaveFirst}
+      </div>
+    )
+  }
+
+  return (
+    <div className="rounded-md border p-4">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+        <div>
+          <div className="font-medium">{copy.tencentQrLogin}</div>
+          <div className="mt-1 text-sm text-muted-foreground">{copy.tencentLoginDescription}</div>
+          {loginState?.cli_version && <div className="mt-1 text-xs text-muted-foreground">tencent-channel-cli {loginState.cli_version}</div>}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="gap-2" disabled={startLogin.isPending} onClick={() => startLogin.mutate()}>
+            <QrCode size={16} />
+            {startLogin.isPending ? copy.tencentStarting : copy.tencentStartLogin}
+          </Button>
+          <Button variant="outline" disabled={finishLogin.isPending || !loginState} onClick={() => finishLogin.mutate()}>
+            {finishLogin.isPending ? copy.tencentFinishing : copy.tencentFinishLogin}
+          </Button>
+        </div>
+      </div>
+      {loginState && (
+        <div className="mt-4 grid gap-4 md:grid-cols-[auto_minmax(0,1fr)] md:items-center">
+          {loginState.qr_data_url ? (
+            <img src={loginState.qr_data_url} alt={copy.tencentQrLogin} className="h-48 w-48 rounded-md border bg-white p-2" />
+          ) : (
+            <div className="flex h-48 w-48 items-center justify-center rounded-md border text-sm text-muted-foreground">QR</div>
+          )}
+          <div className="min-w-0 space-y-2 text-sm">
+            <div className="font-medium">{loginState.connected ? copy.tencentConnected : (loginState.message || copy.tencentWaiting)}</div>
+            <div className="text-muted-foreground">{copy.status}: {loginState.status || "pending"}</div>
+            {loginState.expires_in_s > 0 && <div className="text-muted-foreground">{copy.tencentExpiresIn}: {loginState.expires_in_s}s</div>}
+            {loginState.connectivity && <div className="text-muted-foreground">{copy.tencentConnectivity}: {loginState.connectivity}</div>}
+            {loginState.qrcode_path && <div className="break-all font-mono text-xs text-muted-foreground">{loginState.qrcode_path}</div>}
+            {loginState.qrcode_url && (
+              <a className="block break-all text-primary underline-offset-4 hover:underline" href={loginState.qrcode_url} target="_blank" rel="noreferrer">
+                {loginState.qrcode_url}
+              </a>
+            )}
+            {isRecord(loginState.setup_hint) && stringValue(loginState.setup_hint.message) && (
+              <div className="rounded-md bg-muted p-2 text-xs text-muted-foreground">{stringValue(loginState.setup_hint.message)}</div>
             )}
           </div>
         </div>
@@ -1594,6 +1743,27 @@ function normalizeQQLoginState(value: unknown): QQLoginState {
   }
 }
 
+function normalizeTencentChannelLoginState(value: unknown): TencentChannelLoginState {
+  const item = isRecord(value) ? value : {}
+  const data = isRecord(item.data) ? item.data : item
+  const status = firstStringValue(item.status, data.status)
+  const connected = item.connected === true || ["authorized", "connected", "success", "ok"].includes(status.toLowerCase())
+  const expires = Number(item.expires_in_s || data.expires_in_s || data.expires_in || 0)
+  return {
+    qrcode_url: firstStringValue(item.qrcode_url, data.qrcode_url, data.qr_url, data.verification_uri),
+    verification_uri: firstStringValue(item.verification_uri, data.verification_uri),
+    qr_data_url: firstStringValue(item.qr_data_url, data.qr_data_url) || qrCodeDataURLFromBase64(firstStringValue(item.qr_code, item.qrcode, data.qr_code, data.qrcode, data.qr_code_base64, data.qrcode_base64)),
+    qrcode_path: firstStringValue(item.qrcode_path, data.qrcode_path),
+    status,
+    message: firstStringValue(item.message, data.message, item.error, data.error),
+    connected,
+    cli_version: firstStringValue(item.cli_version, data.cli_version),
+    connectivity: firstStringValue(item.connectivity, data.connectivity),
+    expires_in_s: Number.isFinite(expires) ? expires : 0,
+    setup_hint: item.setup_hint || data.setup_hint,
+  }
+}
+
 function uniqueModels(catalog: UserChannelCatalog[]) {
   return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
 }
@@ -1626,6 +1796,21 @@ function commandPrefixesFromText(value: string) {
 
 function stringValue(value: unknown) {
   return typeof value === "string" ? value : ""
+}
+
+function firstStringValue(...values: unknown[]) {
+  for (const value of values) {
+    const text = stringValue(value).trim()
+    if (text) return text
+  }
+  return ""
+}
+
+function qrCodeDataURLFromBase64(value: string) {
+  const text = value.trim()
+  if (!text) return ""
+  if (text.startsWith("data:image/")) return text
+  return `data:image/png;base64,${text}`
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -1814,6 +1999,21 @@ const zhCopy = {
   tencentDefaultGetType: "默认帖子排序",
   tencentNewest: "最新",
   tencentHot: "热门",
+  tencentConnectorDevice: "腾讯频道连接器",
+  tencentSelectConnector: "请选择连接器",
+  tencentConnectorRequired: "腾讯频道必须通过连接器运行，本机连接器需要先安装 tencent-channel-cli。",
+  tencentQrLogin: "腾讯频道扫码登录",
+  tencentLoginDescription: "保存后通过所选连接器执行 tencent-channel-cli login --json --yes 强制获取登录二维码。",
+  tencentSaveFirst: "请先保存腾讯频道，并选择一个连接器。",
+  tencentStartLogin: "生成二维码",
+  tencentStarting: "生成中...",
+  tencentFinishLogin: "完成登录",
+  tencentFinishing: "确认中...",
+  tencentWaiting: "请扫码或打开授权链接完成授权，然后点击完成登录。",
+  tencentConnected: "腾讯频道已登录",
+  tencentLoginFailed: "腾讯频道登录失败",
+  tencentExpiresIn: "有效期",
+  tencentConnectivity: "连通性",
   connectionHint: "这些连接设置会自动保存到渠道扩展配置中，并由对应渠道发送消息时读取。",
   noMessages: "暂无消息记录。",
   save: "保存",
@@ -1980,6 +2180,21 @@ const enCopy: CopyText = {
   tencentDefaultGetType: "Default post order",
   tencentNewest: "Newest",
   tencentHot: "Hot",
+  tencentConnectorDevice: "Tencent Channel connector",
+  tencentSelectConnector: "Select a connector",
+  tencentConnectorRequired: "Tencent Channel must run through a connector. Install tencent-channel-cli on the connector device first.",
+  tencentQrLogin: "Tencent Channel QR login",
+  tencentLoginDescription: "After saving, the selected connector runs tencent-channel-cli login --json --yes to force a fresh QR code.",
+  tencentSaveFirst: "Save this Tencent Channel and select a connector first.",
+  tencentStartLogin: "Generate QR",
+  tencentStarting: "Generating...",
+  tencentFinishLogin: "Finish login",
+  tencentFinishing: "Confirming...",
+  tencentWaiting: "Scan the QR code or open the auth link, then click Finish login.",
+  tencentConnected: "Tencent Channel connected",
+  tencentLoginFailed: "Tencent Channel login failed",
+  tencentExpiresIn: "Expires in",
+  tencentConnectivity: "Connectivity",
   connectionHint: "These connection settings are saved into the provider extension config and used by the selected provider when sending messages.",
   noMessages: "No messages yet.",
   save: "Save",
