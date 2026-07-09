@@ -241,19 +241,7 @@ export default function AdvancedChatMemories() {
                       "rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
                       selectedID === memory.id && "border-primary bg-muted"
                     )}
-                    onClick={() => {
-                      setSelectedID(memory.id)
-                      setDraft({
-                        id: memory.id,
-                        scope: memory.scope,
-                        agent_id: memory.agent_id || "",
-                        kind: memory.kind || "facts",
-                        title: memory.title || "",
-                        content: "",
-                        enabled: memory.enabled !== false,
-                      })
-                      setIsEditorOpen(true)
-                    }}
+                    onClick={() => setSelectedID(memory.id)}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium">{memory.title || memory.kind}</span>
@@ -288,7 +276,21 @@ export default function AdvancedChatMemories() {
                   <SummaryItem label={copy.status} value={selectedMemory.enabled ? copy.enabled : copy.disabled} />
                   <SummaryItem label={copy.updatedBy} value={selectedMemory.updated_by || "-"} />
                 </div>
-                <Button className="gap-2" onClick={() => setIsEditorOpen(true)}>
+                <Button
+                  className="gap-2"
+                  onClick={() => {
+                    setDraft((current) => ({
+                      id: selectedMemory.id,
+                      scope: selectedMemory.scope,
+                      agent_id: selectedMemory.agent_id || "",
+                      kind: selectedMemory.kind || "facts",
+                      title: selectedMemory.title || "",
+                      content: current.id === selectedMemory.id ? current.content : "",
+                      enabled: selectedMemory.enabled !== false,
+                    }))
+                    setIsEditorOpen(true)
+                  }}
+                >
                   <Save size={16} />
                   {copy.editMemory}
                 </Button>
@@ -325,7 +327,7 @@ export default function AdvancedChatMemories() {
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.kind}</span>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))} disabled={Boolean(draft.id)}>
+                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}>
                   {memoryKinds.map((kind) => (
                     <option key={kind} value={kind}>{kind}</option>
                   ))}
