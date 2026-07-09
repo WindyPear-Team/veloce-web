@@ -4,6 +4,7 @@ import { Brain, Plus, RefreshCw, Save, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 import { useI18n } from "@/lib/i18n"
@@ -61,6 +62,7 @@ export default function AdvancedChatMemories() {
   const { success, error } = useToast()
   const [selectedID, setSelectedID] = useState("")
   const [draft, setDraft] = useState(emptyDraft)
+  const [isEditorOpen, setIsEditorOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
 
@@ -124,6 +126,7 @@ export default function AdvancedChatMemories() {
   const startNew = () => {
     setSelectedID("")
     setDraft({ ...emptyDraft })
+    setIsEditorOpen(true)
   }
 
   const saveMemory = async () => {
@@ -157,6 +160,7 @@ export default function AdvancedChatMemories() {
       if (saved?.id) {
         setSelectedID(saved.id)
       }
+      setIsEditorOpen(false)
     } catch (err) {
       error(apiErrorMessage(err, copy.saveFailed))
     } finally {
@@ -174,6 +178,7 @@ export default function AdvancedChatMemories() {
       success(copy.deleted)
       setSelectedID("")
       setDraft({ ...emptyDraft })
+      setIsEditorOpen(false)
       await queryClient.invalidateQueries({ queryKey: memoriesQueryKey })
     } catch (err) {
       error(apiErrorMessage(err, copy.deleteFailed))
@@ -236,7 +241,19 @@ export default function AdvancedChatMemories() {
                       "rounded-md border px-3 py-2 text-left text-sm transition-colors hover:bg-muted/40",
                       selectedID === memory.id && "border-primary bg-muted"
                     )}
-                    onClick={() => setSelectedID(memory.id)}
+                    onClick={() => {
+                      setSelectedID(memory.id)
+                      setDraft({
+                        id: memory.id,
+                        scope: memory.scope,
+                        agent_id: memory.agent_id || "",
+                        kind: memory.kind || "facts",
+                        title: memory.title || "",
+                        content: "",
+                        enabled: memory.enabled !== false,
+                      })
+                      setIsEditorOpen(true)
+                    }}
                   >
                     <div className="flex items-center justify-between gap-2">
                       <span className="truncate font-medium">{memory.title || memory.kind}</span>
@@ -254,9 +271,41 @@ export default function AdvancedChatMemories() {
 
         <Card>
           <CardHeader>
-            <CardTitle>{draft.id ? copy.editMemory : copy.newMemory}</CardTitle>
+            <CardTitle>{copy.details}</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent>
+            {selectedMemory ? (
+              <div className="space-y-4 text-sm">
+                <div>
+                  <div className="text-xs text-muted-foreground">{copy.memoryTitle}</div>
+                  <div className="font-medium">{selectedMemory.title || selectedMemory.kind}</div>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2">
+                  <SummaryItem label={copy.scope} value={selectedMemory.scope === "global" ? copy.global : copy.agent} />
+                  <SummaryItem label={copy.kind} value={selectedMemory.kind} />
+                  <SummaryItem label={copy.agent} value={selectedMemory.agent_id || "-"} />
+                  <SummaryItem label={copy.size} value={formatBytes(selectedMemory.size)} />
+                  <SummaryItem label={copy.status} value={selectedMemory.enabled ? copy.enabled : copy.disabled} />
+                  <SummaryItem label={copy.updatedBy} value={selectedMemory.updated_by || "-"} />
+                </div>
+                <Button className="gap-2" onClick={() => setIsEditorOpen(true)}>
+                  <Save size={16} />
+                  {copy.editMemory}
+                </Button>
+              </div>
+            ) : (
+              <div className="rounded-md border border-dashed px-3 py-10 text-center text-sm text-muted-foreground">{copy.selectMemory}</div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      <Dialog open={isEditorOpen} onOpenChange={setIsEditorOpen}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{draft.id ? copy.editMemory : copy.newMemory}</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[72vh] space-y-4 overflow-y-auto pr-1">
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.scope}</span>
@@ -300,19 +349,28 @@ export default function AdvancedChatMemories() {
                 onChange={(event) => setDraft((current) => ({ ...current, content: event.target.value }))}
               />
             </label>
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-between">
-              <Button variant="outline" className="gap-2" disabled={!draft.id || isDeleting} onClick={deleteMemory}>
-                <Trash2 size={16} />
-                {copy.delete}
-              </Button>
-              <Button className="gap-2" disabled={isSaving} onClick={saveMemory}>
-                <Save size={16} />
-                {isSaving ? copy.saving : copy.save}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+          </div>
+          <DialogFooter className="gap-2 sm:justify-between">
+            <Button variant="outline" className="gap-2" disabled={!draft.id || isDeleting} onClick={deleteMemory}>
+              <Trash2 size={16} />
+              {copy.delete}
+            </Button>
+            <Button className="gap-2" disabled={isSaving} onClick={saveMemory}>
+              <Save size={16} />
+              {isSaving ? copy.saving : copy.save}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function SummaryItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-md border bg-muted/20 px-3 py-2">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="mt-1 truncate font-medium">{value}</div>
     </div>
   )
 }
@@ -401,8 +459,10 @@ const zhCopy = {
   refresh: "刷新",
   newMemory: "新建记忆",
   memories: "记忆文档",
+  details: "详情",
   loading: "加载中",
   empty: "暂无记忆",
+  selectMemory: "选择一条记忆查看详情",
   global: "全局",
   agent: "助理",
   editMemory: "编辑记忆",
@@ -412,6 +472,10 @@ const zhCopy = {
   memoryTitle: "标题",
   titlePlaceholder: "例如：项目偏好",
   enabled: "启用",
+  disabled: "停用",
+  status: "状态",
+  size: "大小",
+  updatedBy: "更新者",
   content: "Markdown 内容",
   contentPlaceholder: "# Facts\n\n- 用户偏好...",
   save: "保存",
@@ -432,8 +496,10 @@ const enCopy = {
   refresh: "Refresh",
   newMemory: "New memory",
   memories: "Memory documents",
+  details: "Details",
   loading: "Loading",
   empty: "No memories",
+  selectMemory: "Select a memory to view details",
   global: "Global",
   agent: "Assistant",
   editMemory: "Edit memory",
@@ -443,6 +509,10 @@ const enCopy = {
   memoryTitle: "Title",
   titlePlaceholder: "For example: Project preferences",
   enabled: "Enabled",
+  disabled: "Disabled",
+  status: "Status",
+  size: "Size",
+  updatedBy: "Updated by",
   content: "Markdown content",
   contentPlaceholder: "# Facts\n\n- User prefers...",
   save: "Save",
