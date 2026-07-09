@@ -145,13 +145,14 @@ interface Draft {
 }
 
 const channelQueryKey = ["message-channels"] as const
-type ChannelProvider = "telegram" | "discord" | "qq" | "onebot" | "weixin"
+type ChannelProvider = "telegram" | "discord" | "qq" | "onebot" | "weixin" | "tencent_channel"
 const providerOptions: Array<{ value: ChannelProvider; label: string }> = [
   { value: "telegram", label: "Telegram" },
   { value: "discord", label: "Discord" },
   { value: "qq", label: "QQ 官方机器人" },
   { value: "onebot", label: "OneBot" },
   { value: "weixin", label: "微信 Bot" },
+  { value: "tencent_channel", label: "腾讯频道 Gateway" },
 ]
 const emptyAdvancedOptions: AdvancedOptions = {
   temperature: null,
@@ -616,6 +617,50 @@ function ConnectionSettings({
               </Field>
             </div>
             <WeixinLoginPanel copy={copy} current={current} />
+          </div>
+        )}
+
+        {draft.provider === "tencent_channel" && (
+          <div className="grid gap-4 md:grid-cols-2">
+            <Field label={copy.tencentGuildID}>
+              <Input value={config.guild_id || ""} placeholder="guild_id" onChange={(event) => updateConfig("guild_id", event.target.value)} />
+            </Field>
+            <Field label={copy.tencentChannelID}>
+              <Input value={config.channel_id || ""} placeholder="channel_id" onChange={(event) => updateConfig("channel_id", event.target.value)} />
+            </Field>
+            <Field label={copy.tencentCLIProfile}>
+              <Input value={config.cli_profile || ""} placeholder="default" onChange={(event) => updateConfig("cli_profile", event.target.value)} />
+            </Field>
+            <SelectField label={copy.tencentGatewayEnabled} value={config.gateway_enabled || "true"} onChange={(value) => updateConfig("gateway_enabled", value)}>
+              <option value="true">{copy.enabled}</option>
+              <option value="false">{copy.disabledState}</option>
+            </SelectField>
+            <SelectField label={copy.tencentPollMentions} value={config.poll_mentions || "true"} onChange={(value) => updateConfig("poll_mentions", value)}>
+              <option value="true">{copy.enabled}</option>
+              <option value="false">{copy.disabledState}</option>
+            </SelectField>
+            <SelectField label={copy.tencentPollPosts} value={config.poll_posts || "false"} onChange={(value) => updateConfig("poll_posts", value)}>
+              <option value="false">{copy.disabledState}</option>
+              <option value="true">{copy.enabled}</option>
+            </SelectField>
+            <SelectField label={copy.tencentAutoReplyMentions} value={config.auto_reply_mentions || "true"} onChange={(value) => updateConfig("auto_reply_mentions", value)}>
+              <option value="true">{copy.enabled}</option>
+              <option value="false">{copy.disabledState}</option>
+            </SelectField>
+            <SelectField label={copy.tencentReplyMode} value={config.reply_mode || "comment"} onChange={(value) => updateConfig("reply_mode", value)}>
+              <option value="comment">{copy.tencentReplyCommentPost}</option>
+              <option value="reply">{copy.tencentReplyExistingComment}</option>
+            </SelectField>
+            <Field label={copy.tencentPollInterval}>
+              <Input value={config.poll_interval_seconds || "30"} placeholder="30" onChange={(event) => updateConfig("poll_interval_seconds", event.target.value)} />
+            </Field>
+            <Field label={copy.tencentMaxEvents}>
+              <Input value={config.max_events || "20"} placeholder="20" onChange={(event) => updateConfig("max_events", event.target.value)} />
+            </Field>
+            <SelectField label={copy.tencentDefaultGetType} value={config.default_get_type || "2"} onChange={(value) => updateConfig("default_get_type", value)}>
+              <option value="2">{copy.tencentNewest}</option>
+              <option value="1">{copy.tencentHot}</option>
+            </SelectField>
           </div>
         )}
 
@@ -1333,6 +1378,11 @@ function normalizeProviderValue(value: unknown): ChannelProvider {
     case "we-chat":
     case "we_chat":
       return "weixin"
+    case "tencent_channel":
+    case "tencent-channel":
+    case "qq_channel":
+    case "qq-channel":
+      return "tencent_channel"
     default:
       return "telegram"
   }
@@ -1644,6 +1694,21 @@ const zhCopy = {
   weixinWaiting: "等待扫码确认。",
   weixinConnected: "微信已连接",
   weixinLoginFailed: "微信登录失败",
+  tencentGuildID: "默认频道 ID",
+  tencentChannelID: "默认版块 ID",
+  tencentCLIProfile: "CLI 配置档",
+  tencentGatewayEnabled: "Gateway 轮询",
+  tencentPollMentions: "监听被 @",
+  tencentPollPosts: "轮询帖子",
+  tencentAutoReplyMentions: "被 @ 后自动回复",
+  tencentReplyMode: "回复落点",
+  tencentReplyCommentPost: "评论帖子",
+  tencentReplyExistingComment: "回复评论",
+  tencentPollInterval: "轮询间隔（秒）",
+  tencentMaxEvents: "单次事件上限",
+  tencentDefaultGetType: "默认帖子排序",
+  tencentNewest: "最新",
+  tencentHot: "热门",
   connectionHint: "这些连接设置会自动保存到渠道扩展配置中，并由对应渠道发送消息时读取。",
   noMessages: "暂无消息记录。",
   save: "保存",
@@ -1785,6 +1850,21 @@ const enCopy: CopyText = {
   weixinWaiting: "Waiting for scan confirmation.",
   weixinConnected: "Weixin connected",
   weixinLoginFailed: "Weixin login failed",
+  tencentGuildID: "Default guild ID",
+  tencentChannelID: "Default channel ID",
+  tencentCLIProfile: "CLI profile",
+  tencentGatewayEnabled: "Gateway polling",
+  tencentPollMentions: "Poll mentions",
+  tencentPollPosts: "Poll posts",
+  tencentAutoReplyMentions: "Auto-reply mentions",
+  tencentReplyMode: "Reply target",
+  tencentReplyCommentPost: "Comment on post",
+  tencentReplyExistingComment: "Reply to comment",
+  tencentPollInterval: "Poll interval (seconds)",
+  tencentMaxEvents: "Max events per poll",
+  tencentDefaultGetType: "Default post order",
+  tencentNewest: "Newest",
+  tencentHot: "Hot",
   connectionHint: "These connection settings are saved into the provider extension config and used by the selected provider when sending messages.",
   noMessages: "No messages yet.",
   save: "Save",
