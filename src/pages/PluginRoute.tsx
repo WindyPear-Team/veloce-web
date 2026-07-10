@@ -7,10 +7,6 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 
-interface PluginFrontendResponse {
-  plugins?: PluginFrontendItem[]
-}
-
 interface PluginFrontendItem {
   id: string
   name: string
@@ -21,14 +17,15 @@ export default function PluginRoute() {
   const { pluginId = "", "*": rest = "" } = useParams()
   const routePath = rest || ""
 
-  const { data: plugins = [], isFetching } = useQuery<PluginFrontendItem[]>({
+  const { data: pluginExtensions, isFetching } = useQuery<unknown>({
     queryKey: ["plugins-frontend"],
     queryFn: async () => {
-      const res = await api.get<PluginFrontendResponse>("/user/plugins/frontend")
-      return Array.isArray(res.data.plugins) ? res.data.plugins : []
+      const res = await api.get("/user/plugins/frontend")
+      return res.data
     },
   })
 
+  const plugins = useMemo(() => normalizePluginFrontendItems(pluginExtensions), [pluginExtensions])
   const plugin = plugins.find((item) => item.id === pluginId)
   const route = useMemo(() => findPluginRoute(plugin, routePath), [plugin, routePath])
 
@@ -177,6 +174,22 @@ function normalizePluginRoutePath(value: string) {
   text = text.replace(/^\/plugins\/[^/]+\/?/, "")
   text = text.replace(/^\/+/, "")
   return text
+}
+
+function normalizePluginFrontendItems(value: unknown): PluginFrontendItem[] {
+  const source = Array.isArray(value) ? value : Array.isArray(recordValue(value, "plugins")) ? recordValue(value, "plugins") : []
+  return Array.isArray(source) ? source.map(normalizePluginFrontendItem).filter((item): item is PluginFrontendItem => Boolean(item)) : []
+}
+
+function normalizePluginFrontendItem(value: unknown): PluginFrontendItem | null {
+  if (!isRecord(value)) return null
+  const id = stringValue(value.id)
+  if (!id) return null
+  return {
+    id,
+    name: stringValue(value.name),
+    frontend: value.frontend,
+  }
 }
 
 function recordValue(value: unknown, key: string) {

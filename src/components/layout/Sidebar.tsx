@@ -75,7 +75,7 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
       return res.data
     },
   })
-  const { data: pluginExtensions } = useQuery<PluginFrontendResponse>({
+  const { data: pluginExtensions } = useQuery<unknown>({
     queryKey: ["plugins-frontend"],
     queryFn: async () => {
       const res = await api.get("/user/plugins/frontend")
@@ -196,16 +196,14 @@ function isSidebarItemActive(pathname: string, item: MenuItem) {
   return pathname === item.path
 }
 
-interface PluginFrontendResponse {
-  plugins?: Array<{
-    id: string
-    name: string
-    frontend?: unknown
-  }>
+interface PluginFrontendItem {
+  id: string
+  name: string
+  frontend?: unknown
 }
 
-function pluginSidebarItems(data: PluginFrontendResponse | undefined): MenuItem[] {
-  const plugins = Array.isArray(data?.plugins) ? data.plugins : []
+function pluginSidebarItems(data: unknown): MenuItem[] {
+  const plugins = normalizePluginFrontendItems(data)
   const items: MenuItem[] = []
   for (const plugin of plugins) {
     const frontend = isRecord(plugin.frontend) ? plugin.frontend : {}
@@ -222,6 +220,22 @@ function pluginSidebarItems(data: PluginFrontendResponse | undefined): MenuItem[
   return items
 }
 
+function normalizePluginFrontendItems(value: unknown): PluginFrontendItem[] {
+  const source = Array.isArray(value) ? value : Array.isArray(recordValue(value, "plugins")) ? recordValue(value, "plugins") : []
+  return Array.isArray(source) ? source.map(normalizePluginFrontendItem).filter((item): item is PluginFrontendItem => Boolean(item)) : []
+}
+
+function normalizePluginFrontendItem(value: unknown): PluginFrontendItem | null {
+  if (!isRecord(value)) return null
+  const id = stringValue(value.id)
+  if (!id) return null
+  return {
+    id,
+    name: stringValue(value.name),
+    frontend: value.frontend,
+  }
+}
+
 function normalizePluginSidebarPath(pluginID: string, declaredPath: string) {
   if (!pluginID) return ""
   if (!declaredPath) return `/dashboard/plugins/${encodeURIComponent(pluginID)}`
@@ -232,6 +246,10 @@ function normalizePluginSidebarPath(pluginID: string, declaredPath: string) {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function recordValue(value: unknown, key: string) {
+  return isRecord(value) ? value[key] : undefined
 }
 
 function stringValue(value: unknown) {
