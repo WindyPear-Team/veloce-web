@@ -11,6 +11,8 @@ import { useI18n } from "@/lib/i18n"
 interface PluginHook {
   point: string
   mode: string
+  action?: string
+  priority?: number
 }
 
 interface PluginItem {
@@ -189,7 +191,7 @@ export default function Plugins() {
                 </div>
                 <div className="mt-4 grid gap-3 md:grid-cols-3">
                   <PluginMetaBlock title="权限" items={plugin.permissions} empty="未声明权限" />
-                  <PluginMetaBlock title="Hook" items={plugin.hooks.map((hook) => hook.mode ? `${hook.point} · ${hook.mode}` : hook.point)} empty="未声明 Hook" />
+                  <PluginMetaBlock title="Hook" items={plugin.hooks.map(formatPluginHook)} empty="未声明 Hook" />
                   <PluginMetaBlock title="前端声明" items={plugin.frontend ? ["已声明"] : []} empty="未声明前端扩展" />
                 </div>
               </div>
@@ -262,7 +264,20 @@ function normalizePlugin(value: unknown): PluginItem | null {
 function normalizeHook(value: unknown): PluginHook | null {
   if (!value || typeof value !== "object") return null
   const item = value as Record<string, unknown>
-  return { point: String(item.point || ""), mode: String(item.mode || "") }
+  return {
+    point: String(item.point || ""),
+    mode: String(item.mode || ""),
+    action: String(item.action || ""),
+    priority: Number.isFinite(Number(item.priority)) ? Number(item.priority) : 0,
+  }
+}
+
+function formatPluginHook(hook: PluginHook) {
+  const parts = [hook.point]
+  if (hook.action) parts.push(hook.action)
+  if (hook.mode) parts.push(hook.mode)
+  if (hook.priority) parts.push(`P${hook.priority}`)
+  return parts.filter(Boolean).join(" · ")
 }
 
 function normalizePluginSettings(value: unknown): PluginSettingsResponse {
