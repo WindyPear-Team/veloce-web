@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, ChevronDown, Database, History, KeyRound, LayoutDashboard, MessageSquare, Palette, ScrollText, Settings, Shield, Users, Video, WalletCards } from "lucide-react"
+import { BarChart3, Boxes, ChevronDown, Database, History, KeyRound, LayoutDashboard, MessageSquare, Palette, Puzzle, ScrollText, Settings, Shield, Users, Video, WalletCards } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -42,6 +42,7 @@ const userMenuItems: MenuItem[] = [
   { icon: History, labelKey: "nav.details", path: "/dashboard/logs", settingKey: "sidebar_usage_enabled" },
   { icon: WalletCards, labelKey: "nav.wallet", path: "/dashboard/wallet", settingKey: "sidebar_wallet_enabled" },
   { icon: KeyRound, labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
+  { icon: Puzzle, labelKey: "nav.plugins", path: "/dashboard/plugins" },
   { icon: MessageSquare, labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
   { icon: Palette, labelKey: "nav.images", path: "/dashboard/images", settingKey: "sidebar_images_enabled" },
   { icon: Video, labelKey: "nav.videos", path: "/dashboard/videos" },
