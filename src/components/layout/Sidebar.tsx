@@ -16,7 +16,8 @@ interface CurrentUser {
 
 interface MenuItem {
   icon: LucideIcon
-  labelKey: TranslationKey
+  labelKey?: TranslationKey
+  label?: string
   path: string
   settingKey?: keyof PublicSettings
   children?: SystemSubItem[]
@@ -74,6 +75,14 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
       return res.data
     },
   })
+  const { data: pluginExtensions } = useQuery<PluginFrontendResponse>({
+    queryKey: ["plugins-frontend"],
+    queryFn: async () => {
+      const res = await api.get("/user/plugins/frontend")
+      return res.data
+    },
+    enabled: Boolean(user),
+  })
   const publicSettings = withPublicSettingsDefaults(settings)
   const chatPath = chatPathForSettings()
   const imagePath = imagePathForSettings()
@@ -93,6 +102,7 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
     })
     .filter((item) => !item.settingKey || publicSettings[item.settingKey] !== false)
   const visibleAdminItems = adminMenuItems.filter((item) => !item.settingKey || publicSettings[item.settingKey] !== false)
+  const pluginItems = pluginSidebarItems(pluginExtensions)
 
   return (
     <div className={cn("flex h-full w-64 flex-col border-r bg-card", className)}>
@@ -100,6 +110,9 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
         <div className="flex flex-col gap-1">
           {visibleUserItems.map((item) => (
             <SidebarLink key={item.path} item={item} active={location.pathname === item.path} onNavigate={onNavigate} />
+          ))}
+          {pluginItems.map((item) => (
+            <SidebarLink key={item.path} item={item} active={location.pathname === item.path || location.pathname.startsWith(item.path + "/")} onNavigate={onNavigate} />
           ))}
           {user?.is_admin && visibleAdminItems.length > 0 && (
             <>
@@ -137,6 +150,7 @@ function SidebarLink({
 }) {
   const { t } = useI18n()
   const isExpanded = active && Boolean(item.children?.length)
+  const label = item.label || (item.labelKey ? t(item.labelKey) : item.path)
   return (
     <div>
       <Link
@@ -146,9 +160,9 @@ function SidebarLink({
           "flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium",
           active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
         )}
-      >
+        >
         <item.icon size={18} />
-        <span className="flex-1">{t(item.labelKey)}</span>
+        <span className="flex-1">{label}</span>
         {item.children && <ChevronDown size={14} className={cn("transition-transform", isExpanded && "rotate-180")} />}
       </Link>
       {isExpanded && item.children && (
@@ -180,4 +194,48 @@ function isSidebarItemActive(pathname: string, item: MenuItem) {
     return pathname === item.path || item.children.some((child) => pathname === child.path) || pathname.startsWith("/dashboard/admin/")
   }
   return pathname === item.path
+}
+
+interface PluginFrontendResponse {
+  plugins?: Array<{
+    id: string
+    name: string
+    frontend?: unknown
+  }>
+}
+
+function pluginSidebarItems(data: PluginFrontendResponse | undefined): MenuItem[] {
+  const plugins = Array.isArray(data?.plugins) ? data.plugins : []
+  const items: MenuItem[] = []
+  for (const plugin of plugins) {
+    const frontend = isRecord(plugin.frontend) ? plugin.frontend : {}
+    const sidebar = Array.isArray(frontend.sidebar) ? frontend.sidebar : []
+    for (const raw of sidebar) {
+      if (!isRecord(raw)) continue
+      const label = stringValue(raw.label) || plugin.name || plugin.id
+      const declaredPath = stringValue(raw.path)
+      const path = normalizePluginSidebarPath(plugin.id, declaredPath)
+      if (!path) continue
+      items.push({ icon: Puzzle, label, path })
+    }
+  }
+  return items
+}
+
+function normalizePluginSidebarPath(pluginID: string, declaredPath: string) {
+  if (!pluginID) return ""
+  if (!declaredPath) return `/dashboard/plugins/${encodeURIComponent(pluginID)}`
+  if (declaredPath.startsWith("/dashboard/plugins/")) return declaredPath
+  if (declaredPath.startsWith("/plugins/")) return `/dashboard${declaredPath}`
+  return `/dashboard/plugins/${encodeURIComponent(pluginID)}/${declaredPath.replace(/^\/+/, "")}`
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value))
+}
+
+function stringValue(value: unknown) {
+  if (typeof value === "string") return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return ""
 }

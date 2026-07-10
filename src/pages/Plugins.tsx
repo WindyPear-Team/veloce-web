@@ -121,8 +121,8 @@ export default function Plugins() {
   const handleUpload = (file: File | undefined) => {
     if (!file) return
     const lower = file.name.toLowerCase()
-    if (!lower.endsWith(".zip") && !lower.endsWith(".tar.gz") && !lower.endsWith(".tgz")) {
-      error("请上传 zip、tar.gz 或 tgz 格式的插件包")
+    if (!lower.endsWith(".wasm") && !lower.endsWith(".zip") && !lower.endsWith(".tar.gz") && !lower.endsWith(".tgz")) {
+      error("请上传 wasm、zip、tar.gz 或 tgz 格式的插件包")
       return
     }
     uploadPlugin.mutate(file)
@@ -133,13 +133,13 @@ export default function Plugins() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{t("nav.plugins")}</h1>
-          <p className="mt-1 text-sm text-muted-foreground">上传 WASM 插件包，管理权限、hook、前端声明和插件设置。</p>
+          <p className="mt-1 text-sm text-muted-foreground">上传 WASM 插件，系统会从 plugin_manifest 导出读取权限、hook、前端声明和设置。</p>
         </div>
         <div>
           <input
             ref={fileInputRef}
             type="file"
-            accept=".zip,.tgz,.tar.gz,application/zip,application/gzip"
+            accept=".wasm,.zip,.tgz,.tar.gz,application/wasm,application/zip,application/gzip"
             className="hidden"
             onChange={(event) => handleUpload(event.target.files?.[0])}
           />

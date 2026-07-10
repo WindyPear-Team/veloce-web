@@ -17,6 +17,7 @@ import Settings from "./pages/Settings"
 import Wallet from "./pages/Wallet"
 import APIKeys from "./pages/APIKeys"
 import Plugins from "./pages/Plugins"
+import PluginRoute from "./pages/PluginRoute"
 import AdvancedChat from "./pages/AdvancedChat"
 import SystemManagement from "./pages/SystemManagement"
 import AdminOverview from "./pages/AdminOverview"
@@ -225,7 +226,7 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/dashboard/api-keys") {
     return t("settings.apiKeys")
   }
-  if (normalizedPathname === "/dashboard/plugins") {
+  if (normalizedPathname === "/dashboard/plugins" || normalizedPathname.startsWith("/dashboard/plugins/")) {
     return t("nav.plugins")
   }
   if (normalizedPathname === "/chat") {
@@ -437,6 +438,7 @@ function App() {
                 <Route path="wallet" element={<Wallet />} />
                 <Route path="api-keys" element={<APIKeys />} />
                 <Route path="plugins" element={<Plugins />} />
+                <Route path="plugins/:pluginId/*" element={<PluginRoute />} />
                 <Route path="chat" element={<Navigate to="/chat" replace />} />
                 <Route path="images" element={<Navigate to="/chat/images" replace />} />
                 <Route path="videos" element={<Navigate to="/chat/videos" replace />} />
