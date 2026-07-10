@@ -677,9 +677,6 @@ function ConnectionSettings({
               <Field label={copy.tencentCLIProfile}>
                 <Input value={config.cli_profile || ""} placeholder="default" onChange={(event) => updateConfig("cli_profile", event.target.value)} />
               </Field>
-              <Field label={copy.tencentSessionKey}>
-                <Input value={config.session_key || ""} placeholder="agent:main:" onChange={(event) => updateConfig("session_key", event.target.value)} />
-              </Field>
             </div>
             <TencentChannelLoginPanel copy={copy} current={current} autoStartKey={tencentLoginAutoStartKey} />
           </div>
@@ -1056,7 +1053,6 @@ function TencentChannelLoginPanel({ copy, current, autoStartKey }: { copy: CopyT
   const queryClient = useQueryClient()
   const { success, error } = useToast()
   const [loginState, setLoginState] = useState<TencentChannelLoginState | null>(null)
-  const [noticeState, setNoticeState] = useState("")
   const startedAutoKey = useRef<string | number>("")
 
   const startLogin = useMutation({
@@ -1085,27 +1081,6 @@ function TencentChannelLoginPanel({ copy, current, autoStartKey }: { copy: CopyT
     onError: (err) => error(apiErrorMessage(err, copy.tencentLoginFailed)),
   })
 
-  const runNoticeAction = useMutation({
-    mutationFn: async (action: "status" | "on" | "confirm" | "check") => {
-      if (!current?.id) throw new Error(copy.tencentSaveFirst)
-      const res = await api.post(`/user/message-channels/${current.id}/tencent-channel/notices/${action}`)
-      return res.data
-    },
-    onSuccess: (data, action) => {
-      const message = tencentNoticeMessage(data) || copy.tencentNoticeDone
-      setNoticeState(message)
-      if (action === "confirm") {
-        queryClient.invalidateQueries({ queryKey: channelQueryKey })
-      }
-      success(message)
-    },
-    onError: (err) => {
-      const message = apiErrorMessage(err, copy.tencentNoticeFailed)
-      setNoticeState(message)
-      error(message)
-    },
-  })
-
   useEffect(() => {
     if (!current?.id || !autoStartKey || startedAutoKey.current === autoStartKey) {
       return
@@ -1128,7 +1103,6 @@ function TencentChannelLoginPanel({ copy, current, autoStartKey }: { copy: CopyT
         <div>
           <div className="font-medium">{copy.tencentQrLogin}</div>
           <div className="mt-1 text-sm text-muted-foreground">{copy.tencentLoginDescription}</div>
-          <div className="mt-1 text-xs text-muted-foreground">{copy.tencentNoticeDescription}</div>
           {loginState?.cli_version && <div className="mt-1 text-xs text-muted-foreground">tencent-channel-cli {loginState.cli_version}</div>}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -1165,15 +1139,6 @@ function TencentChannelLoginPanel({ copy, current, autoStartKey }: { copy: CopyT
           </div>
         </div>
       )}
-      <div className="mt-4 rounded-md border bg-muted/20 p-3">
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" disabled={runNoticeAction.isPending} onClick={() => runNoticeAction.mutate("status")}>{copy.tencentNoticeStatus}</Button>
-          <Button variant="outline" size="sm" disabled={runNoticeAction.isPending} onClick={() => runNoticeAction.mutate("on")}>{copy.tencentNoticeTestOn}</Button>
-          <Button variant="outline" size="sm" disabled={runNoticeAction.isPending} onClick={() => runNoticeAction.mutate("confirm")}>{copy.tencentNoticeConfirm}</Button>
-          <Button variant="outline" size="sm" disabled={runNoticeAction.isPending} onClick={() => runNoticeAction.mutate("check")}>{copy.tencentNoticeCheck}</Button>
-        </div>
-        {noticeState && <div className="mt-2 break-all text-xs text-muted-foreground">{noticeState}</div>}
-      </div>
     </div>
   )
 }
@@ -1927,12 +1892,6 @@ function normalizeTencentChannelLoginState(value: unknown): TencentChannelLoginS
   }
 }
 
-function tencentNoticeMessage(value: unknown): string {
-  const item = isRecord(value) ? value : {}
-  const data = isRecord(item.data) ? item.data : item
-  return firstStringValue(data.message, item.message, data.status, item.status, item.error)
-}
-
 function normalizeTencentGuildOptions(value: unknown): TencentGuildOption[] {
   const item = isRecord(value) ? value : {}
   const data = isRecord(item.data) ? item.data : item
@@ -2223,7 +2182,6 @@ const zhCopy = {
   tencentChannelsLoaded: "版块列表已加载",
   tencentChannelsFailed: "加载版块列表失败",
   tencentCLIProfile: "CLI 配置档",
-  tencentSessionKey: "OpenClaw 通知 Session Key（可选）",
   tencentGatewayEnabled: "Gateway 轮询",
   tencentPollMentions: "监听被 @",
   tencentPollPosts: "轮询帖子",
@@ -2251,13 +2209,6 @@ const zhCopy = {
   tencentLoginFailed: "腾讯频道登录失败",
   tencentExpiresIn: "有效期",
   tencentConnectivity: "连通性",
-  tencentNoticeDescription: "自动接收使用轮询互动消息，不依赖 OpenClaw 通知。下面的测试/确认通知仅用于 OpenClaw 兼容。",
-  tencentNoticeStatus: "通知状态",
-  tencentNoticeTestOn: "测试开启通知",
-  tencentNoticeConfirm: "确认开启通知",
-  tencentNoticeCheck: "检查互动消息",
-  tencentNoticeDone: "腾讯频道通知操作已完成",
-  tencentNoticeFailed: "腾讯频道通知操作失败",
   connectionHint: "这些连接设置会自动保存到渠道扩展配置中，并由对应渠道发送消息时读取。",
   noMessages: "暂无消息记录。",
   save: "保存",
@@ -2425,7 +2376,6 @@ const enCopy: CopyText = {
   tencentChannelsLoaded: "Channels loaded",
   tencentChannelsFailed: "Failed to load channels",
   tencentCLIProfile: "CLI profile",
-  tencentSessionKey: "OpenClaw notice session key (optional)",
   tencentGatewayEnabled: "Gateway polling",
   tencentPollMentions: "Poll mentions",
   tencentPollPosts: "Poll posts",
@@ -2453,13 +2403,6 @@ const enCopy: CopyText = {
   tencentLoginFailed: "Tencent Channel login failed",
   tencentExpiresIn: "Expires in",
   tencentConnectivity: "Connectivity",
-  tencentNoticeDescription: "Automatic receiving polls interaction notices and does not depend on OpenClaw notices. Test/confirm notices are only for OpenClaw compatibility.",
-  tencentNoticeStatus: "Notice status",
-  tencentNoticeTestOn: "Test notices",
-  tencentNoticeConfirm: "Confirm notices",
-  tencentNoticeCheck: "Check interactions",
-  tencentNoticeDone: "Tencent Channel notice action completed",
-  tencentNoticeFailed: "Tencent Channel notice action failed",
   connectionHint: "These connection settings are saved into the provider extension config and used by the selected provider when sending messages.",
   noMessages: "No messages yet.",
   save: "Save",
