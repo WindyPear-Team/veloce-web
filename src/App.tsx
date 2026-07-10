@@ -437,7 +437,14 @@ function App() {
                 <Route path="logs" element={<Logs />} />
                 <Route path="wallet" element={<Wallet />} />
                 <Route path="api-keys" element={<APIKeys />} />
-                <Route path="plugins" element={<Plugins />} />
+                <Route
+                  path="plugins"
+                  element={
+                    <AdminRoute>
+                      <Plugins />
+                    </AdminRoute>
+                  }
+                />
                 <Route path="plugins/:pluginId/*" element={<PluginRoute />} />
                 <Route path="chat" element={<Navigate to="/chat" replace />} />
                 <Route path="images" element={<Navigate to="/chat/images" replace />} />

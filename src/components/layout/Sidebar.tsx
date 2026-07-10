@@ -43,7 +43,6 @@ const userMenuItems: MenuItem[] = [
   { icon: History, labelKey: "nav.details", path: "/dashboard/logs", settingKey: "sidebar_usage_enabled" },
   { icon: WalletCards, labelKey: "nav.wallet", path: "/dashboard/wallet", settingKey: "sidebar_wallet_enabled" },
   { icon: KeyRound, labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
-  { icon: Puzzle, labelKey: "nav.plugins", path: "/dashboard/plugins" },
   { icon: MessageSquare, labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
   { icon: Palette, labelKey: "nav.images", path: "/dashboard/images", settingKey: "sidebar_images_enabled" },
   { icon: Video, labelKey: "nav.videos", path: "/dashboard/videos" },
@@ -57,6 +56,7 @@ const adminMenuItems: MenuItem[] = [
   { icon: Database, labelKey: "nav.channels", path: "/dashboard/channels", settingKey: "sidebar_channels_enabled" },
   { icon: Boxes, labelKey: "nav.models", path: "/dashboard/models", settingKey: "sidebar_models_enabled" },
   { icon: Users, labelKey: "nav.users", path: "/dashboard/users", settingKey: "sidebar_users_enabled" },
+  { icon: Puzzle, labelKey: "nav.plugins", path: "/dashboard/plugins" },
 ]
 
 export function Sidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
@@ -111,9 +111,6 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
           {visibleUserItems.map((item) => (
             <SidebarLink key={item.path} item={item} active={location.pathname === item.path} onNavigate={onNavigate} />
           ))}
-          {pluginItems.map((item) => (
-            <SidebarLink key={item.path} item={item} active={location.pathname === item.path || location.pathname.startsWith(item.path + "/")} onNavigate={onNavigate} />
-          ))}
           {user?.is_admin && visibleAdminItems.length > 0 && (
             <>
               <div className="my-2 border-t" />
@@ -125,6 +122,9 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
                   currentPath={location.pathname}
                   onNavigate={onNavigate}
                 />
+              ))}
+              {pluginItems.map((item) => (
+                <SidebarLink key={item.path} item={item} active={location.pathname === item.path || location.pathname.startsWith(item.path + "/")} onNavigate={onNavigate} />
               ))}
             </>
           )}

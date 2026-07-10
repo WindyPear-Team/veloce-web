@@ -121,8 +121,8 @@ export default function Plugins() {
   const handleUpload = (file: File | undefined) => {
     if (!file) return
     const lower = file.name.toLowerCase()
-    if (!lower.endsWith(".wasm") && !lower.endsWith(".zip") && !lower.endsWith(".tar.gz") && !lower.endsWith(".tgz")) {
-      error("请上传 wasm、zip、tar.gz 或 tgz 格式的插件包")
+    if (!lower.endsWith(".wasm")) {
+      error("请上传 wasm 格式的插件")
       return
     }
     uploadPlugin.mutate(file)
@@ -139,7 +139,7 @@ export default function Plugins() {
           <input
             ref={fileInputRef}
             type="file"
-            accept=".wasm,.zip,.tgz,.tar.gz,application/wasm,application/zip,application/gzip"
+            accept=".wasm,application/wasm"
             className="hidden"
             onChange={(event) => handleUpload(event.target.files?.[0])}
           />
