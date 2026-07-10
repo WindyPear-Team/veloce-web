@@ -370,20 +370,27 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
   const updateDraft = (patch: Partial<Draft>) => setDraft((currentDraft) => ({ ...currentDraft, ...patch }))
   const updateAdvanced = (patch: Partial<AdvancedOptions>) => setDraft((currentDraft) => ({ ...currentDraft, advanced_options: { ...currentDraft.advanced_options, ...patch } }))
 
-  if (mode === "edit" && channels.length > 0 && !current) {
-    return <Navigate to="/chat/channels" replace />
-  }
-
   const locationTencentLoginKey = new URLSearchParams(location.search).get("login") === "tencent" ? `route-${numericID}` : ""
   const tencentLoginAutoStartKey = tencentLoginAutoKey || locationTencentLoginKey
 
-  const tabs = [
+  const tabs = useMemo(() => [
     { id: "basic", label: copy.tabBasic },
+    ...(draft.provider === "tencent_channel" ? [{ id: "tencent", label: copy.tabTencentChannel }] : []),
     { id: "routing", label: copy.tabRouting },
     { id: "groups", label: copy.tabGroups },
     { id: "advanced", label: copy.tabAdvanced },
     ...(draft.id ? [{ id: "messages", label: copy.tabMessages }] : []),
-  ]
+  ], [copy.tabAdvanced, copy.tabBasic, copy.tabGroups, copy.tabMessages, copy.tabRouting, copy.tabTencentChannel, draft.id, draft.provider])
+
+  useEffect(() => {
+    if (!tabs.some((tab) => tab.id === activeTab)) {
+      setActiveTab("basic")
+    }
+  }, [activeTab, tabs])
+
+  if (mode === "edit" && channels.length > 0 && !current) {
+    return <Navigate to="/chat/channels" replace />
+  }
 
   return (
     <div className="space-y-6">
@@ -435,6 +442,9 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
       )}
       {activeTab === "routing" && (
         <RoutingTab copy={copy} draft={draft} lookups={lookups} modelOptions={modelOptions} defaultModelOptions={defaultModelOptions} onDraftChange={updateDraft} />
+      )}
+      {activeTab === "tencent" && draft.provider === "tencent_channel" && (
+        <TencentChannelTab copy={copy} draft={draft} current={current} onAdvancedChange={updateAdvanced} />
       )}
       {activeTab === "groups" && (
         <GroupsTab copy={copy} draft={draft} lookups={lookups} modelOptions={modelOptions} onDraftChange={updateDraft} />
@@ -664,48 +674,12 @@ function ConnectionSettings({
               <Field label={copy.workspacePath}>
                 <Input disabled={draft.default_workspace_unrestricted} value={draft.default_workspace_path} placeholder={draft.default_workspace_unrestricted ? copy.unrestrictedWorkspace : copy.workspacePathPlaceholder} onChange={(event) => onDraftChange({ default_workspace_path: event.target.value })} />
               </Field>
-              <Field label={copy.tencentGuildID}>
-                <Input value={config.guild_id || ""} placeholder="guild_id" onChange={(event) => updateConfig("guild_id", event.target.value)} />
-              </Field>
-              <Field label={copy.tencentChannelID}>
-                <Input value={config.channel_id || ""} placeholder="channel_id" onChange={(event) => updateConfig("channel_id", event.target.value)} />
-              </Field>
               <Field label={copy.tencentCLIProfile}>
                 <Input value={config.cli_profile || ""} placeholder="default" onChange={(event) => updateConfig("cli_profile", event.target.value)} />
               </Field>
               <Field label={copy.tencentSessionKey}>
                 <Input value={config.session_key || ""} placeholder="agent:main:" onChange={(event) => updateConfig("session_key", event.target.value)} />
               </Field>
-              <SelectField label={copy.tencentGatewayEnabled} value={config.gateway_enabled || "true"} onChange={(value) => updateConfig("gateway_enabled", value)}>
-                <option value="true">{copy.enabled}</option>
-                <option value="false">{copy.disabledState}</option>
-              </SelectField>
-              <SelectField label={copy.tencentPollMentions} value={config.poll_mentions || "true"} onChange={(value) => updateConfig("poll_mentions", value)}>
-                <option value="true">{copy.enabled}</option>
-                <option value="false">{copy.disabledState}</option>
-              </SelectField>
-              <SelectField label={copy.tencentPollPosts} value={config.poll_posts || "false"} onChange={(value) => updateConfig("poll_posts", value)}>
-                <option value="false">{copy.disabledState}</option>
-                <option value="true">{copy.enabled}</option>
-              </SelectField>
-              <SelectField label={copy.tencentAutoReplyMentions} value={config.auto_reply_mentions || "true"} onChange={(value) => updateConfig("auto_reply_mentions", value)}>
-                <option value="true">{copy.enabled}</option>
-                <option value="false">{copy.disabledState}</option>
-              </SelectField>
-              <SelectField label={copy.tencentReplyMode} value={config.reply_mode || "comment"} onChange={(value) => updateConfig("reply_mode", value)}>
-                <option value="comment">{copy.tencentReplyCommentPost}</option>
-                <option value="reply">{copy.tencentReplyExistingComment}</option>
-              </SelectField>
-              <Field label={copy.tencentPollInterval}>
-                <Input value={config.poll_interval_seconds || "30"} placeholder="30" onChange={(event) => updateConfig("poll_interval_seconds", event.target.value)} />
-              </Field>
-              <Field label={copy.tencentMaxEvents}>
-                <Input value={config.max_events || "20"} placeholder="20" onChange={(event) => updateConfig("max_events", event.target.value)} />
-              </Field>
-              <SelectField label={copy.tencentDefaultGetType} value={config.default_get_type || "2"} onChange={(value) => updateConfig("default_get_type", value)}>
-                <option value="2">{copy.tencentNewest}</option>
-                <option value="1">{copy.tencentHot}</option>
-              </SelectField>
             </div>
             <TencentChannelLoginPanel copy={copy} current={current} autoStartKey={tencentLoginAutoStartKey} />
           </div>
@@ -715,6 +689,160 @@ function ConnectionSettings({
           {copy.connectionHint}
         </div>
     </div>
+  )
+}
+
+interface TencentGuildOption {
+  id: string
+  name: string
+  role: string
+}
+
+interface TencentChannelOption {
+  id: string
+  name: string
+  guild_id: string
+}
+
+function TencentChannelTab({ copy, draft, current, onAdvancedChange }: { copy: CopyText; draft: Draft; current?: MessageChannel; onAdvancedChange: (patch: Partial<AdvancedOptions>) => void }) {
+  const { success, error } = useToast()
+  const config = parseProviderConfig(draft.advanced_options.custom_provider_config_json)
+  const [guilds, setGuilds] = useState<TencentGuildOption[]>([])
+  const [channels, setChannels] = useState<TencentChannelOption[]>([])
+
+  const updateConfig = (key: string, value: string) => {
+    const next = { ...config }
+    if (value.trim() === "") {
+      delete next[key]
+    } else {
+      next[key] = value
+    }
+    onAdvancedChange({ custom_provider_config_json: stringifyProviderConfig(next) })
+  }
+  const updateConfigs = (patch: Record<string, string>) => {
+    const next = { ...config }
+    for (const [key, value] of Object.entries(patch)) {
+      if (value.trim() === "") {
+        delete next[key]
+      } else {
+        next[key] = value
+      }
+    }
+    onAdvancedChange({ custom_provider_config_json: stringifyProviderConfig(next) })
+  }
+
+  const loadGuilds = useMutation({
+    mutationFn: async () => {
+      if (!current?.id) throw new Error(copy.tencentSaveFirst)
+      const res = await api.post(`/user/message-channels/${current.id}/tencent-channel/guilds`)
+      return normalizeTencentGuildOptions(res.data)
+    },
+    onSuccess: (items) => {
+      setGuilds(items)
+      success(copy.tencentGuildsLoaded)
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.tencentGuildsFailed)),
+  })
+
+  const loadChannels = useMutation({
+    mutationFn: async (guildID: string) => {
+      if (!current?.id) throw new Error(copy.tencentSaveFirst)
+      if (!guildID) throw new Error(copy.tencentSelectGuildFirst)
+      const res = await api.post(`/user/message-channels/${current.id}/tencent-channel/channels`, { guild_id: guildID })
+      return normalizeTencentChannelOptions(res.data)
+    },
+    onSuccess: (items) => {
+      setChannels(items)
+      success(copy.tencentChannelsLoaded)
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.tencentChannelsFailed)),
+  })
+
+  const selectedGuildID = config.guild_id || ""
+  const selectedChannelID = config.channel_id || ""
+  const selectGuild = (guildID: string) => {
+    updateConfigs({ guild_id: guildID, channel_id: "" })
+    setChannels([])
+    if (guildID && current?.id) {
+      loadChannels.mutate(guildID)
+    }
+  }
+
+  return (
+    <Card>
+      <CardHeader><CardTitle className="text-base">{copy.tabTencentChannel}</CardTitle></CardHeader>
+      <CardContent className="space-y-5">
+        {!current?.id && (
+          <div className="rounded-md border border-dashed p-4 text-sm text-muted-foreground">{copy.tencentSaveFirst}</div>
+        )}
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium">{copy.tencentGuild}</div>
+              <Button type="button" variant="outline" size="sm" disabled={!current?.id || loadGuilds.isPending} onClick={() => loadGuilds.mutate()}>
+                {loadGuilds.isPending ? copy.loading : copy.tencentRefreshGuilds}
+              </Button>
+            </div>
+            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedGuildID} onChange={(event) => selectGuild(event.target.value)}>
+              <option value="">{copy.tencentSelectGuild}</option>
+              {guilds.map((guild) => (
+                <option key={guild.id} value={guild.id}>{guild.name}{guild.role ? ` · ${guild.role}` : ""}</option>
+              ))}
+            </select>
+            <Input value={selectedGuildID} placeholder="guild_id" onChange={(event) => updateConfigs({ guild_id: event.target.value, channel_id: selectedChannelID })} />
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-sm font-medium">{copy.tencentChannel}</div>
+              <Button type="button" variant="outline" size="sm" disabled={!current?.id || !selectedGuildID || loadChannels.isPending} onClick={() => loadChannels.mutate(selectedGuildID)}>
+                {loadChannels.isPending ? copy.loading : copy.tencentRefreshChannels}
+              </Button>
+            </div>
+            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedChannelID} onChange={(event) => updateConfig("channel_id", event.target.value)}>
+              <option value="">{copy.tencentSelectChannel}</option>
+              {channels.map((channel) => (
+                <option key={channel.id} value={channel.id}>{channel.name}</option>
+              ))}
+            </select>
+            <Input value={selectedChannelID} placeholder="channel_id" onChange={(event) => updateConfig("channel_id", event.target.value)} />
+          </div>
+        </div>
+
+        <div className="grid gap-4 border-t pt-5 md:grid-cols-2">
+          <SelectField label={copy.tencentGatewayEnabled} value={config.gateway_enabled || "true"} onChange={(value) => updateConfig("gateway_enabled", value)}>
+            <option value="true">{copy.enabled}</option>
+            <option value="false">{copy.disabledState}</option>
+          </SelectField>
+          <SelectField label={copy.tencentPollMentions} value={config.poll_mentions || "true"} onChange={(value) => updateConfig("poll_mentions", value)}>
+            <option value="true">{copy.enabled}</option>
+            <option value="false">{copy.disabledState}</option>
+          </SelectField>
+          <SelectField label={copy.tencentPollPosts} value={config.poll_posts || "false"} onChange={(value) => updateConfig("poll_posts", value)}>
+            <option value="false">{copy.disabledState}</option>
+            <option value="true">{copy.enabled}</option>
+          </SelectField>
+          <SelectField label={copy.tencentAutoReplyMentions} value={config.auto_reply_mentions || "true"} onChange={(value) => updateConfig("auto_reply_mentions", value)}>
+            <option value="true">{copy.enabled}</option>
+            <option value="false">{copy.disabledState}</option>
+          </SelectField>
+          <SelectField label={copy.tencentReplyMode} value={config.reply_mode || "comment"} onChange={(value) => updateConfig("reply_mode", value)}>
+            <option value="comment">{copy.tencentReplyCommentPost}</option>
+            <option value="reply">{copy.tencentReplyExistingComment}</option>
+          </SelectField>
+          <SelectField label={copy.tencentDefaultGetType} value={config.default_get_type || "2"} onChange={(value) => updateConfig("default_get_type", value)}>
+            <option value="2">{copy.tencentNewest}</option>
+            <option value="1">{copy.tencentHot}</option>
+          </SelectField>
+          <Field label={copy.tencentPollInterval}>
+            <Input value={config.poll_interval_seconds || "30"} placeholder="30" onChange={(event) => updateConfig("poll_interval_seconds", event.target.value)} />
+          </Field>
+          <Field label={copy.tencentMaxEvents}>
+            <Input value={config.max_events || "20"} placeholder="20" onChange={(event) => updateConfig("max_events", event.target.value)} />
+          </Field>
+        </div>
+      </CardContent>
+    </Card>
   )
 }
 
@@ -1805,6 +1933,60 @@ function tencentNoticeMessage(value: unknown): string {
   return firstStringValue(data.message, item.message, data.status, item.status, item.error)
 }
 
+function normalizeTencentGuildOptions(value: unknown): TencentGuildOption[] {
+  const item = isRecord(value) ? value : {}
+  const data = isRecord(item.data) ? item.data : item
+  const groups = [
+    ...(Array.isArray(data.managed_guilds) ? data.managed_guilds : []),
+    ...(Array.isArray(data.created_guilds) ? data.created_guilds : []),
+    ...(Array.isArray(data.joined_guilds) ? data.joined_guilds : []),
+  ]
+  const seen = new Set<string>()
+  const result: TencentGuildOption[] = []
+  for (const group of groups) {
+    if (!isRecord(group)) continue
+    const id = scalarString(group.guild_id || group.id)
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    result.push({
+      id,
+      name: firstNonEmptyScalar(group.name, group.guild_name, id),
+      role: firstNonEmptyScalar(group.role),
+    })
+  }
+  return result
+}
+
+function normalizeTencentChannelOptions(value: unknown): TencentChannelOption[] {
+  const item = isRecord(value) ? value : {}
+  const data = isRecord(item.data) ? item.data : item
+  const channels = Array.isArray(data.channels) ? data.channels : []
+  return channels.map((channel) => {
+    if (!isRecord(channel)) return null
+    const id = scalarString(channel.channel_id || channel.id)
+    if (!id) return null
+    return {
+      id,
+      name: firstNonEmptyScalar(channel.channel_name, channel.name, id),
+      guild_id: scalarString(channel.guild_id),
+    }
+  }).filter((channel): channel is TencentChannelOption => Boolean(channel))
+}
+
+function scalarString(value: unknown) {
+  if (typeof value === "string") return value.trim()
+  if (typeof value === "number" && Number.isFinite(value)) return String(value)
+  return ""
+}
+
+function firstNonEmptyScalar(...values: unknown[]) {
+  for (const value of values) {
+    const text = scalarString(value)
+    if (text) return text
+  }
+  return ""
+}
+
 function uniqueModels(catalog: UserChannelCatalog[]) {
   return Array.from(new Set(catalog.flatMap((channel) => channel.models))).sort()
 }
@@ -1906,6 +2088,7 @@ const zhCopy = {
   lastEvent: "最近事件",
   tabBasic: "基础",
   tabConnection: "连接设置",
+  tabTencentChannel: "腾讯频道",
   tabRouting: "默认路由",
   tabGroups: "群配置",
   tabAdvanced: "高级",
@@ -1920,6 +2103,7 @@ const zhCopy = {
   webhook: "Webhook",
   copy: "复制",
   copied: "已复制",
+  loading: "加载中...",
   device: "设备开发环境",
   workspacePath: "工作目录",
   workspacePathPlaceholder: "例如 D:\\dev\\project",
@@ -2027,6 +2211,17 @@ const zhCopy = {
   weixinLoginFailed: "微信登录失败",
   tencentGuildID: "默认频道 ID",
   tencentChannelID: "默认版块 ID",
+  tencentGuild: "频道",
+  tencentChannel: "版块",
+  tencentSelectGuild: "请选择频道",
+  tencentSelectChannel: "请选择版块",
+  tencentSelectGuildFirst: "请先选择频道。",
+  tencentRefreshGuilds: "刷新频道",
+  tencentRefreshChannels: "刷新版块",
+  tencentGuildsLoaded: "腾讯频道列表已加载",
+  tencentGuildsFailed: "加载腾讯频道列表失败",
+  tencentChannelsLoaded: "版块列表已加载",
+  tencentChannelsFailed: "加载版块列表失败",
   tencentCLIProfile: "CLI 配置档",
   tencentSessionKey: "OpenClaw 通知 Session Key（可选）",
   tencentGatewayEnabled: "Gateway 轮询",
@@ -2095,6 +2290,7 @@ const enCopy: CopyText = {
   lastEvent: "Last event",
   tabBasic: "Basic",
   tabConnection: "Connection",
+  tabTencentChannel: "Tencent Channel",
   tabRouting: "Default Routing",
   tabGroups: "Groups",
   tabAdvanced: "Advanced",
@@ -2109,6 +2305,7 @@ const enCopy: CopyText = {
   webhook: "Webhook",
   copy: "Copy",
   copied: "Copied",
+  loading: "Loading...",
   device: "Device environment",
   workspacePath: "Workspace path",
   workspacePathPlaceholder: "For example D:\\dev\\project",
@@ -2216,6 +2413,17 @@ const enCopy: CopyText = {
   weixinLoginFailed: "Weixin login failed",
   tencentGuildID: "Default guild ID",
   tencentChannelID: "Default channel ID",
+  tencentGuild: "Guild",
+  tencentChannel: "Channel",
+  tencentSelectGuild: "Select a guild",
+  tencentSelectChannel: "Select a channel",
+  tencentSelectGuildFirst: "Select a guild first.",
+  tencentRefreshGuilds: "Refresh guilds",
+  tencentRefreshChannels: "Refresh channels",
+  tencentGuildsLoaded: "Tencent Channel guilds loaded",
+  tencentGuildsFailed: "Failed to load Tencent Channel guilds",
+  tencentChannelsLoaded: "Channels loaded",
+  tencentChannelsFailed: "Failed to load channels",
   tencentCLIProfile: "CLI profile",
   tencentSessionKey: "OpenClaw notice session key (optional)",
   tencentGatewayEnabled: "Gateway polling",
