@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, Bot, Check, Copy, FileDiff, FileText, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, Bot, Check, ChevronLeft, Copy, FileDiff, FileText, Folder, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -231,6 +231,11 @@ interface ConnectorTaskStatus {
   error_message?: string
 }
 
+interface WorkspaceDirectories {
+  path: string
+  directories: Array<{ name: string; path: string }>
+}
+
 interface WorkspaceSkill {
   id: string
   name: string
@@ -316,6 +321,7 @@ type ConnectorApprovalMode = "manual" | "full_access" | "assistant"
 type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "mcp" | "device"
 type AttachmentTarget = "composer" | "editor"
 type ComposerControlMenu = "" | "mode" | "device" | "workspace" | "agent_group" | "approval"
+type WorkspacePickerTarget = "session" | "pending"
 
 interface ChatProps {
   variant?: ChatMode
@@ -408,6 +414,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
   const approvalModeCopy = useMemo(() => (language === "zh" ? zhConnectorApprovalModeCopy : enConnectorApprovalModeCopy), [language])
   const gitCopy = useMemo(() => (language === "zh" ? zhGitWorkspaceCopy : enGitWorkspaceCopy), [language])
+  const workspacePickerCopy = useMemo(() => (language === "zh" ? zhWorkspacePickerCopy : enWorkspacePickerCopy), [language])
   const { error, success } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [] : readStoredSessions(storeKeys.sessions, true)))
   const [draftSession, setDraftSession] = useState<ChatSession>(() => createSession())
@@ -435,6 +442,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [pendingConnectorWorkspace, setPendingConnectorWorkspace] = useState("")
   const [pendingConnectorApprovalMode, setPendingConnectorApprovalMode] = useState<ConnectorApprovalMode>("manual")
   const [pendingConnectorCommandPrefixes, setPendingConnectorCommandPrefixes] = useState("")
+  const [isWorkspacePickerOpen, setIsWorkspacePickerOpen] = useState(false)
+  const [workspacePickerDeviceID, setWorkspacePickerDeviceID] = useState("")
+  const [workspacePickerPath, setWorkspacePickerPath] = useState("")
+  const [workspacePickerTarget, setWorkspacePickerTarget] = useState<WorkspacePickerTarget>("session")
   const [isGitPanelOpen, setIsGitPanelOpen] = useState(false)
   const [gitCompareBranch, setGitCompareBranch] = useState("")
   const [gitCommitMessage, setGitCommitMessage] = useState("")
@@ -683,6 +694,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const selectableConnectorDevices = assistantConnectorToolsEnabled ? connectorDevices : []
   const currentConnectorDeviceID = currentSession?.connector_device_id || ""
   const currentConnectorDevice = connectorDevices.find((device) => device.id === currentConnectorDeviceID)
+  const workspacePickerDevice = connectorDevices.find((device) => device.id === workspacePickerDeviceID)
+  const workspaceDirectoriesQuery = useQuery<WorkspaceDirectories>({
+    queryKey: ["advanced-chat-workspace-directories", workspacePickerDeviceID, workspacePickerPath],
+    enabled: isWorkspacePickerOpen && Boolean(workspacePickerDeviceID),
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/workspace/directories", {
+        params: {
+          connector_device_id: workspacePickerDeviceID,
+          path: workspacePickerPath,
+        },
+      })
+      return normalizeWorkspaceDirectories(res.data)
+    },
+  })
   const canInspectGitWorkspace = isAdvanced && activeRunMode !== "chat" && Boolean(currentConnectorDeviceID && currentSession?.connector_workspace_path)
   const gitStatusQuery = useQuery<WorkspaceGitStatus>({
     queryKey: ["advanced-chat-workspace-git-status", currentConnectorDeviceID, currentSession?.connector_workspace_path || "", gitCompareBranch],
@@ -1387,12 +1412,32 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setComposerControlMenu("")
   }
 
-  const promptForWorkspacePath = () => {
-    const initial = currentSession?.connector_workspace_path || pendingConnectorWorkspace
-    const path = window.prompt(copy.workspacePathPlaceholder, initial)
-    if (path !== null) {
-      setSessionWorkspacePath(path)
+  const openWorkspacePicker = (target: WorkspacePickerTarget = "session") => {
+    const deviceID = target === "session" ? currentSession?.connector_device_id || "" : pendingConnectorDeviceID
+    const device = connectorDevices.find((item) => item.id === deviceID)
+    if (!deviceID || !device) {
+      error(copy.noDeviceSelected)
+      return
     }
+    const currentPath = target === "session"
+      ? currentSession?.connector_workspace_path || ""
+      : pendingConnectorWorkspace.trim()
+    setWorkspacePickerTarget(target)
+    setWorkspacePickerDeviceID(deviceID)
+    setWorkspacePickerPath(currentPath || (device.os?.toLowerCase() === "windows" ? "" : "/"))
+    setIsWorkspacePickerOpen(true)
+  }
+
+  const selectWorkspacePickerPath = () => {
+    if (!workspacePickerPath) {
+      return
+    }
+    if (workspacePickerTarget === "pending") {
+      setPendingConnectorWorkspace(workspacePickerPath)
+    } else {
+      setSessionWorkspacePath(workspacePickerPath)
+    }
+    setIsWorkspacePickerOpen(false)
   }
 
   const clearSessionConnector = () => {
@@ -2346,7 +2391,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <button
                 type="button"
                 className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-muted"
-                onClick={promptForWorkspacePath}
+                onClick={() => openWorkspacePicker("session")}
               >
                 <Plus size={14} />
                 {copy.selectWorkspace}
@@ -3100,6 +3145,77 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <PageInlineSlot slotKey="primary" />
       <PageInlineSlot slotKey="secondary" />
       {isAdvanced && (
+        <Dialog open={isWorkspacePickerOpen} onOpenChange={setIsWorkspacePickerOpen}>
+          <DialogContent className="max-h-[80vh] max-w-xl overflow-hidden p-0">
+            <DialogHeader className="border-b px-5 py-4 pr-12">
+              <DialogTitle>{workspacePickerCopy.title}</DialogTitle>
+            </DialogHeader>
+            <div className="min-h-0 px-5 py-4">
+              <div className="mb-3 flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={!workspacePickerCanGoUp(workspacePickerPath, workspacePickerDevice?.os)}
+                  onClick={() => setWorkspacePickerPath(workspacePickerParentPath(workspacePickerPath, workspacePickerDevice?.os))}
+                  aria-label={workspacePickerCopy.up}
+                  title={workspacePickerCopy.up}
+                >
+                  <ChevronLeft size={17} />
+                </Button>
+                <div className="min-w-0 flex-1 truncate rounded-md border bg-muted/30 px-3 py-2 text-sm" title={workspacePickerPath || workspacePickerCopy.computer}>
+                  {workspacePickerPath || workspacePickerCopy.computer}
+                </div>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  className="h-9 w-9 shrink-0"
+                  disabled={workspaceDirectoriesQuery.isFetching}
+                  onClick={() => void workspaceDirectoriesQuery.refetch()}
+                  aria-label={workspacePickerCopy.refresh}
+                  title={workspacePickerCopy.refresh}
+                >
+                  <RefreshCw size={15} className={workspaceDirectoriesQuery.isFetching ? "animate-spin" : ""} />
+                </Button>
+              </div>
+
+              <div className="max-h-[48vh] min-h-56 overflow-y-auto rounded-md border">
+                {workspaceDirectoriesQuery.isLoading ? (
+                  <div className="flex min-h-56 items-center justify-center text-sm text-muted-foreground">{workspacePickerCopy.loading}</div>
+                ) : workspaceDirectoriesQuery.isError ? (
+                  <div className="p-4 text-sm text-destructive">{apiErrorMessage(workspaceDirectoriesQuery.error, workspacePickerCopy.loadFailed)}</div>
+                ) : (workspaceDirectoriesQuery.data?.directories.length || 0) === 0 ? (
+                  <div className="flex min-h-56 items-center justify-center text-sm text-muted-foreground">{workspacePickerCopy.empty}</div>
+                ) : (
+                  <div className="p-1">
+                    {(workspaceDirectoriesQuery.data?.directories || []).map((directory) => (
+                      <button
+                        key={directory.path}
+                        type="button"
+                        className="flex h-10 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-muted"
+                        onClick={() => setWorkspacePickerPath(directory.path)}
+                      >
+                        <Folder size={16} className="shrink-0 text-amber-600" />
+                        <span className="truncate">{directory.name}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <DialogFooter className="border-t px-5 py-4">
+              <Button type="button" variant="ghost" onClick={() => setIsWorkspacePickerOpen(false)}>{workspacePickerCopy.cancel}</Button>
+              <Button type="button" disabled={!workspacePickerPath || workspaceDirectoriesQuery.isLoading} onClick={selectWorkspacePickerPath}>
+                <Folder size={16} />
+                {workspacePickerCopy.selectCurrent}
+              </Button>
+            </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      {isAdvanced && (
         <Dialog open={isFilePickerOpen} onOpenChange={setIsFilePickerOpen}>
           <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
             <DialogHeader>
@@ -3576,12 +3692,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">{copy.workspacePath}</span>
-                      <input
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        value={pendingConnectorWorkspace}
-                        placeholder={copy.workspacePathPlaceholder}
-                        onChange={(event) => setPendingConnectorWorkspace(event.target.value)}
-                      />
+                      <div className="flex gap-2">
+                        <input
+                          className="h-10 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"
+                          value={pendingConnectorWorkspace}
+                          placeholder={copy.workspacePathPlaceholder}
+                          onChange={(event) => setPendingConnectorWorkspace(event.target.value)}
+                        />
+                        <Button type="button" variant="outline" size="icon" className="h-10 w-10 shrink-0" disabled={!pendingConnectorDeviceID} onClick={() => openWorkspacePicker("pending")} aria-label={workspacePickerCopy.title} title={workspacePickerCopy.title}>
+                          <Folder size={16} />
+                        </Button>
+                      </div>
                     </label>
                     <div className="flex items-end">
                       <Button
@@ -4964,6 +5085,26 @@ function normalizeConnectorApprovalTask(value: unknown): ConnectorApprovalTask |
   }
 }
 
+function normalizeWorkspaceDirectories(value: unknown): WorkspaceDirectories {
+  const item = isRecord(value) ? value : {}
+  const directories = Array.isArray(item.directories)
+    ? item.directories.flatMap((entry) => {
+      if (!isRecord(entry)) {
+        return []
+      }
+      const path = stringFromUnknown(entry.path)
+      if (!path) {
+        return []
+      }
+      return [{ name: stringFromUnknown(entry.name) || path, path }]
+    })
+    : []
+  return {
+    path: stringFromUnknown(item.path) || "",
+    directories,
+  }
+}
+
 function normalizeWorkspaceGitStatus(value: unknown): WorkspaceGitStatus {
   const item = isRecord(value) ? value : {}
   const numberValue = (candidate: unknown) => {
@@ -4993,6 +5134,33 @@ function normalizeConnectorTaskStatus(value: unknown): ConnectorTaskStatus {
 
 function isActiveConnectorTask(status?: string) {
   return status === "pending_approval" || status === "queued" || status === "running"
+}
+
+function workspacePickerIsWindows(os?: string) {
+  return os?.toLowerCase() === "windows"
+}
+
+function workspacePickerCanGoUp(path: string, os?: string) {
+  if (!path) {
+    return false
+  }
+  if (workspacePickerIsWindows(os)) {
+    return !/^[a-z]:[\\/]?$/i.test(path)
+  }
+  return path !== "/"
+}
+
+function workspacePickerParentPath(path: string, os?: string) {
+  if (!workspacePickerCanGoUp(path, os)) {
+    return path
+  }
+  if (workspacePickerIsWindows(os)) {
+    const normalized = path.replace(/\//g, "\\").replace(/\\+$/, "")
+    const separatorIndex = normalized.lastIndexOf("\\")
+    return separatorIndex <= 2 ? normalized.slice(0, 3) : normalized.slice(0, separatorIndex)
+  }
+  const separatorIndex = path.replace(/\/+$/, "").lastIndexOf("/")
+  return separatorIndex <= 0 ? "/" : path.slice(0, separatorIndex)
 }
 
 function normalizeWorkspaceSkill(value: unknown): WorkspaceSkill | null {
@@ -6544,6 +6712,30 @@ const enGitWorkspaceCopy: typeof zhGitWorkspaceCopy = {
   running: "Running",
   completed: "Completed",
   failed: "Failed",
+}
+
+const zhWorkspacePickerCopy = {
+  title: "选择工作区文件夹",
+  computer: "此电脑",
+  up: "上一级",
+  refresh: "刷新",
+  loading: "正在读取文件夹",
+  loadFailed: "读取文件夹失败",
+  empty: "该文件夹中没有子文件夹",
+  cancel: "取消",
+  selectCurrent: "选择当前文件夹",
+}
+
+const enWorkspacePickerCopy: typeof zhWorkspacePickerCopy = {
+  title: "Select workspace folder",
+  computer: "This PC",
+  up: "Up one level",
+  refresh: "Refresh",
+  loading: "Loading folders",
+  loadFailed: "Failed to load folders",
+  empty: "No subfolders in this folder",
+  cancel: "Cancel",
+  selectCurrent: "Select current folder",
 }
 
 function gitTaskStatusLabel(status: string, copy: typeof zhGitWorkspaceCopy) {
