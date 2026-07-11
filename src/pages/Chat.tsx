@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, Bot, Check, ChevronLeft, Copy, FileDiff, FileText, Folder, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, Bot, Check, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, Monitor, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -463,6 +463,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isTaskChangesOpen, setIsTaskChangesOpen] = useState(false)
   const [selectedTaskChangePath, setSelectedTaskChangePath] = useState("")
   const [isGitPanelOpen, setIsGitPanelOpen] = useState(false)
+  const [isEnvironmentDevicePickerOpen, setIsEnvironmentDevicePickerOpen] = useState(false)
+  const [isEnvironmentWorkspacePickerOpen, setIsEnvironmentWorkspacePickerOpen] = useState(false)
   const [gitCompareBranch, setGitCompareBranch] = useState("")
   const [gitCommitMessage, setGitCommitMessage] = useState("")
   const [gitActionTaskID, setGitActionTaskID] = useState("")
@@ -851,13 +853,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [sessionMenu])
 
   const recentWorkspacePaths = useMemo(() => {
-    const deviceID = currentConnectorDeviceID
-    if (!deviceID) {
+    if (!currentConnectorDeviceID) {
       return []
     }
     return uniqueStrings(
       displaySessions
-        .filter((session) => session.connector_device_id === deviceID && session.connector_workspace_path)
+        .filter((session) => session.connector_device_id === currentConnectorDeviceID && session.connector_workspace_path)
         .map((session) => session.connector_workspace_path || "")
     ).slice(0, 6)
   }, [currentConnectorDeviceID, displaySessions])
@@ -2344,99 +2345,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     )
   }
 
-  const composerDeviceControl = () => {
-    if (activeRunMode === "chat") {
-      return null
-    }
-    const open = composerControlMenu === "device"
-    return (
-      <div className="relative min-w-0">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 w-full justify-between gap-2 px-2 text-xs"
-          disabled={!assistantConnectorToolsEnabled}
-          onClick={() => setComposerControlMenu((current) => current === "device" ? "" : "device")}
-        >
-          <span className="truncate">{currentConnectorDevice?.name || copy.selectDevice}</span>
-          <ArrowDown className="h-3.5 w-3.5 rotate-180" />
-        </Button>
-        {open && (
-          <div className="absolute bottom-full left-1/2 z-30 mb-2 w-56 -translate-x-1/2 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-            {selectableConnectorDevices.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-muted-foreground">{copy.noDevices}</div>
-            ) : (
-              selectableConnectorDevices.map((device) => (
-                <button
-                  key={device.id}
-                  type="button"
-                  className="flex h-10 w-full items-center justify-between gap-2 rounded px-2 text-left text-sm hover:bg-muted"
-                  onClick={() => setSessionConnectorDevice(device.id)}
-                >
-                  <span className="min-w-0 truncate">{device.name}</span>
-                  <span className={cn("shrink-0 text-[11px]", device.online ? "text-emerald-600" : "text-muted-foreground")}>
-                    {device.online ? copy.deviceOnline : copy.deviceOffline}
-                  </span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  const composerWorkspaceControl = () => {
-    if (activeRunMode === "chat") {
-      return null
-    }
-    const open = composerControlMenu === "workspace"
-    const disabled = !currentConnectorDeviceID
-    return (
-      <div className="relative min-w-0">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 w-full justify-between gap-2 px-2 text-xs"
-          disabled={disabled}
-          onClick={() => setComposerControlMenu((current) => current === "workspace" ? "" : "workspace")}
-        >
-          <span className="truncate">{currentSession?.connector_workspace_path || copy.workspacePath}</span>
-          <ArrowDown className="h-3.5 w-3.5 rotate-180" />
-        </Button>
-        {open && (
-          <div className="absolute bottom-full right-0 z-30 mb-2 w-72 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-            <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{currentConnectorDevice?.name || copy.selectDevice}</div>
-            {recentWorkspacePaths.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-muted-foreground">{copy.noWorkspaces}</div>
-            ) : (
-              recentWorkspacePaths.map((workspacePath) => (
-                <button
-                  key={workspacePath}
-                  type="button"
-                  className="flex min-h-9 w-full items-center rounded px-2 text-left text-sm hover:bg-muted"
-                  onClick={() => setSessionWorkspacePath(workspacePath)}
-                >
-                  <span className="truncate">{workspacePath}</span>
-                </button>
-              ))
-            )}
-            <div className="mt-1 border-t pt-1">
-              <button
-                type="button"
-                className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-muted"
-                onClick={() => openWorkspacePicker("session")}
-              >
-                <Plus size={14} />
-                {copy.selectWorkspace}
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
-    )
-  }
-
   const composerApprovalControl = () => {
     if (activeRunMode === "chat") {
       return null
@@ -2705,7 +2613,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   return (
     <div className={cn(isAdvanced ? (isDesktop ? "flex min-h-[calc(100vh-6.25rem)] flex-col xl:pr-80" : "flex min-h-[calc(100vh-4rem)] flex-col xl:pr-80") : "space-y-5 xl:pr-80")}>
       {sessionsSidebarPortal}
-      <div className="sticky top-0 z-10 -mx-4 flex min-h-14 justify-end border-b border-slate-200/80 bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-0 z-30 -mx-4 flex min-h-14 justify-end border-b border-slate-200/80 bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="relative flex items-center gap-2">
           <Button
             variant="outline"
@@ -2729,7 +2637,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 variant="outline"
                 size="icon"
                 className="h-9 w-9 border-slate-200 bg-white"
-                onClick={() => setIsGitPanelOpen((open) => !open)}
+                onClick={() => {
+                  setIsGitPanelOpen((open) => !open)
+                  setIsEnvironmentDevicePickerOpen(false)
+                  setIsEnvironmentWorkspacePickerOpen(false)
+                }}
                 aria-label={gitCopy.environment}
                 aria-expanded={isGitPanelOpen}
                 title={gitCopy.environment}
@@ -2737,7 +2649,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 <MoreHorizontal size={18} />
               </Button>
               {isGitPanelOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-3 text-popover-foreground shadow-lg">
+                <div className={cn("absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-3 text-popover-foreground shadow-lg", (isEnvironmentDevicePickerOpen || isEnvironmentWorkspacePickerOpen) && "xl:right-[18.5rem]")}>
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
                       <GitBranch size={16} className="shrink-0 text-slate-600" />
@@ -2755,6 +2667,113 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     >
                       <RefreshCw size={14} className={gitStatusQuery.isFetching ? "animate-spin" : ""} />
                     </Button>
+                  </div>
+
+                  <div className="relative mt-3 overflow-visible rounded-md border border-slate-200">
+                    <button
+                      type="button"
+                      className="flex min-h-12 w-full items-center gap-2 px-3 text-left hover:bg-muted/50"
+                      onClick={() => {
+                        setIsEnvironmentDevicePickerOpen((open) => !open)
+                        setIsEnvironmentWorkspacePickerOpen(false)
+                      }}
+                      aria-expanded={isEnvironmentDevicePickerOpen}
+                    >
+                      <Monitor size={16} className="shrink-0 text-slate-600" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-muted-foreground">{gitCopy.executionEnvironment}</span>
+                        <span className="block truncate text-sm font-medium">{currentConnectorDevice?.name || gitCopy.noDevice}</span>
+                      </span>
+                      <ChevronRight size={16} className={cn("shrink-0 text-muted-foreground transition-transform", isEnvironmentDevicePickerOpen && "translate-x-0.5")} />
+                    </button>
+                    <button
+                      type="button"
+                      className="flex min-h-12 w-full items-center gap-2 border-t border-slate-100 px-3 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                      disabled={!currentConnectorDeviceID}
+                      onClick={() => {
+                        setIsEnvironmentWorkspacePickerOpen((open) => !open)
+                        setIsEnvironmentDevicePickerOpen(false)
+                      }}
+                    >
+                      <Folder size={16} className="shrink-0 text-amber-600" />
+                      <span className="min-w-0 flex-1">
+                        <span className="block text-xs text-muted-foreground">{gitCopy.runDirectory}</span>
+                        <span className="block truncate font-mono text-xs text-foreground">{currentSession?.connector_workspace_path || gitCopy.noWorkspacePath}</span>
+                      </span>
+                      <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
+                    </button>
+
+                    {isEnvironmentDevicePickerOpen && (
+                      <div className="absolute left-full top-0 z-50 ml-2 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg">
+                        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{gitCopy.selectDevice}</div>
+                        {selectableConnectorDevices.length === 0 ? (
+                          <div className="px-2 py-4 text-center text-sm text-muted-foreground">{copy.noDevices}</div>
+                        ) : (
+                          selectableConnectorDevices.map((device) => {
+                            const selected = device.id === currentConnectorDeviceID
+                            return (
+                              <button
+                                key={device.id}
+                                type="button"
+                                className={cn(
+                                  "flex min-h-11 w-full items-center justify-between gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted",
+                                  selected && "bg-primary/10 text-primary"
+                                )}
+                                onClick={() => {
+                                  setSessionConnectorDevice(device.id)
+                                  setGitCompareBranch("")
+                                  setGitActionTaskID("")
+                                  setIsEnvironmentDevicePickerOpen(false)
+                                }}
+                              >
+                                <span className="min-w-0 truncate font-medium">{device.name}</span>
+                                <span className={cn("shrink-0 text-[11px]", device.online ? "text-emerald-600" : "text-muted-foreground")}>
+                                  {device.online ? copy.deviceOnline : copy.deviceOffline}
+                                </span>
+                              </button>
+                            )
+                          })
+                        )}
+                      </div>
+                    )}
+                    {isEnvironmentWorkspacePickerOpen && (
+                      <div className="absolute left-full top-12 z-50 ml-2 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg">
+                        <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{gitCopy.runDirectory}</div>
+                        {recentWorkspacePaths.length === 0 ? (
+                          <div className="px-2 py-4 text-center text-sm text-muted-foreground">{copy.noWorkspaces}</div>
+                        ) : (
+                          recentWorkspacePaths.map((workspacePath) => (
+                            <button
+                              key={workspacePath}
+                              type="button"
+                              className={cn(
+                                "flex min-h-10 w-full items-center rounded px-2 text-left text-sm hover:bg-muted",
+                                workspacePath === currentSession?.connector_workspace_path && "bg-primary/10 text-primary"
+                              )}
+                              onClick={() => {
+                                setSessionWorkspacePath(workspacePath)
+                                setIsEnvironmentWorkspacePickerOpen(false)
+                              }}
+                            >
+                              <span className="truncate font-mono text-xs">{workspacePath}</span>
+                            </button>
+                          ))
+                        )}
+                        <div className="mt-1 border-t border-slate-100 pt-1">
+                          <button
+                            type="button"
+                            className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-muted"
+                            onClick={() => {
+                              setIsEnvironmentWorkspacePickerOpen(false)
+                              openWorkspacePicker("session")
+                            }}
+                          >
+                            <Folder size={15} />
+                            {copy.selectWorkspace}
+                          </button>
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {!canInspectGitWorkspace ? (
@@ -2877,12 +2896,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               <div className={cn(
                 "grid gap-2 border-t px-2 pt-3",
-                activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-4" : activeRunMode === "assistant" ? "grid-cols-3" : "grid-cols-1"
+                activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : activeRunMode === "assistant" ? "grid-cols-2" : "grid-cols-1"
               )}>
                 {composerModeControl()}
-                {composerDeviceControl()}
                 {activeRunMode === "agent_group" && composerAgentGroupControl()}
-                {composerWorkspaceControl()}
                 {composerApprovalControl()}
               </div>
 
@@ -3155,11 +3172,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </div>
                     {advancedComposerActionButton("h-10 w-10 rounded-md")}
                   </div>
-                  <div className={cn("grid gap-2", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
+                  <div className={cn("grid gap-2", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
                     {composerModeControl()}
-                    {composerDeviceControl()}
                     {activeRunMode === "agent_group" && composerAgentGroupControl()}
-                    {composerWorkspaceControl()}
                     {composerApprovalControl()}
                   </div>
                 </div>
@@ -6881,6 +6896,11 @@ const enConnectorApprovalModeCopy: typeof zhConnectorApprovalModeCopy = {
 
 const zhGitWorkspaceCopy = {
   environment: "环境信息",
+  executionEnvironment: "执行环境",
+  runDirectory: "运行目录",
+  selectDevice: "选择设备",
+  noDevice: "未选择设备",
+  noWorkspacePath: "未选择运行目录",
   changes: "变更",
   local: "本地",
   files: "{count} 个文件",
@@ -6905,6 +6925,11 @@ const zhGitWorkspaceCopy = {
 
 const enGitWorkspaceCopy: typeof zhGitWorkspaceCopy = {
   environment: "Environment",
+  executionEnvironment: "Execution environment",
+  runDirectory: "Run directory",
+  selectDevice: "Select device",
+  noDevice: "No device selected",
+  noWorkspacePath: "No run directory selected",
   changes: "Changes",
   local: "Local",
   files: "{count} files",
