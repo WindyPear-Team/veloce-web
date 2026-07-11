@@ -236,6 +236,19 @@ interface WorkspaceDirectories {
   directories: Array<{ name: string; path: string }>
 }
 
+interface TaskFileChange {
+  path: string
+  additions: number
+  deletions: number
+  entries: ReplacementEntry[]
+}
+
+interface TaskChangeSummary {
+  files: TaskFileChange[]
+  additions: number
+  deletions: number
+}
+
 interface WorkspaceSkill {
   id: string
   name: string
@@ -415,6 +428,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const approvalModeCopy = useMemo(() => (language === "zh" ? zhConnectorApprovalModeCopy : enConnectorApprovalModeCopy), [language])
   const gitCopy = useMemo(() => (language === "zh" ? zhGitWorkspaceCopy : enGitWorkspaceCopy), [language])
   const workspacePickerCopy = useMemo(() => (language === "zh" ? zhWorkspacePickerCopy : enWorkspacePickerCopy), [language])
+  const taskChangeCopy = useMemo(() => (language === "zh" ? zhTaskChangeCopy : enTaskChangeCopy), [language])
   const { error, success } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [] : readStoredSessions(storeKeys.sessions, true)))
   const [draftSession, setDraftSession] = useState<ChatSession>(() => createSession())
@@ -446,6 +460,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [workspacePickerDeviceID, setWorkspacePickerDeviceID] = useState("")
   const [workspacePickerPath, setWorkspacePickerPath] = useState("")
   const [workspacePickerTarget, setWorkspacePickerTarget] = useState<WorkspacePickerTarget>("session")
+  const [isTaskChangesOpen, setIsTaskChangesOpen] = useState(false)
+  const [selectedTaskChangePath, setSelectedTaskChangePath] = useState("")
   const [isGitPanelOpen, setIsGitPanelOpen] = useState(false)
   const [gitCompareBranch, setGitCompareBranch] = useState("")
   const [gitCommitMessage, setGitCommitMessage] = useState("")
@@ -615,6 +631,24 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const activeRun = isAdvanced ? currentSession?.latest_run : undefined
   const isActiveRunRunning = isRunActive(activeRun)
   const activeRunID = activeRun?.id || ""
+  const taskChangeMessage = useMemo(() => {
+    if (activeRun?.assistant_message_id) {
+      const activeMessage = currentMessages.find((message) => message.id === activeRun.assistant_message_id)
+      if (activeMessage) {
+        return activeMessage
+      }
+    }
+    return [...currentMessages].reverse().find((message) => message.role === "assistant")
+  }, [activeRun?.assistant_message_id, currentMessages])
+  const taskChangeSummary = useMemo(
+    () => taskChangeSummaryFromToolCalls(taskChangeMessage?.tool_calls?.length ? taskChangeMessage.tool_calls : activeRun?.tool_call_details || []),
+    [activeRun?.tool_call_details, taskChangeMessage?.tool_calls]
+  )
+  useEffect(() => {
+    if (!taskChangeSummary.files.some((file) => file.path === selectedTaskChangePath)) {
+      setSelectedTaskChangePath(taskChangeSummary.files[0]?.path || "")
+    }
+  }, [selectedTaskChangePath, taskChangeSummary.files])
   const showAgentWorkStatus = isAdvanced && activeRunMode === "agent_group"
   const { data: agentWork } = useQuery<AgentWorkResponse | undefined>({
     queryKey: agentWorkQueryKey(activeRunID),
@@ -3086,6 +3120,23 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       onDecide={decideConnectorApproval}
                     />
                   )}
+                  {taskChangeSummary.files.length > 0 && (
+                    <button
+                      type="button"
+                      className="flex w-full items-center justify-between gap-3 rounded-md border border-slate-200 bg-card px-3 py-2 text-left text-xs shadow-sm transition-colors hover:bg-slate-50"
+                      onClick={() => setIsTaskChangesOpen(true)}
+                    >
+                      <span className="flex min-w-0 items-center gap-2">
+                        <FileDiff size={15} className="shrink-0 text-slate-600" />
+                        <span className="truncate font-medium">{taskChangeCopy.summary.replace("{count}", String(taskChangeSummary.files.length))}</span>
+                        {isActiveRunRunning && <span className="shrink-0 text-muted-foreground">{taskChangeCopy.inProgress}</span>}
+                      </span>
+                      <span className="flex shrink-0 items-center gap-2 font-medium tabular-nums">
+                        <span className="text-emerald-600">+{taskChangeSummary.additions}</span>
+                        <span className="text-rose-600">-{taskChangeSummary.deletions}</span>
+                      </span>
+                    </button>
+                  )}
                   <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-card p-2 shadow-sm">
                     {attachmentMenuButton("composer")}
                     {agentWorkStatusButton()}
@@ -3144,6 +3195,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
       <PageInlineSlot slotKey="primary" />
       <PageInlineSlot slotKey="secondary" />
+      {isAdvanced && (
+        <TaskChangesDialog
+          open={isTaskChangesOpen}
+          onOpenChange={setIsTaskChangesOpen}
+          summary={taskChangeSummary}
+          selectedPath={selectedTaskChangePath}
+          onSelectPath={setSelectedTaskChangePath}
+          copy={taskChangeCopy}
+        />
+      )}
       {isAdvanced && (
         <Dialog open={isWorkspacePickerOpen} onOpenChange={setIsWorkspacePickerOpen}>
           <DialogContent className="max-h-[80vh] max-w-xl overflow-hidden p-0">
@@ -4120,6 +4181,81 @@ function ToolResultBlock({ result, copy }: { result?: string; copy: ChatCopy }) 
         {text}
       </pre>
     </div>
+  )
+}
+
+function TaskChangesDialog({
+  open,
+  onOpenChange,
+  summary,
+  selectedPath,
+  onSelectPath,
+  copy,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  summary: TaskChangeSummary
+  selectedPath: string
+  onSelectPath: (path: string) => void
+  copy: typeof zhTaskChangeCopy
+}) {
+  const selectedFile = summary.files.find((file) => file.path === selectedPath) || summary.files[0]
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[85vh] max-w-5xl overflow-hidden p-0">
+        <DialogHeader className="border-b px-5 py-4 pr-12">
+          <DialogTitle>{copy.title}</DialogTitle>
+          <div className="mt-1 flex items-center gap-3 text-xs font-medium tabular-nums">
+            <span className="text-muted-foreground">{copy.summary.replace("{count}", String(summary.files.length))}</span>
+            <span className="text-emerald-600">+{summary.additions}</span>
+            <span className="text-rose-600">-{summary.deletions}</span>
+          </div>
+        </DialogHeader>
+        <div className="grid min-h-0 md:grid-cols-[15rem_minmax(0,1fr)]">
+          <div className="max-h-[65vh] overflow-y-auto border-b p-2 md:border-b-0 md:border-r">
+            {summary.files.map((file) => {
+              const selected = file.path === selectedFile?.path
+              return (
+                <button
+                  key={file.path}
+                  type="button"
+                  className={cn(
+                    "w-full rounded-md px-3 py-2 text-left text-sm transition-colors hover:bg-muted",
+                    selected && "bg-primary/10 text-primary"
+                  )}
+                  onClick={() => onSelectPath(file.path)}
+                >
+                  <div className="flex min-w-0 items-center gap-2">
+                    <FileText size={15} className="shrink-0" />
+                    <span className="truncate font-medium">{file.path}</span>
+                  </div>
+                  <div className="mt-1 flex gap-2 pl-5 text-xs font-medium tabular-nums">
+                    <span className="text-emerald-600">+{file.additions}</span>
+                    <span className="text-rose-600">-{file.deletions}</span>
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+          <div className="min-h-0 overflow-y-auto">
+            {selectedFile ? (
+              <>
+                <div className="sticky top-0 z-10 border-b bg-popover px-4 py-3 font-mono text-xs text-muted-foreground">{selectedFile.path}</div>
+                <div className="space-y-3 p-3">
+                  {selectedFile.entries.map((entry, index) => (
+                    <div key={`${entry.path}-${index}`} className="overflow-hidden rounded-md border">
+                      <LineDiff oldText={entry.oldText} newText={entry.newText} />
+                    </div>
+                  ))}
+                </div>
+              </>
+            ) : (
+              <div className="flex min-h-64 items-center justify-center p-4 text-sm text-muted-foreground">{copy.empty}</div>
+            )}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   )
 }
 
@@ -6078,6 +6214,83 @@ function replacementEntriesFromArguments(value?: Record<string, unknown>): Repla
   return oldText || newText ? [{ path: defaultPath, oldText, newText }] : []
 }
 
+function taskChangeSummaryFromToolCalls(toolCalls: ChatToolCall[]): TaskChangeSummary {
+  const changes = new Map<string, TaskFileChange>()
+  for (const toolCall of toolCalls) {
+    if (toolCall.status === "error" || toolCall.status === "invalid_arguments" || toolCall.status === "cancelled") {
+      continue
+    }
+    for (const entry of taskChangeEntriesFromToolCall(toolCall)) {
+      const path = entry.path.trim()
+      if (!path) {
+        continue
+      }
+      const diff = lineDiff(entry.oldText, entry.newText)
+      const additions = diff.filter((line) => line.type === "add").length
+      const deletions = diff.filter((line) => line.type === "remove").length
+      const existing = changes.get(path) || { path, additions: 0, deletions: 0, entries: [] }
+      existing.additions += additions
+      existing.deletions += deletions
+      existing.entries.push({ ...entry, path })
+      changes.set(path, existing)
+    }
+  }
+  const files = Array.from(changes.values())
+  return {
+    files,
+    additions: files.reduce((total, file) => total + file.additions, 0),
+    deletions: files.reduce((total, file) => total + file.deletions, 0),
+  }
+}
+
+function taskChangeEntriesFromToolCall(toolCall: ChatToolCall): ReplacementEntry[] {
+  const argumentsValue = toolCall.arguments
+  const kind = builtinToolKind(toolCall)
+  if (kind === "write") {
+    const path = stringArgument(argumentsValue, "path")
+    return path ? [{
+      path,
+      oldText: stringArgument(argumentsValue, "preview_old_content"),
+      newText: stringArgument(argumentsValue, "content"),
+    }] : []
+  }
+  if (kind === "replace") {
+    return replacementEntriesFromArguments(argumentsValue)
+  }
+  const action = `${toolCall.name} ${toolCall.tool || ""}`.toLowerCase()
+  if (!action.includes("commit_delta")) {
+    return []
+  }
+  const mutations = Array.isArray(argumentsValue?.mutations) ? argumentsValue.mutations : []
+  return mutations.flatMap((mutation) => taskChangeEntryFromMutation(mutation))
+}
+
+function taskChangeEntryFromMutation(value: unknown): ReplacementEntry[] {
+  if (!isRecord(value)) {
+    return []
+  }
+  const action = stringFromUnknown(value.action)?.toLowerCase() || ""
+  const path = stringFromUnknown(value.path) || ""
+  if (!path) {
+    return []
+  }
+  if (action === "write_file") {
+    return [{
+      path,
+      oldText: stringFromUnknown(value.preview_old_content) || "",
+      newText: stringFromUnknown(value.content) || "",
+    }]
+  }
+  if (action === "replace_text") {
+    return [{
+      path,
+      oldText: stringFromUnknown(value.old_text) || "",
+      newText: stringFromUnknown(value.new_text) || "",
+    }]
+  }
+  return []
+}
+
 function diffHunks(oldText: string, newText: string, contextLines: number): DiffLine[][] {
   const lines = lineDiff(oldText, newText)
   const changed = lines
@@ -6736,6 +6949,20 @@ const enWorkspacePickerCopy: typeof zhWorkspacePickerCopy = {
   empty: "No subfolders in this folder",
   cancel: "Cancel",
   selectCurrent: "Select current folder",
+}
+
+const zhTaskChangeCopy = {
+  title: "本轮修改",
+  summary: "已修改 {count} 个文件",
+  inProgress: "进行中",
+  empty: "本轮任务没有可显示的文件修改。",
+}
+
+const enTaskChangeCopy: typeof zhTaskChangeCopy = {
+  title: "Task changes",
+  summary: "{count} files changed",
+  inProgress: "In progress",
+  empty: "This task has no file changes to show.",
 }
 
 function gitTaskStatusLabel(status: string, copy: typeof zhGitWorkspaceCopy) {
