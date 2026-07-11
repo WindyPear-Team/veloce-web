@@ -506,6 +506,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null)
+  const environmentDeviceButtonRef = useRef<HTMLButtonElement | null>(null)
+  const environmentWorkspaceButtonRef = useRef<HTMLButtonElement | null>(null)
   const [showJumpToLatest, setShowJumpToLatest] = useState(false)
   const [editingMessageID, setEditingMessageID] = useState("")
   const [editingText, setEditingText] = useState("")
@@ -2812,27 +2814,24 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     typeof document === "undefined"
       ? null
       : createPortal(
-          <>
-            <div className={cn("fixed right-0 z-20 hidden xl:flex", isDesktop ? "top-[6.25rem] h-[calc(100vh-6.25rem)]" : "top-16 h-[calc(100vh-4rem)]")}>{sessionsSidebar}</div>
-
-            {isSessionsSidebarOpen && (
-              <div className={cn("fixed inset-x-0 bottom-0 z-40 xl:hidden", isDesktop ? "top-[6.25rem]" : "top-16")}>
-                <button
-                  type="button"
-                  className="absolute inset-0 bg-black/50"
-                  aria-label={copy.closeSessions}
-                  onClick={() => setIsSessionsSidebarOpen(false)}
-                />
-                <div className="relative z-50 ml-auto h-full w-80 max-w-[85vw]">{sessionsSidebar}</div>
-              </div>
-            )}
-          </>,
+          isSessionsSidebarOpen && (
+            <div className={cn("fixed inset-x-0 bottom-0 z-40 xl:hidden", isDesktop ? "top-[6.25rem]" : "top-16")}>
+              <button
+                type="button"
+                className="absolute inset-0 bg-black/50"
+                aria-label={copy.closeSessions}
+                onClick={() => setIsSessionsSidebarOpen(false)}
+              />
+              <div className="relative z-50 ml-auto h-full w-80 max-w-[85vw]">{sessionsSidebar}</div>
+            </div>
+          ),
           document.body
         )
 
   return (
-    <div className={cn(isAdvanced ? (isDesktop ? "flex min-h-[calc(100vh-6.25rem)] flex-col xl:pr-80" : "flex min-h-[calc(100vh-4rem)] flex-col xl:pr-80") : "space-y-5 xl:pr-80")}>
+    <div className={cn("flex min-w-0", isAdvanced && "h-full min-h-0")}>
       {sessionsSidebarPortal}
+      <div className={cn("min-w-0 flex-1", isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8" : "space-y-5")}>
       <div className="sticky top-0 z-30 -mx-4 flex min-h-14 justify-end border-b border-slate-200/80 bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="relative flex items-center gap-2">
           <Button
@@ -2903,6 +2902,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
                   <div className="relative mt-3 overflow-visible rounded-md border border-slate-200">
                     <button
+                      ref={environmentDeviceButtonRef}
                       type="button"
                       className="flex min-h-12 w-full items-center gap-2 px-3 text-left hover:bg-muted/50"
                       onClick={() => {
@@ -2919,6 +2919,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       <ChevronRight size={16} className={cn("shrink-0 text-muted-foreground transition-transform", isEnvironmentDevicePickerOpen && "translate-x-0.5")} />
                     </button>
                     <button
+                      ref={environmentWorkspaceButtonRef}
                       type="button"
                       className="flex min-h-12 w-full items-center gap-2 border-t border-slate-100 px-3 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={!currentConnectorDeviceID}
@@ -2935,8 +2936,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       <ChevronRight size={16} className="shrink-0 text-muted-foreground" />
                     </button>
 
-                    {isEnvironmentDevicePickerOpen && (
-                      <div className="absolute left-full top-0 z-50 ml-2 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg">
+                    {isEnvironmentDevicePickerOpen && typeof document !== "undefined" && createPortal(
+                      <div className="fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg" style={floatingMenuStyle(environmentDeviceButtonRef.current)}>
                         <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{gitCopy.selectDevice}</div>
                         {selectableConnectorDevices.length === 0 ? (
                           <div className="px-2 py-4 text-center text-sm text-muted-foreground">{copy.noDevices}</div>
@@ -2966,10 +2967,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                             )
                           })
                         )}
-                      </div>
+                      </div>,
+                      document.body
                     )}
-                    {isEnvironmentWorkspacePickerOpen && (
-                      <div className="absolute left-full top-12 z-50 ml-2 w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg">
+                    {isEnvironmentWorkspacePickerOpen && typeof document !== "undefined" && createPortal(
+                      <div className="fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg" style={floatingMenuStyle(environmentWorkspaceButtonRef.current)}>
                         <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{gitCopy.runDirectory}</div>
                         {recentWorkspacePaths.length === 0 ? (
                           <div className="px-2 py-4 text-center text-sm text-muted-foreground">{copy.noWorkspaces}</div>
@@ -3004,7 +3006,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                             {copy.selectWorkspace}
                           </button>
                         </div>
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </div>
 
@@ -3224,8 +3227,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 )}
               </div>
             </div>
-            <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
-              <div className={cn(isAdvanced ? "mx-auto min-h-[360px] w-full max-w-3xl flex-1 space-y-4 px-2 py-5 sm:px-4" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
+            <div className={cn(isAdvanced ? "relative flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
+              <div className={cn(isAdvanced ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
+                <div className={cn(isAdvanced ? "mx-auto w-full max-w-3xl space-y-4 px-2 py-5 pb-36 sm:px-4" : "contents")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
                 ) : (
@@ -3351,16 +3355,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     {copy.jumpToLatest}
                   </Button>
                 )}
+                </div>
               </div>
 
-              {attachments.length > 0 && (
+              {attachments.length > 0 && !isAdvanced && (
                 <div className={cn(isAdvanced && "mx-auto w-full max-w-3xl px-2 sm:px-4")}>
                   <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
                 </div>
               )}
 
               {isAdvanced ? (
-                <div className="sticky bottom-0 mx-auto w-full max-w-3xl space-y-2 border-t border-slate-200 bg-background/95 px-2 py-3 backdrop-blur sm:px-4">
+                <div className="absolute inset-x-0 bottom-3 z-20 mx-auto w-full max-w-3xl space-y-2 px-2 sm:px-4">
                   {pendingConnectorApprovals.length > 0 && (
                     <PendingConnectorApprovalsPanel
                       tasks={pendingConnectorApprovals}
@@ -3368,6 +3373,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       decidingTaskID={decidingConnectorTaskID}
                       onDecide={decideConnectorApproval}
                     />
+                  )}
+                  {attachments.length > 0 && (
+                    <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
                   )}
                   {taskChangeSummary.files.length > 0 && (
                     <button
@@ -4095,8 +4103,21 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           </DialogContent>
         </Dialog>
       )}
+      </div>
+      <div className="hidden h-full w-80 shrink-0 xl:flex">{sessionsSidebar}</div>
     </div>
   )
+}
+
+function floatingMenuStyle(anchor: HTMLElement | null) {
+  if (!anchor) {
+    return undefined
+  }
+  const rect = anchor.getBoundingClientRect()
+  return {
+    left: Math.min(rect.right + 8, window.innerWidth - 304),
+    top: Math.max(8, Math.min(rect.top, window.innerHeight - 240)),
+  }
 }
 
 type MarkdownBlock =

@@ -170,15 +170,15 @@ export default function AdvancedChat() {
           </div>
         )}
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-          {publicSettings.announcement && (
+        <main className={cn("flex min-h-0 flex-1 flex-col", isChatRoute ? "overflow-hidden" : "overflow-y-auto")}>
+          {!isChatRoute && publicSettings.announcement && (
             <div className="border-b bg-muted/50 px-4 py-3 text-sm sm:px-6 lg:px-8">
               <div className="mx-auto max-w-6xl whitespace-pre-wrap">{publicSettings.announcement}</div>
             </div>
           )}
-          <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
-            <PageTransition transitionKey={transitionKey}>
-              <div className="space-y-6">
+          <div className={cn("w-full flex-1", isChatRoute ? "min-h-0" : "mx-auto max-w-6xl p-4 sm:p-6 lg:p-8")}>
+            <PageTransition transitionKey={transitionKey} className={isChatRoute ? "h-full min-h-0" : undefined}>
+              <div className={cn(isChatRoute ? "h-full" : "space-y-6")}>
                 {isChatRoute ? (
                   <Chat variant="advanced" />
                 ) : (
@@ -217,7 +217,7 @@ export default function AdvancedChat() {
               </div>
             </PageTransition>
           </div>
-          {publicSettings.footer_text && (
+          {!isChatRoute && publicSettings.footer_text && (
             <footer className="border-t px-4 py-4 text-center text-sm text-muted-foreground sm:px-6 lg:px-8">
               {publicSettings.footer_text}
             </footer>
