@@ -454,6 +454,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(storeKeys.apiKey) || 0))
   const [selectedUserChannelID, setSelectedUserChannelID] = useState(() => Number(localStorage.getItem(storeKeys.userChannel) || 0))
   const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
+  const [desktopHostname, setDesktopHostname] = useState("")
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isAgentWorkOpen, setIsAgentWorkOpen] = useState(false)
   const [selectedWorkAgentID, setSelectedWorkAgentID] = useState("")
@@ -780,6 +781,21 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const selectableConnectorDevices = assistantConnectorToolsEnabled ? connectorDevices : []
   const currentConnectorDeviceID = currentSession?.connector_device_id || ""
   const currentConnectorDevice = connectorDevices.find((device) => device.id === currentConnectorDeviceID)
+  const isCurrentConnectorLocal = Boolean(
+    isDesktop &&
+    desktopHostname &&
+    currentConnectorDevice?.hostname &&
+    desktopHostname.trim().toLowerCase() === currentConnectorDevice.hostname.trim().toLowerCase()
+  )
+  const canOpenWorkspaceInVSCode = Boolean(isAdvanced && isCurrentConnectorLocal && currentSession?.connector_workspace_path)
+  useEffect(() => {
+    if (!isDesktop || typeof window === "undefined" || !window.veloceDesktop?.getDesktopSystemInfo) {
+      return
+    }
+    void window.veloceDesktop.getDesktopSystemInfo()
+      .then((info) => setDesktopHostname(info.hostname.trim()))
+      .catch(() => setDesktopHostname(""))
+  }, [isDesktop])
   const workspacePickerDevice = connectorDevices.find((device) => device.id === workspacePickerDeviceID)
   const workspaceDirectoriesQuery = useQuery<WorkspaceDirectories>({
     queryKey: ["advanced-chat-workspace-directories", workspacePickerDeviceID, workspacePickerPath],
@@ -1220,6 +1236,21 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     cancelEdit()
     if (isAdvanced && location.pathname !== "/chat") {
       navigate("/chat")
+    }
+  }
+
+  const openCurrentWorkspaceInVSCode = async () => {
+    const workspacePath = currentSession?.connector_workspace_path || ""
+    if (!canOpenWorkspaceInVSCode || !window.veloceDesktop?.openInVSCode) {
+      return
+    }
+    try {
+      const result = await window.veloceDesktop.openInVSCode(workspacePath)
+      if (!result.ok) {
+        error(result.message || gitCopy.openVSCodeFailed)
+      }
+    } catch (err) {
+      error(apiErrorMessage(err, gitCopy.openVSCodeFailed))
     }
   }
 
@@ -2815,6 +2846,18 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           >
             <Menu size={16} />
           </Button>
+          {isAdvanced && canOpenWorkspaceInVSCode && (
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-9 w-9 border-slate-200 bg-white"
+              onClick={() => void openCurrentWorkspaceInVSCode()}
+              aria-label={gitCopy.openInVSCode}
+              title={gitCopy.openInVSCode}
+            >
+              <VSCodeIcon size={18} />
+            </Button>
+          )}
           {isAdvanced && (
             <Button variant="outline" size="icon" className="h-9 w-9 border-slate-200 bg-white" onClick={() => openAdvancedConfig()} aria-label={copy.config} title={copy.config}>
               <Settings size={16} />
@@ -7179,6 +7222,8 @@ const zhGitWorkspaceCopy = {
   loading: "加载中",
   actionFailed: "Git 操作失败",
   noWorkspace: "请选择本地设备和工作区。",
+  openInVSCode: "在 VS Code 中打开",
+  openVSCodeFailed: "无法在 VS Code 中打开工作区",
   pendingApproval: "等待审批",
   queued: "已排队",
   running: "执行中",
@@ -7208,6 +7253,8 @@ const enGitWorkspaceCopy: typeof zhGitWorkspaceCopy = {
   loading: "Loading",
   actionFailed: "Git action failed",
   noWorkspace: "Select a local device and workspace.",
+  openInVSCode: "Open in VS Code",
+  openVSCodeFailed: "Failed to open the workspace in VS Code",
   pendingApproval: "Approval required",
   queued: "Queued",
   running: "Running",
@@ -7277,6 +7324,15 @@ const enSessionSidebarCopy: typeof zhSessionSidebarCopy = {
   noSessions: "No matching sessions",
   createFolderFailed: "Failed to create session folder",
   moveFailed: "Failed to move session",
+}
+
+function VSCodeIcon({ size = 16 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+      <path fill="#29B6F6" d="M17.8 2.4 11 8.9 7.3 6.1 3.6 8v8l3.7 1.9 3.7-2.8 6.8 6.5 3.9-1.9V4.3l-3.9-1.9Zm.6 5.1v8.9l-4.5-4.5 4.5-4.4Z" />
+      <path fill="#0179CB" d="m7.3 6.1 3.7 2.8v6.2l-3.7 2.8L2 14.8V9.2l5.3-3.1Z" />
+    </svg>
+  )
 }
 
 function gitTaskStatusLabel(status: string, copy: typeof zhGitWorkspaceCopy) {

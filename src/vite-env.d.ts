@@ -52,6 +52,8 @@ interface Window {
     getDesktopSettings: () => Promise<DesktopSettings>
     saveDesktopSettings: (settings: DesktopSettings) => Promise<DesktopSettings>
     chooseDesktopFile: () => Promise<string>
+    getDesktopSystemInfo: () => Promise<{ hostname: string; platform: string }>
+    openInVSCode: (workspacePath: string) => Promise<{ ok: boolean; message: string }>
     checkDesktopUpdate: () => Promise<DesktopUpdateResult>
     installPreparedDesktopUpdate: () => Promise<{ ok: boolean; message: string }>
     setBuiltinServerEnabled: (enabled: boolean) => Promise<BuiltinServerStatus>
