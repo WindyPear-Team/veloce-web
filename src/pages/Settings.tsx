@@ -55,6 +55,12 @@ interface AdvancedChatUserSettings {
   title_model_name: string
   title_user_channel_id?: number
   title_generation_scope: "all" | "recent"
+  connector_approval_agent_id: string
+}
+
+interface AdvancedChatAgentOption {
+  id: string
+  name: string
 }
 
 export default function Settings() {
@@ -73,6 +79,7 @@ export default function Settings() {
   const [titleModelName, setTitleModelName] = useState("")
   const [titleUserChannelID, setTitleUserChannelID] = useState(0)
   const [titleGenerationScope, setTitleGenerationScope] = useState<"all" | "recent">("recent")
+  const [connectorApprovalAgentID, setConnectorApprovalAgentID] = useState("")
 
   const { data: user, isLoading } = useQuery<CurrentUser>({
     queryKey: ["me"],
@@ -119,6 +126,13 @@ export default function Settings() {
       return normalizeAdvancedChatUserSettings(res.data)
     },
   })
+  const { data: advancedChatAgents = [] } = useQuery<AdvancedChatAgentOption[]>({
+    queryKey: ["advanced-chat-agents"],
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/agents")
+      return Array.isArray(res.data) ? res.data.map(normalizeAdvancedChatAgentOption).filter((item): item is AdvancedChatAgentOption => Boolean(item)) : []
+    },
+  })
   const titleModelOptions = useMemo(() => modelsForChannel(catalog, titleUserChannelID), [catalog, titleUserChannelID])
   const titleSelectOptions = useMemo(
     () => titleModelName && !titleModelOptions.includes(titleModelName) ? [titleModelName, ...titleModelOptions] : titleModelOptions,
@@ -132,6 +146,7 @@ export default function Settings() {
     setTitleModelName(advancedChatSettings.title_model_name || "")
     setTitleUserChannelID(advancedChatSettings.title_user_channel_id || 0)
     setTitleGenerationScope(advancedChatSettings.title_generation_scope || "recent")
+    setConnectorApprovalAgentID(advancedChatSettings.connector_approval_agent_id || "")
   }, [advancedChatSettings])
 
   const logout = () => {
@@ -224,6 +239,7 @@ export default function Settings() {
         title_model_name: titleModelName.trim(),
         title_user_channel_id: titleUserChannelID || 0,
         title_generation_scope: titleGenerationScope,
+        connector_approval_agent_id: connectorApprovalAgentID,
       })
       return normalizeAdvancedChatUserSettings(res.data)
     },
@@ -231,6 +247,7 @@ export default function Settings() {
       setTitleModelName(saved.title_model_name || "")
       setTitleUserChannelID(saved.title_user_channel_id || 0)
       setTitleGenerationScope(saved.title_generation_scope || "recent")
+      setConnectorApprovalAgentID(saved.connector_approval_agent_id || "")
       queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
     },
   })
@@ -326,6 +343,30 @@ export default function Settings() {
             </label>
             <Button className="gap-2" disabled={saveTitleSettings.isPending} onClick={() => saveTitleSettings.mutate()}>
               {saveTitleSettings.isPending ? copy.saving : copy.saveTitleSettings}
+            </Button>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>{copy.connectorApproval}</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="text-sm text-muted-foreground">{copy.connectorApprovalDescription}</div>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.approvalAssistant}</span>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={connectorApprovalAgentID}
+                onChange={(event) => setConnectorApprovalAgentID(event.target.value)}
+              >
+                <option value="">{copy.noApprovalAssistant}</option>
+                {advancedChatAgents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>{agent.name}</option>
+                ))}
+              </select>
+            </label>
+            <Button className="gap-2" disabled={saveTitleSettings.isPending} onClick={() => saveTitleSettings.mutate()}>
+              {saveTitleSettings.isPending ? copy.saving : copy.saveApprovalSettings}
             </Button>
           </CardContent>
         </Card>
@@ -533,12 +574,22 @@ function modelsForChannel(catalog: UserChannelCatalog[], channelID: number) {
   return catalog.find((channel) => channel.id === channelID)?.models || []
 }
 
+function normalizeAdvancedChatAgentOption(value: unknown): AdvancedChatAgentOption | null {
+  const item = isRecord(value) ? value : {}
+  const id = typeof item.id === "string" ? item.id : String(item.id || "")
+  if (!id) {
+    return null
+  }
+  return { id, name: typeof item.name === "string" && item.name ? item.name : id }
+}
+
 function normalizeAdvancedChatUserSettings(value: unknown): AdvancedChatUserSettings {
   const item = isRecord(value) ? value : {}
   return {
     title_model_name: typeof item.title_model_name === "string" ? item.title_model_name : "",
     title_user_channel_id: Number(item.title_user_channel_id || 0) || undefined,
     title_generation_scope: normalizeTitleScope(item.title_generation_scope),
+    connector_approval_agent_id: typeof item.connector_approval_agent_id === "string" ? item.connector_approval_agent_id : "",
   }
 }
 
@@ -619,6 +670,11 @@ const zhSettingsCopy = {
   titleScopeRecent: "最近对话",
   titleScopeAll: "全部对话",
   saveTitleSettings: "保存标题设置",
+  connectorApproval: "连接器审批",
+  connectorApprovalDescription: "选择一个助手来审核连接器的文件修改和命令执行。选择后，可在聊天输入框中启用“助手审批”。",
+  approvalAssistant: "审批助手",
+  noApprovalAssistant: "暂不使用助手审批",
+  saveApprovalSettings: "保存审批设置",
   saving: "保存中...",
 }
 
@@ -691,5 +747,10 @@ const enSettingsCopy: typeof zhSettingsCopy = {
   titleScopeRecent: "Recent conversation",
   titleScopeAll: "Full conversation",
   saveTitleSettings: "Save title settings",
+  connectorApproval: "Connector approval",
+  connectorApprovalDescription: "Choose an assistant to review connector file changes and command execution. It can then be enabled from the chat composer.",
+  approvalAssistant: "Approval assistant",
+  noApprovalAssistant: "Do not use assistant approval",
+  saveApprovalSettings: "Save approval settings",
   saving: "Saving...",
 }

@@ -67,6 +67,7 @@ interface ChatSession {
   connector_device_id?: string
   connector_workspace_path?: string
   connector_auto_approve: boolean
+  connector_approval_mode: ConnectorApprovalMode
   connector_command_prefixes: string[]
   model_name?: string
   user_channel_id?: number
@@ -242,6 +243,7 @@ interface AdvancedChatSettings {
   assistant_connector_run_command_enabled: boolean
   assistant_connector_web_search_enabled: boolean
   assistant_connector_static_site_enabled: boolean
+  connector_approval_agent_id: string
 }
 
 interface ChatAttachment {
@@ -293,9 +295,10 @@ interface StoredFileContent {
 type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
 type ChatMode = "basic" | "advanced"
 type ChatRunMode = "chat" | "assistant" | "agent_group"
+type ConnectorApprovalMode = "manual" | "full_access" | "assistant"
 type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "mcp" | "device"
 type AttachmentTarget = "composer" | "editor"
-type ComposerControlMenu = "" | "mode" | "device" | "workspace" | "agent_group"
+type ComposerControlMenu = "" | "mode" | "device" | "workspace" | "agent_group" | "approval"
 
 interface ChatProps {
   variant?: ChatMode
@@ -351,6 +354,7 @@ const defaultAdvancedChatSettings: AdvancedChatSettings = {
   assistant_connector_run_command_enabled: true,
   assistant_connector_web_search_enabled: true,
   assistant_connector_static_site_enabled: true,
+  connector_approval_agent_id: "",
 }
 
 const chatStoreKeys: Record<ChatMode, ChatStoreKeys> = {
@@ -385,6 +389,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const copy = useMemo(() => buildChatCopy(t), [t])
   const fileCopy = useMemo(() => (language === "zh" ? zhFileAttachmentCopy : enFileAttachmentCopy), [language])
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
+  const approvalModeCopy = useMemo(() => (language === "zh" ? zhConnectorApprovalModeCopy : enConnectorApprovalModeCopy), [language])
   const { error, success } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [] : readStoredSessions(storeKeys.sessions, true)))
   const [draftSession, setDraftSession] = useState<ChatSession>(() => createSession())
@@ -410,7 +415,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [pendingMCPServerID, setPendingMCPServerID] = useState("")
   const [pendingConnectorDeviceID, setPendingConnectorDeviceID] = useState("")
   const [pendingConnectorWorkspace, setPendingConnectorWorkspace] = useState("")
-  const [pendingConnectorAutoApprove, setPendingConnectorAutoApprove] = useState(false)
+  const [pendingConnectorApprovalMode, setPendingConnectorApprovalMode] = useState<ConnectorApprovalMode>("manual")
   const [pendingConnectorCommandPrefixes, setPendingConnectorCommandPrefixes] = useState("")
   const [workspaceSkills, setWorkspaceSkills] = useState<WorkspaceSkill[]>([])
   const [isRefreshingWorkspaceSkills, setIsRefreshingWorkspaceSkills] = useState(false)
@@ -1205,6 +1210,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       connector_device_id: mode === "chat" ? undefined : session.connector_device_id,
       connector_workspace_path: mode === "chat" ? undefined : session.connector_workspace_path,
       connector_auto_approve: mode === "chat" ? false : session.connector_auto_approve,
+      connector_approval_mode: mode === "chat" ? "manual" : connectorApprovalModeFor(session),
       connector_command_prefixes: mode === "chat" ? [] : session.connector_command_prefixes || [],
       model_name: mode === "agent_group" ? undefined : session.model_name,
     }), { persist: true })
@@ -1261,7 +1267,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }), { persist: true })
   }
 
-  const setSessionConnector = (deviceID: string, workspacePath: string, autoApprove: boolean, commandPrefixes: string[]) => {
+  const setSessionConnector = (deviceID: string, workspacePath: string, approvalMode: ConnectorApprovalMode, commandPrefixes: string[]) => {
     if (!currentSession) {
       return
     }
@@ -1273,7 +1279,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       ...session,
       connector_device_id: deviceID || undefined,
       connector_workspace_path: workspacePath || undefined,
-      connector_auto_approve: autoApprove,
+      connector_auto_approve: approvalMode === "full_access",
+      connector_approval_mode: approvalMode,
       connector_command_prefixes: uniqueStrings(commandPrefixes),
     }), { persist: true })
   }
@@ -1320,7 +1327,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setSessionConnector(
       deviceID,
       path,
-      currentSession.connector_auto_approve || pendingConnectorAutoApprove,
+      connectorApprovalModeFor(currentSession),
       currentSession.connector_command_prefixes || commandPrefixesFromText(pendingConnectorCommandPrefixes)
     )
     setPendingConnectorWorkspace(path)
@@ -1345,6 +1352,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       connector_workspace_path: undefined,
       agent_group_id: undefined,
       connector_auto_approve: false,
+      connector_approval_mode: "manual",
       connector_command_prefixes: [],
     }), { persist: true })
     setWorkspaceSkills([])
@@ -1413,7 +1421,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (tab === "device") {
       setPendingConnectorDeviceID(currentSession?.connector_device_id || connectorDevices[0]?.id || "")
       setPendingConnectorWorkspace(currentSession?.connector_workspace_path || "")
-      setPendingConnectorAutoApprove(Boolean(currentSession?.connector_auto_approve))
+      setPendingConnectorApprovalMode(connectorApprovalModeFor(currentSession))
       setPendingConnectorCommandPrefixes((currentSession?.connector_command_prefixes || []).join("\n"))
     }
     setConfigTab(tab)
@@ -1650,6 +1658,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               connector_device_id: session.connector_device_id || "",
               connector_workspace_path: session.connector_workspace_path || "",
               connector_auto_approve: session.connector_auto_approve,
+              connector_approval_mode: connectorApprovalModeFor(session),
               connector_command_prefixes: session.connector_command_prefixes,
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
@@ -1690,6 +1699,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               connector_device_id: "",
               connector_workspace_path: "",
               connector_auto_approve: false,
+              connector_approval_mode: "manual",
               connector_command_prefixes: [],
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
@@ -1751,6 +1761,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               connector_device_id: "",
               connector_workspace_path: "",
               connector_auto_approve: false,
+              connector_approval_mode: "manual",
               connector_command_prefixes: [],
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
@@ -2253,6 +2264,70 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     )
   }
 
+  const composerApprovalControl = () => {
+    if (activeRunMode === "chat") {
+      return null
+    }
+    const open = composerControlMenu === "approval"
+    const approvalMode = connectorApprovalModeFor(currentSession)
+    const selectApprovalMode = (nextMode: ConnectorApprovalMode) => {
+      if (!currentSession) {
+        return
+      }
+      if (nextMode === "assistant" && !currentAdvancedSettings.connector_approval_agent_id) {
+        error(approvalModeCopy.agentRequired)
+        return
+      }
+      updateSession(currentSession.id, (session) => ({
+        ...session,
+        connector_auto_approve: nextMode === "full_access",
+        connector_approval_mode: nextMode,
+      }), { persist: true })
+      setComposerControlMenu("")
+    }
+    const labels: Record<ConnectorApprovalMode, string> = {
+      manual: approvalModeCopy.manual,
+      full_access: approvalModeCopy.fullAccess,
+      assistant: approvalModeCopy.assistant,
+    }
+    return (
+      <div className="relative min-w-0">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-8 w-full justify-between gap-2 px-2 text-xs"
+          onClick={() => setComposerControlMenu((current) => current === "approval" ? "" : "approval")}
+        >
+          <span className="truncate">{labels[approvalMode]}</span>
+          <ArrowDown className="h-3.5 w-3.5 rotate-180" />
+        </Button>
+        {open && (
+          <div className="absolute bottom-full right-0 z-30 mb-2 w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+            {(["manual", "full_access", "assistant"] as const).map((mode) => {
+              const disabled = mode === "assistant" && !currentAdvancedSettings.connector_approval_agent_id
+              return (
+                <button
+                  key={mode}
+                  type="button"
+                  className={cn(
+                    "flex min-h-9 w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-muted",
+                    approvalMode === mode && "bg-primary/10 text-primary",
+                    disabled && "cursor-not-allowed opacity-40"
+                  )}
+                  disabled={disabled}
+                  onClick={() => selectApprovalMode(mode)}
+                >
+                  <span>{labels[mode]}</span>
+                  {approvalMode === mode && <Check size={14} />}
+                </button>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
   const composerAgentGroupControl = () => {
     const open = composerControlMenu === "agent_group"
     return (
@@ -2347,28 +2422,28 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   )
 
   const sessionsSidebar = (
-    <aside className="flex h-full w-72 flex-col border-l bg-card">
-      <div className="flex h-16 shrink-0 items-center justify-between border-b px-4">
+    <aside className="flex h-full w-80 max-w-[85vw] flex-col border-l border-slate-200 bg-slate-100/95 text-slate-900 shadow-sm">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 px-4">
         <div className="min-w-0">
-          <div className="truncate text-base font-semibold">{copy.sessions}</div>
+          <div className="truncate text-sm font-semibold">{copy.sessions}</div>
         </div>
-        <Button variant="ghost" size="sm" className="xl:hidden" onClick={() => setIsSessionsSidebarOpen(false)} aria-label={copy.closeSessions}>
+        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 xl:hidden" onClick={() => setIsSessionsSidebarOpen(false)} aria-label={copy.closeSessions}>
           <X size={16} />
         </Button>
       </div>
-      <div className="border-b p-4">
-        <Button className="w-full gap-2" onClick={createNewSession}>
+      <div className="border-b border-slate-200/80 p-3">
+        <Button className="h-10 w-full justify-start gap-2 rounded-md bg-white text-slate-900 shadow-sm hover:bg-slate-50" variant="outline" onClick={createNewSession}>
           <MessageSquarePlus size={16} />
           {copy.newSession}
         </Button>
       </div>
-      <div className="min-h-0 flex-1 space-y-2 overflow-y-auto p-4">
+      <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {displaySessions.map((session) => (
           <div
             key={session.id}
             className={cn(
-              "grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border p-2",
-              session.id === activeSession?.id && "border-primary bg-primary/5"
+              "group grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
+              session.id === activeSession?.id ? "bg-white shadow-sm" : "hover:bg-white/70"
             )}
             onContextMenu={(event) => {
               event.preventDefault()
@@ -2376,19 +2451,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             }}
           >
             <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
-              <div className="truncate text-sm font-medium">{session.title || copy.untitledSession}</div>
-              <div className="mt-1 text-xs text-muted-foreground">
+              <div className="truncate text-sm font-medium text-slate-900">{session.title || copy.untitledSession}</div>
+              <div className="mt-1 text-xs text-slate-500">
                 {copy.messageCount.replace("{count}", String(session.messages.length))}
               </div>
               {isAdvanced && sessionAgentName(session) && (
-                <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-muted-foreground">
+                <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500">
                   <Bot size={12} className="shrink-0" />
                   <span className="truncate">{sessionAgentName(session)}</span>
                 </div>
               )}
               {isAdvanced && session.run_mode !== "chat" && (
                 <div className="mt-1 flex flex-wrap gap-1">
-                  <span className="inline-flex rounded-md border border-primary/30 bg-primary/5 px-1.5 py-0.5 text-[11px] text-primary">
+                  <span className="inline-flex rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[11px] text-violet-700">
                     {runModeLabel(session.run_mode, copy, agentGroupCopy)}
                   </span>
                   {isRunActive(session.latest_run) && (
@@ -2399,7 +2474,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </div>
               )}
             </button>
-            <Button variant="ghost" size="sm" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
+            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
               <Trash2 size={15} />
             </Button>
           </div>
@@ -2447,7 +2522,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   aria-label={copy.closeSessions}
                   onClick={() => setIsSessionsSidebarOpen(false)}
                 />
-                <div className="relative z-50 ml-auto h-full w-72 max-w-[85vw]">{sessionsSidebar}</div>
+                <div className="relative z-50 ml-auto h-full w-80 max-w-[85vw]">{sessionsSidebar}</div>
               </div>
             )}
           </>,
@@ -2455,14 +2530,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         )
 
   return (
-    <div className={cn(isAdvanced ? (isDesktop ? "flex min-h-[calc(100vh-6.25rem)] flex-col xl:pr-72" : "flex min-h-[calc(100vh-4rem)] flex-col xl:pr-72") : "space-y-6 xl:pr-72")}>
+    <div className={cn(isAdvanced ? (isDesktop ? "flex min-h-[calc(100vh-6.25rem)] flex-col xl:pr-80" : "flex min-h-[calc(100vh-4rem)] flex-col xl:pr-80") : "space-y-5 xl:pr-80")}>
       {sessionsSidebarPortal}
-      <div className="sticky top-0 z-10 -mx-4 flex justify-end border-b bg-background/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className="sticky top-0 z-10 -mx-4 flex min-h-14 justify-end border-b border-slate-200/80 bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
         <div className="flex items-center gap-2">
           <Button
             variant="outline"
             size="icon"
-            className="xl:hidden"
+            className="h-9 w-9 border-slate-200 bg-white xl:hidden"
             onClick={() => setIsSessionsSidebarOpen((open) => !open)}
             aria-label={isSessionsSidebarOpen ? copy.closeSessions : copy.openSessions}
             aria-expanded={isSessionsSidebarOpen}
@@ -2471,7 +2546,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             <Menu size={16} />
           </Button>
           {isAdvanced && (
-            <Button variant="outline" size="icon" onClick={() => openAdvancedConfig()} aria-label={copy.config} title={copy.config}>
+            <Button variant="outline" size="icon" className="h-9 w-9 border-slate-200 bg-white" onClick={() => openAdvancedConfig()} aria-label={copy.config} title={copy.config}>
               <Settings size={16} />
             </Button>
           )}
@@ -2483,12 +2558,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         {!isAdvanced && basicConfig}
 
         {isAdvanced && currentSession?.messages.length === 0 ? (
-          <div className={cn("flex items-center justify-center py-8", isDesktop ? "min-h-[calc(100vh-16.25rem)]" : "min-h-[calc(100vh-14rem)]")}>
-            <div className="w-full max-w-3xl rounded-2xl border bg-card p-3 shadow-sm">
+          <div className={cn("flex items-center justify-center px-2 py-8", isDesktop ? "min-h-[calc(100vh-16.25rem)]" : "min-h-[calc(100vh-14rem)]")}>
+            <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-card p-3 shadow-sm">
               <div className="relative">
                 <textarea
                   ref={composerTextareaRef}
-                  className="min-h-36 w-full resize-none rounded-xl border-0 bg-transparent px-3 py-3 text-base outline-none placeholder:text-muted-foreground focus:ring-0"
+                  className="min-h-36 w-full resize-none rounded-md border-0 bg-transparent px-3 py-3 text-base outline-none placeholder:text-muted-foreground focus:ring-0"
                   value={prompt}
                   placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
                   onChange={handleComposerPromptChange}
@@ -2512,6 +2587,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 {composerDeviceControl()}
                 {activeRunMode === "agent_group" && composerAgentGroupControl()}
                 {composerWorkspaceControl()}
+                {composerApprovalControl()}
               </div>
 
               <div className="flex flex-col gap-3 border-t px-2 pt-3 sm:flex-row sm:items-center sm:justify-between">
@@ -2604,7 +2680,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </div>
             <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
-              <div className={cn(isAdvanced ? "min-h-[360px] flex-1 space-y-3 py-3" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
+              <div className={cn(isAdvanced ? "mx-auto min-h-[360px] w-full max-w-3xl flex-1 space-y-4 px-2 py-5 sm:px-4" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
                 ) : (
@@ -2632,7 +2708,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       return (
                         <div key={message.id} className="group space-y-1.5">
                           <div className={message.role === "user" ? "flex justify-end" : "flex justify-start"}>
-                            <div className="w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                            <div className={cn(
+                              "w-fit max-w-full p-3 text-sm",
+                              isAdvanced
+                                ? message.role === "user"
+                                  ? "rounded-lg border border-slate-200 bg-slate-50 shadow-sm"
+                                  : "rounded-lg border border-slate-200 bg-background shadow-sm"
+                                : "rounded-md border bg-background"
+                            )}>
                               <div className="flex items-start gap-2">
                                 {message.role === "user" ? (
                                   <User className="mt-0.5 h-4 w-4 shrink-0" />
@@ -2726,11 +2809,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
 
               {attachments.length > 0 && (
-                <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
+                <div className={cn(isAdvanced && "mx-auto w-full max-w-3xl px-2 sm:px-4")}>
+                  <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
+                </div>
               )}
 
               {isAdvanced ? (
-                <div className="sticky bottom-0 -mx-4 space-y-2 border-t bg-background px-4 py-3 sm:mx-0 sm:rounded-t-md sm:border sm:bg-card">
+                <div className="sticky bottom-0 mx-auto w-full max-w-3xl space-y-2 border-t border-slate-200 bg-background/95 px-2 py-3 backdrop-blur sm:px-4">
                   {pendingConnectorApprovals.length > 0 && (
                     <PendingConnectorApprovalsPanel
                       tasks={pendingConnectorApprovals}
@@ -2739,13 +2824,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       onDecide={decideConnectorApproval}
                     />
                   )}
-                  <div className="flex items-end gap-2">
+                  <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-card p-2 shadow-sm">
                     {attachmentMenuButton("composer")}
                     {agentWorkStatusButton()}
                     <div className="relative min-w-0 flex-1">
                       <textarea
                         ref={composerTextareaRef}
-                        className="h-10 max-h-40 min-h-10 w-full resize-none overflow-y-auto rounded-md border bg-background px-3 py-0 text-sm leading-10 outline-none focus:ring-2 focus:ring-ring"
+                        className="h-10 max-h-40 min-h-10 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-2 text-sm leading-5 outline-none focus:ring-0"
                         rows={1}
                         value={prompt}
                         placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
@@ -2755,13 +2840,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       />
                       {agentMentionPicker()}
                     </div>
-                    {advancedComposerActionButton()}
+                    {advancedComposerActionButton("h-10 w-10 rounded-md")}
                   </div>
                   <div className={cn("grid gap-2", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-4" : "grid-cols-3")}>
                     {composerModeControl()}
                     {composerDeviceControl()}
                     {activeRunMode === "agent_group" && composerAgentGroupControl()}
                     {composerWorkspaceControl()}
+                    {composerApprovalControl()}
                   </div>
                 </div>
               ) : (
@@ -3287,7 +3373,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         onClick={() => setSessionConnector(
                           pendingConnectorDeviceID,
                           pendingConnectorWorkspace.trim(),
-                          pendingConnectorAutoApprove,
+                          pendingConnectorApprovalMode,
                           commandPrefixesFromText(pendingConnectorCommandPrefixes)
                         )}
                       >
@@ -3296,16 +3382,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       </Button>
                     </div>
                   </div>
-                  <label className="flex items-start gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-                    <input
-                      type="checkbox"
-                      className="mt-1"
-                      checked={pendingConnectorAutoApprove}
-                      onChange={(event) => setPendingConnectorAutoApprove(event.target.checked)}
-                    />
-                    <span>
-                      <span className="block font-medium">{copy.connectorAutoApprove}</span>
-                    </span>
+                  <label className="space-y-1 text-sm">
+                    <span className="font-medium">{approvalModeCopy.label}</span>
+                    <select
+                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                      value={pendingConnectorApprovalMode}
+                      onChange={(event) => setPendingConnectorApprovalMode(normalizeConnectorApprovalMode(event.target.value))}
+                    >
+                      <option value="manual">{approvalModeCopy.manual}</option>
+                      <option value="full_access">{approvalModeCopy.fullAccess}</option>
+                      <option value="assistant" disabled={!currentAdvancedSettings.connector_approval_agent_id}>{approvalModeCopy.assistant}</option>
+                    </select>
+                    {pendingConnectorApprovalMode === "assistant" && !currentAdvancedSettings.connector_approval_agent_id && (
+                      <span className="block text-xs text-destructive">{approvalModeCopy.agentRequired}</span>
+                    )}
                   </label>
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{copy.connectorCommandPrefixes}</span>
@@ -3448,7 +3538,7 @@ function AssistantMessageSequence({
             {roundParts.map((part, index) => (
               <div key={`${round}-part-${index}`} className="group space-y-1.5">
                 <div className="flex justify-start">
-                  <div className="w-fit max-w-full rounded-md border bg-background p-3 text-sm">
+                  <div className="w-fit max-w-full rounded-lg border border-slate-200 bg-background p-3 text-sm shadow-sm">
                     <div className="flex items-start gap-2">
                       <Bot className="mt-0.5 h-4 w-4 shrink-0" />
                       <div className="min-w-0 flex-1">
@@ -4300,6 +4390,7 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
       skill_ids: [],
       mcp_server_ids: [],
       connector_auto_approve: false,
+      connector_approval_mode: "manual",
       connector_command_prefixes: [],
       created_at: now,
       updated_at: now,
@@ -4427,6 +4518,7 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
     connector_device_id: isChat ? "" : safeSession.connector_device_id || "",
     connector_workspace_path: isChat ? "" : safeSession.connector_workspace_path || "",
     connector_auto_approve: isChat ? false : safeSession.connector_auto_approve,
+    connector_approval_mode: isChat ? "manual" : connectorApprovalModeFor(safeSession),
     connector_command_prefixes: isChat ? [] : safeSession.connector_command_prefixes,
     model_name: isStudio ? "" : safeSession.model_name || "",
     user_channel_id: safeSession.user_channel_id || 0,
@@ -4585,6 +4677,7 @@ function normalizeAdvancedChatSettings(value: unknown): AdvancedChatSettings {
     assistant_connector_run_command_enabled: item.assistant_connector_run_command_enabled !== false,
     assistant_connector_web_search_enabled: item.assistant_connector_web_search_enabled !== false,
     assistant_connector_static_site_enabled: item.assistant_connector_static_site_enabled !== false,
+    connector_approval_agent_id: stringFromUnknown(item.connector_approval_agent_id) || "",
   }
 }
 
@@ -4931,6 +5024,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     connector_device_id: stringFromUnknown(value.connector_device_id) || undefined,
     connector_workspace_path: stringFromUnknown(value.connector_workspace_path) || undefined,
     connector_auto_approve: value.connector_auto_approve === true,
+    connector_approval_mode: normalizeConnectorApprovalMode(value.connector_approval_mode, value.connector_auto_approve === true),
     connector_command_prefixes: stringArrayFromUnknown(value.connector_command_prefixes),
     model_name: stringFromUnknown(value.model_name),
     user_channel_id: Number(value.user_channel_id || 0) || undefined,
@@ -5264,6 +5358,17 @@ function runModeLabel(mode: ChatRunMode, copy: ChatCopy, agentGroupCopy: AgentGr
   return copy.chatMode
 }
 
+function normalizeConnectorApprovalMode(value: unknown, legacyFullAccess = false): ConnectorApprovalMode {
+  if (value === "full_access" || value === "assistant") {
+    return value
+  }
+  return legacyFullAccess ? "full_access" : "manual"
+}
+
+function connectorApprovalModeFor(session?: Pick<ChatSession, "connector_approval_mode" | "connector_auto_approve">): ConnectorApprovalMode {
+  return normalizeConnectorApprovalMode(session?.connector_approval_mode, session?.connector_auto_approve === true)
+}
+
 function createSession(input: { agentID?: string; modelName?: string } = {}): ChatSession {
   const now = new Date().toISOString()
   return {
@@ -5278,6 +5383,7 @@ function createSession(input: { agentID?: string; modelName?: string } = {}): Ch
     connector_device_id: undefined,
     connector_workspace_path: undefined,
     connector_auto_approve: false,
+    connector_approval_mode: "manual",
     connector_command_prefixes: [],
     model_name: input.modelName || undefined,
     max_tokens: 0,
@@ -6126,4 +6232,20 @@ const zhAgentGroupCopy: AgentGroupCopy = {
   statusFailed: "\u5931\u8d25",
   statusCancelled: "\u5df2\u53d6\u6d88",
   statusApproval: "\u7b49\u5f85\u6279\u51c6",
+}
+
+const zhConnectorApprovalModeCopy = {
+  label: "连接器权限",
+  manual: "手动审批",
+  fullAccess: "完全访问",
+  assistant: "助手审批",
+  agentRequired: "请先在个人设置中选择审批助手。",
+}
+
+const enConnectorApprovalModeCopy: typeof zhConnectorApprovalModeCopy = {
+  label: "Connector access",
+  manual: "Manual approval",
+  fullAccess: "Full access",
+  assistant: "Assistant approval",
+  agentRequired: "Select an approval assistant in personal settings first.",
 }
