@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, Bot, Check, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, Monitor, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, Bot, Check, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, Monitor, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Search, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -56,6 +56,7 @@ interface ChatMessage {
 
 interface ChatSession {
   id: string
+  folder_id?: string
   title: string
   messages: ChatMessage[]
   run_mode: ChatRunMode
@@ -249,6 +250,11 @@ interface TaskChangeSummary {
   deletions: number
 }
 
+interface SessionFolder {
+  id: string
+  name: string
+}
+
 interface WorkspaceSkill {
   id: string
   name: string
@@ -361,10 +367,13 @@ const modelStoreKey = "windypear.chat.model.v1"
 const endpointStoreKey = "windypear.chat.endpoint.v1"
 const apiKeyStoreKey = "windypear.chat.api_key_id.v1"
 const selectedAgentStoreKey = "windypear.advanced_chat.selected_agent.v1"
+const sessionFoldersStorageKey = "windypear.chat.session_folders.v1"
+const sessionFolderAssignmentsStorageKey = "windypear.chat.session_folder_assignments.v1"
 const defaultAgentID = "default"
 const agentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
 const advancedSessionsQueryKey = ["advanced-chat-sessions"] as const
+const advancedSessionFoldersQueryKey = ["advanced-chat-session-folders"] as const
 const advancedFilesQueryKey = ["advanced-chat-files"] as const
 const connectorDevicesQueryKey = ["advanced-chat-connector-devices"] as const
 const connectorApprovalsQueryKey = (runID: string) => ["advanced-chat-connector-approvals", runID] as const
@@ -429,6 +438,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const gitCopy = useMemo(() => (language === "zh" ? zhGitWorkspaceCopy : enGitWorkspaceCopy), [language])
   const workspacePickerCopy = useMemo(() => (language === "zh" ? zhWorkspacePickerCopy : enWorkspacePickerCopy), [language])
   const taskChangeCopy = useMemo(() => (language === "zh" ? zhTaskChangeCopy : enTaskChangeCopy), [language])
+  const sessionSidebarCopy = useMemo(() => (language === "zh" ? zhSessionSidebarCopy : enSessionSidebarCopy), [language])
   const { error, success } = useToast()
   const [sessions, setSessions] = useState<ChatSession[]>(() => (variant === "advanced" ? [] : readStoredSessions(storeKeys.sessions, true)))
   const [draftSession, setDraftSession] = useState<ChatSession>(() => createSession())
@@ -448,6 +458,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isAgentWorkOpen, setIsAgentWorkOpen] = useState(false)
   const [selectedWorkAgentID, setSelectedWorkAgentID] = useState("")
   const [isSessionsSidebarOpen, setIsSessionsSidebarOpen] = useState(false)
+  const [sessionSearch, setSessionSearch] = useState("")
+  const [sessionFolders, setSessionFolders] = useState<SessionFolder[]>(readSessionFolders)
+  const [sessionFolderAssignments, setSessionFolderAssignments] = useState<Record<string, string>>(readSessionFolderAssignments)
+  const [isSessionFolderDialogOpen, setIsSessionFolderDialogOpen] = useState(false)
+  const [newSessionFolderName, setNewSessionFolderName] = useState("")
+  const [collapsedSessionFolderIDs, setCollapsedSessionFolderIDs] = useState<Set<string>>(() => new Set())
   const [configTab, setConfigTab] = useState<SessionConfigTab>("basic")
   const [pendingAgentID, setPendingAgentID] = useState("")
   const [pendingSkillID, setPendingSkillID] = useState("")
@@ -481,6 +497,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [attachmentMenuTarget, setAttachmentMenuTarget] = useState<AttachmentTarget | "">("")
   const [composerControlMenu, setComposerControlMenu] = useState<ComposerControlMenu>("")
   const [sessionMenu, setSessionMenu] = useState<{ sessionID: string; x: number; y: number } | null>(null)
+  const [sessionFolderContextMenu, setSessionFolderContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [regeneratingTitleSessionID, setRegeneratingTitleSessionID] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isStreamActive, setIsStreamActive] = useState(false)
@@ -556,6 +573,18 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     },
   })
 
+  const {
+    data: serverSessionFolders = [],
+    refetch: refetchSessionFolders,
+  } = useQuery<SessionFolder[]>({
+    queryKey: advancedSessionFoldersQueryKey,
+    enabled: isAdvanced,
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/sessions/folders")
+      return Array.isArray(res.data) ? res.data.map(normalizeSessionFolder).filter((folder): folder is SessionFolder => Boolean(folder)) : []
+    },
+  })
+
   const { data: connectorDevices = [] } = useQuery<ConnectorDevice[]>({
     queryKey: connectorDevicesQueryKey,
     enabled: isAdvanced,
@@ -577,6 +606,27 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     [sessions, activeSessionID]
   )
   const displaySessions = useMemo(() => sessions.map(normalizeRuntimeSession), [sessions])
+  const resolvedSessionFolderAssignments = useMemo(() => {
+    if (!isAdvanced) {
+      return sessionFolderAssignments
+    }
+    return Object.fromEntries(displaySessions.flatMap((session) => session.folder_id ? [[session.id, session.folder_id]] : []))
+  }, [displaySessions, isAdvanced, sessionFolderAssignments])
+  const normalizedSessionSearch = sessionSearch.trim().toLowerCase()
+  const searchedSessions = useMemo(
+    () => displaySessions.filter((session) => (session.title || copy.untitledSession).toLowerCase().includes(normalizedSessionSearch)),
+    [copy.untitledSession, displaySessions, normalizedSessionSearch]
+  )
+  const ungroupedSessions = useMemo(
+    () => searchedSessions.filter((session) => !resolvedSessionFolderAssignments[session.id]),
+    [resolvedSessionFolderAssignments, searchedSessions]
+  )
+  const folderSessionGroups = useMemo(
+    () => sessionFolders
+      .map((folder) => ({ folder, sessions: searchedSessions.filter((session) => resolvedSessionFolderAssignments[session.id] === folder.id) }))
+      .filter((group) => group.sessions.length > 0 || !normalizedSessionSearch),
+    [normalizedSessionSearch, resolvedSessionFolderAssignments, searchedSessions, sessionFolders]
+  )
   const currentSessionRaw = activeSession || (isAdvanced && routeSessionID ? undefined : draftSession)
   const currentSession = currentSessionRaw ? normalizeRuntimeSession(currentSessionRaw) : undefined
   const currentMessages = currentSession?.messages || []
@@ -840,17 +890,40 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [activeRunMode, configTab])
 
   useEffect(() => {
-    if (!sessionMenu) {
+    if (!sessionMenu && !sessionFolderContextMenu) {
       return
     }
-    const close = () => setSessionMenu(null)
+    const close = () => {
+      setSessionMenu(null)
+      setSessionFolderContextMenu(null)
+    }
     window.addEventListener("click", close)
     window.addEventListener("scroll", close, true)
     return () => {
       window.removeEventListener("click", close)
       window.removeEventListener("scroll", close, true)
     }
-  }, [sessionMenu])
+  }, [sessionFolderContextMenu, sessionMenu])
+
+  useEffect(() => {
+    if (isAdvanced) {
+      setSessionFolders(serverSessionFolders)
+    }
+  }, [isAdvanced, serverSessionFolders])
+
+  useEffect(() => {
+    if (isAdvanced || typeof window === "undefined") {
+      return
+    }
+    localStorage.setItem(sessionFoldersStorageKey, JSON.stringify(sessionFolders))
+  }, [isAdvanced, sessionFolders])
+
+  useEffect(() => {
+    if (isAdvanced || typeof window === "undefined") {
+      return
+    }
+    localStorage.setItem(sessionFolderAssignmentsStorageKey, JSON.stringify(sessionFolderAssignments))
+  }, [isAdvanced, sessionFolderAssignments])
 
   const recentWorkspacePaths = useMemo(() => {
     if (!currentConnectorDeviceID) {
@@ -1156,6 +1229,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       void api.delete(`/user/advanced-chat/sessions/${encodeURIComponent(sessionID)}`).then(() => refetchAdvancedSessions()).catch(() => undefined)
     }
     const nextSessions = sessions.filter((session) => session.id !== sessionID)
+    setSessionFolderAssignments((current) => {
+      if (!current[sessionID]) {
+        return current
+      }
+      const next = { ...current }
+      delete next[sessionID]
+      return next
+    })
     setSessions(nextSessions)
     if (isAdvanced) {
       if (routeSessionID === sessionID) {
@@ -1166,6 +1247,53 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       setActiveSessionID(nextSessions[0]?.id || "")
     }
     cancelEdit()
+  }
+
+  const createSessionFolder = async () => {
+    const name = newSessionFolderName.trim().slice(0, 80)
+    if (!name) {
+      return
+    }
+    try {
+      if (isAdvanced) {
+        const res = await api.post("/user/advanced-chat/sessions/folders", { name })
+        const folder = normalizeSessionFolder(res.data)
+        if (!folder) {
+          throw new Error("Invalid session folder")
+        }
+        setSessionFolders((current) => [...current, folder])
+        void refetchSessionFolders()
+      } else {
+        setSessionFolders((current) => [...current, { id: createID(), name }])
+      }
+      setNewSessionFolderName("")
+      setIsSessionFolderDialogOpen(false)
+    } catch (err) {
+      error(apiErrorMessage(err, sessionSidebarCopy.createFolderFailed))
+    }
+  }
+
+  const moveSessionToFolder = async (sessionID: string, folderID = "") => {
+    try {
+      if (isAdvanced) {
+        await api.put(`/user/advanced-chat/sessions/${encodeURIComponent(sessionID)}/folder`, { folder_id: folderID })
+        setSessions((current) => current.map((session) => session.id === sessionID ? { ...session, folder_id: folderID || undefined } : session))
+        void refetchAdvancedSessions()
+      } else {
+        setSessionFolderAssignments((current) => {
+          const next = { ...current }
+          if (folderID) {
+            next[sessionID] = folderID
+          } else {
+            delete next[sessionID]
+          }
+          return next
+        })
+      }
+    } catch (err) {
+      error(apiErrorMessage(err, sessionSidebarCopy.moveFailed))
+    }
+    setSessionMenu(null)
   }
 
   const renameSessionTitle = (session: ChatSession) => {
@@ -2292,18 +2420,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     )
   }
 
-  const sessionAgentName = (session: ChatSession) => {
-    if (!isAdvanced) {
-      return ""
-    }
-    if (session.run_mode === "agent_group") {
-      const groupID = session.agent_group_id || ""
-      return agentGroups.find((group) => group.id === groupID)?.name || groupID
-    }
-    const agentID = session.agent_id || defaultAgentID
-    return agents.find((agent) => agent.id === agentID)?.name || agentID
-  }
-
   const composerModeControl = () => {
     const open = composerControlMenu === "mode"
     const chatLocked = Boolean((currentSession?.messages.length || 0) > 0 || isActiveRunRunning)
@@ -2502,64 +2618,106 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     </Card>
   )
 
+  const sessionSidebarItem = (session: ChatSession) => (
+    <div
+      key={session.id}
+      className={cn(
+        "group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
+        session.id === activeSession?.id ? "bg-white shadow-sm" : "hover:bg-white/70"
+      )}
+      onContextMenu={(event) => {
+        event.preventDefault()
+        setSessionFolderContextMenu(null)
+        setSessionMenu({ sessionID: session.id, x: event.clientX, y: event.clientY })
+      }}
+    >
+      <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
+        <div className="truncate text-sm font-medium text-slate-900">{session.title || copy.untitledSession}</div>
+      </button>
+      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
+        <Trash2 size={15} />
+      </Button>
+    </div>
+  )
+
   const sessionsSidebar = (
-    <aside className="flex h-full w-80 max-w-[85vw] flex-col border-l border-slate-200 bg-slate-100/95 text-slate-900 shadow-sm">
+    <aside
+      className="flex h-full w-80 max-w-[85vw] flex-col border-l border-slate-200 bg-slate-100/95 text-slate-900 shadow-sm"
+      onContextMenu={(event) => {
+        if (event.defaultPrevented) {
+          return
+        }
+        event.preventDefault()
+        setSessionMenu(null)
+        setSessionFolderContextMenu({ x: event.clientX, y: event.clientY })
+      }}
+    >
       <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 px-4">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{copy.sessions}</div>
         </div>
-        <Button variant="ghost" size="sm" className="h-8 w-8 p-0 xl:hidden" onClick={() => setIsSessionsSidebarOpen(false)} aria-label={copy.closeSessions}>
-          <X size={16} />
-        </Button>
+        <div className="flex items-center gap-1">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => setIsSessionFolderDialogOpen(true)}
+            aria-label={sessionSidebarCopy.newFolder}
+            title={sessionSidebarCopy.newFolder}
+          >
+            <FolderPlus size={16} />
+          </Button>
+          <Button variant="ghost" size="sm" className="h-8 w-8 p-0 xl:hidden" onClick={() => setIsSessionsSidebarOpen(false)} aria-label={copy.closeSessions}>
+            <X size={16} />
+          </Button>
+        </div>
       </div>
       <div className="border-b border-slate-200/80 p-3">
         <Button className="h-10 w-full justify-start gap-2 rounded-md bg-white text-slate-900 shadow-sm hover:bg-slate-50" variant="outline" onClick={createNewSession}>
           <MessageSquarePlus size={16} />
           {copy.newSession}
         </Button>
+        <label className="relative mt-3 block">
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            className="h-9 w-full rounded-md border border-slate-200 bg-white py-1 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400"
+            value={sessionSearch}
+            onChange={(event) => setSessionSearch(event.target.value)}
+            placeholder={sessionSidebarCopy.search}
+            aria-label={sessionSidebarCopy.search}
+          />
+        </label>
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
-        {displaySessions.map((session) => (
-          <div
-            key={session.id}
-            className={cn(
-              "group grid grid-cols-[1fr_auto] items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
-              session.id === activeSession?.id ? "bg-white shadow-sm" : "hover:bg-white/70"
-            )}
-            onContextMenu={(event) => {
-              event.preventDefault()
-              setSessionMenu({ sessionID: session.id, x: event.clientX, y: event.clientY })
-            }}
-          >
-            <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
-              <div className="truncate text-sm font-medium text-slate-900">{session.title || copy.untitledSession}</div>
-              <div className="mt-1 text-xs text-slate-500">
-                {copy.messageCount.replace("{count}", String(session.messages.length))}
-              </div>
-              {isAdvanced && sessionAgentName(session) && (
-                <div className="mt-1 flex min-w-0 items-center gap-1 text-xs text-slate-500">
-                  <Bot size={12} className="shrink-0" />
-                  <span className="truncate">{sessionAgentName(session)}</span>
-                </div>
-              )}
-              {isAdvanced && session.run_mode !== "chat" && (
-                <div className="mt-1 flex flex-wrap gap-1">
-                  <span className="inline-flex rounded-md border border-violet-200 bg-violet-50 px-1.5 py-0.5 text-[11px] text-violet-700">
-                    {runModeLabel(session.run_mode, copy, agentGroupCopy)}
-                  </span>
-                  {isRunActive(session.latest_run) && (
-                    <span className="inline-flex rounded-md border border-amber-300 bg-amber-50 px-1.5 py-0.5 text-[11px] text-amber-700">
-                      {copy.runningAssistant}
-                    </span>
-                  )}
-                </div>
-              )}
+        {folderSessionGroups.map(({ folder, sessions: groupedSessions }) => (
+          <div key={folder.id} className="pb-2">
+            <button
+              type="button"
+              className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-slate-500 hover:bg-white/70"
+              onClick={() => setCollapsedSessionFolderIDs((current) => {
+                const next = new Set(current)
+                if (next.has(folder.id)) {
+                  next.delete(folder.id)
+                } else {
+                  next.add(folder.id)
+                }
+                return next
+              })}
+            >
+              <ChevronRight size={14} className={cn("shrink-0 transition-transform", (normalizedSessionSearch || !collapsedSessionFolderIDs.has(folder.id)) && "rotate-90")} />
+              <Folder size={14} className="shrink-0 text-amber-600" />
+              <span className="truncate">{folder.name}</span>
             </button>
-            <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
-              <Trash2 size={15} />
-            </Button>
+            {(normalizedSessionSearch || !collapsedSessionFolderIDs.has(folder.id)) && groupedSessions.map(sessionSidebarItem)}
           </div>
         ))}
+        {ungroupedSessions.length > 0 && (
+          <div className="pb-2">
+            {sessionFolders.length > 0 && <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{sessionSidebarCopy.uncategorized}</div>}
+            {ungroupedSessions.map(sessionSidebarItem)}
+          </div>
+        )}
+        {searchedSessions.length === 0 && <div className="px-3 py-10 text-center text-sm text-slate-500">{sessionSidebarCopy.noSessions}</div>}
         {sessionMenu && (() => {
           const session = sessions.find((item) => item.id === sessionMenu.sessionID)
           if (!session) {
@@ -2567,8 +2725,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           }
           return (
             <div
-              className="fixed z-[80] w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
-              style={{ left: Math.min(sessionMenu.x, window.innerWidth - 184), top: Math.min(sessionMenu.y, window.innerHeight - 112) }}
+              className="fixed z-[80] max-h-[calc(100vh-1rem)] w-56 overflow-y-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
+              style={{ left: Math.min(sessionMenu.x, window.innerWidth - 240), top: Math.min(sessionMenu.y, window.innerHeight - 160) }}
               onClick={(event) => event.stopPropagation()}
             >
               <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => renameSessionTitle(session)}>
@@ -2582,9 +2740,40 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               >
                 {regeneratingTitleSessionID === session.id ? copy.regeneratingTitle : copy.regenerateTitle}
               </button>
+              <div className="my-1 border-t" />
+              <div className="px-2 py-1 text-xs text-muted-foreground">{sessionSidebarCopy.moveToFolder}</div>
+              <button type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id)}>
+                <Folder size={14} />
+                {sessionSidebarCopy.uncategorized}
+              </button>
+              {sessionFolders.map((folder) => (
+                <button key={folder.id} type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id, folder.id)}>
+                  <Folder size={14} className="text-amber-600" />
+                  <span className="truncate">{folder.name}</span>
+                </button>
+              ))}
             </div>
           )
         })()}
+        {sessionFolderContextMenu && (
+          <div
+            className="fixed z-[80] w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
+            style={{ left: Math.min(sessionFolderContextMenu.x, window.innerWidth - 184), top: Math.min(sessionFolderContextMenu.y, window.innerHeight - 48) }}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted"
+              onClick={() => {
+                setSessionFolderContextMenu(null)
+                setIsSessionFolderDialogOpen(true)
+              }}
+            >
+              <FolderPlus size={15} />
+              {sessionSidebarCopy.newFolder}
+            </button>
+          </div>
+        )}
       </div>
     </aside>
   )
@@ -2649,7 +2838,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 <MoreHorizontal size={18} />
               </Button>
               {isGitPanelOpen && (
-                <div className={cn("absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-3 text-popover-foreground shadow-lg", (isEnvironmentDevicePickerOpen || isEnvironmentWorkspacePickerOpen) && "xl:right-[18.5rem]")}>
+                <div className="absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-3 text-popover-foreground shadow-lg">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
                       <GitBranch size={16} className="shrink-0 text-slate-600" />
@@ -3220,6 +3409,38 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           copy={taskChangeCopy}
         />
       )}
+      <Dialog
+        open={isSessionFolderDialogOpen}
+        onOpenChange={(open) => {
+          setIsSessionFolderDialogOpen(open)
+          if (!open) {
+            setNewSessionFolderName("")
+          }
+        }}
+      >
+        <DialogContent className="max-w-sm">
+          <DialogHeader>
+            <DialogTitle>{sessionSidebarCopy.newFolder}</DialogTitle>
+          </DialogHeader>
+          <input
+            autoFocus
+            className="h-10 w-full rounded-md border bg-background px-3 text-sm outline-none focus:border-primary"
+            value={newSessionFolderName}
+            onChange={(event) => setNewSessionFolderName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Enter") {
+                event.preventDefault()
+                void createSessionFolder()
+              }
+            }}
+            placeholder={sessionSidebarCopy.folderName}
+          />
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setIsSessionFolderDialogOpen(false)}>{sessionSidebarCopy.cancel}</Button>
+            <Button type="button" disabled={!newSessionFolderName.trim()} onClick={() => void createSessionFolder()}>{sessionSidebarCopy.create}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       {isAdvanced && (
         <Dialog open={isWorkspacePickerOpen} onOpenChange={setIsWorkspacePickerOpen}>
           <DialogContent className="max-h-[80vh] max-w-xl overflow-hidden p-0">
@@ -4888,6 +5109,35 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
   return []
 }
 
+function readSessionFolders(): SessionFolder[] {
+  if (typeof window === "undefined") {
+    return []
+  }
+  try {
+    const value = JSON.parse(localStorage.getItem(sessionFoldersStorageKey) || "[]")
+    return Array.isArray(value) ? value.map(normalizeSessionFolder).filter((folder): folder is SessionFolder => Boolean(folder)) : []
+  } catch {
+    return []
+  }
+}
+
+function readSessionFolderAssignments(): Record<string, string> {
+  if (typeof window === "undefined") {
+    return {}
+  }
+  try {
+    const value = JSON.parse(localStorage.getItem(sessionFolderAssignmentsStorageKey) || "{}")
+    if (!isRecord(value)) {
+      return {}
+    }
+    return Object.fromEntries(
+      Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === "string" && Boolean(entry[0]) && Boolean(entry[1]))
+    )
+  } catch {
+    return {}
+  }
+}
+
 function readLegacyMessages(): ChatMessage[] {
   try {
     const value = JSON.parse(localStorage.getItem(legacyMessagesStoreKey) || "[]")
@@ -5580,6 +5830,7 @@ function normalizeSession(value: unknown): ChatSession | null {
   const agentID = stringFromUnknown(value.agent_id)
   return {
     id: typeof value.id === "string" && value.id ? value.id : createID(),
+    folder_id: stringFromUnknown(value.folder_id) || undefined,
     title: typeof value.title === "string" ? value.title : "",
     messages,
     run_mode: runMode,
@@ -5601,6 +5852,18 @@ function normalizeSession(value: unknown): ChatSession | null {
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
+}
+
+function normalizeSessionFolder(value: unknown): SessionFolder | null {
+  if (!isRecord(value)) {
+    return null
+  }
+  const id = stringFromUnknown(value.id)
+  const name = (stringFromUnknown(value.name) || "").trim()
+  if (!id || !name) {
+    return null
+  }
+  return { id, name }
 }
 
 function normalizeRuntimeSession(session: ChatSession): ChatSession {
@@ -6988,6 +7251,32 @@ const enTaskChangeCopy: typeof zhTaskChangeCopy = {
   summary: "{count} files changed",
   inProgress: "In progress",
   empty: "This task has no file changes to show.",
+}
+
+const zhSessionSidebarCopy = {
+  search: "搜索会话",
+  newFolder: "新建文件夹",
+  folderName: "文件夹名称",
+  create: "创建",
+  cancel: "取消",
+  uncategorized: "未分类",
+  moveToFolder: "移动到文件夹",
+  noSessions: "没有匹配的会话",
+  createFolderFailed: "创建会话文件夹失败",
+  moveFailed: "移动会话失败",
+}
+
+const enSessionSidebarCopy: typeof zhSessionSidebarCopy = {
+  search: "Search sessions",
+  newFolder: "New folder",
+  folderName: "Folder name",
+  create: "Create",
+  cancel: "Cancel",
+  uncategorized: "Uncategorized",
+  moveToFolder: "Move to folder",
+  noSessions: "No matching sessions",
+  createFolderFailed: "Failed to create session folder",
+  moveFailed: "Failed to move session",
 }
 
 function gitTaskStatusLabel(status: string, copy: typeof zhGitWorkspaceCopy) {
