@@ -6,6 +6,7 @@ import { Activity, Check, FolderOpen, Globe2, Plus, Server, Settings } from "luc
 import Login from "./pages/Login"
 import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
+import SettingsWorkspace from "./pages/SettingsWorkspace"
 import api, {
   getAuthToken,
   getDesktopTabID,
@@ -202,9 +203,11 @@ function DocumentTitle() {
   useEffect(() => {
     const pageTitle = location.pathname.startsWith("/chat")
       ? t("nav.chat")
-      : location.pathname === "/setup"
-        ? language === "zh" ? "初始化站点" : "Initial Setup"
-        : language === "zh" ? "登录" : "Sign in"
+      : location.pathname.startsWith("/settings")
+        ? language === "zh" ? "设置" : "Settings"
+        : location.pathname === "/setup"
+          ? language === "zh" ? "初始化站点" : "Initial Setup"
+          : language === "zh" ? "登录" : "Sign in"
     document.title = `${pageTitle} - Veloce Desktop`
   }, [language, location.pathname, t])
 
@@ -847,6 +850,14 @@ function DesktopRoutes() {
                 element={
                   <ProtectedRoute>
                     <AdvancedChat />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings/*"
+                element={
+                  <ProtectedRoute>
+                    <SettingsWorkspace />
                   </ProtectedRoute>
                 }
               />

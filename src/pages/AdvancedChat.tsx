@@ -444,7 +444,7 @@ function UserAvatar({ user }: { user?: CurrentUser }) {
   const initials = avatarInitials(label)
   return (
     <Link
-      to="/dashboard/settings"
+      to="/settings/profile"
       className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-full border bg-muted text-sm font-semibold text-foreground hover:bg-accent"
       title={label}
       aria-label={label}

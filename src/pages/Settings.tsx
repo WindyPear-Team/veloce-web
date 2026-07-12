@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { KeyRound, LogOut } from "lucide-react"
-import { useNavigate } from "react-router-dom"
+import { KeyRound } from "lucide-react"
 import { useEffect, useMemo, useState } from "react"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import api from "@/lib/api"
@@ -63,10 +62,12 @@ interface AdvancedChatAgentOption {
   name: string
 }
 
-export default function Settings() {
-  const navigate = useNavigate()
+export type SettingsSection = "profile" | "assistant" | "security"
+
+export default function Settings({ section = "profile" }: { section?: SettingsSection }) {
   const { language, t } = useI18n()
   const copy = language === "zh" ? zhSettingsCopy : enSettingsCopy
+  const sectionTitle = section === "assistant" ? copy.assistantSettings : section === "security" ? copy.securitySettings : t("settings.title")
   const queryClient = useQueryClient()
   const [bindStatus, setBindStatus] = useState("")
   const [currentPassword, setCurrentPassword] = useState("")
@@ -148,11 +149,6 @@ export default function Settings() {
     setTitleGenerationScope(advancedChatSettings.title_generation_scope || "recent")
     setConnectorApprovalAgentID(advancedChatSettings.connector_approval_agent_id || "")
   }, [advancedChatSettings])
-
-  const logout = () => {
-    localStorage.removeItem("token")
-    navigate("/login", { replace: true })
-  }
 
   const bindOIDC = useMutation({
     mutationFn: async () => {
@@ -254,48 +250,45 @@ export default function Settings() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between gap-4">
-        <h1 className="text-3xl font-bold">{t("settings.title")}</h1>
-        <Button variant="outline" className="gap-2" onClick={logout}>
-          <LogOut size={16} />
-          {t("common.signOut")}
-        </Button>
-      </div>
+      <h1 className="text-2xl font-semibold">{sectionTitle}</h1>
 
-      <PageTitleSlot />
+      {section === "profile" && <PageTitleSlot />}
       <div className="grid gap-4 lg:grid-cols-2">
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("settings.profile")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {isLoading ? (
-              <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
-            ) : (
-              <>
-                <Field label={t("common.username")} value={user?.username || "-"} />
-                <Field label={t("common.email")} value={user?.email || "-"} />
-                <Field label={copy.oidcAccount} value={user?.oidc_sub ? copy.bound : copy.notBound} />
-                <Field label={t("common.group")} value={groupNames(user)} />
-                <Field label={t("common.balance")} value={`${publicSettings.payment_currency_display_name}${user?.balance || 0}`} />
-                <Field label={t("common.role")} value={user?.is_admin ? t("common.admin") : t("common.user")} />
-              </>
-            )}
-          </CardContent>
-        </Card>
+        {section === "profile" && <>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("settings.profile")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {isLoading ? (
+                <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
+              ) : (
+                <>
+                  <Field label={t("common.username")} value={user?.username || "-"} />
+                  <Field label={t("common.email")} value={user?.email || "-"} />
+                  <Field label={copy.oidcAccount} value={user?.oidc_sub ? copy.bound : copy.notBound} />
+                  <Field label={t("common.group")} value={groupNames(user)} />
+                  <Field label={t("common.balance")} value={`${publicSettings.payment_currency_display_name}${user?.balance || 0}`} />
+                  <Field label={t("common.role")} value={user?.is_admin ? t("common.admin") : t("common.user")} />
+                </>
+              )}
+            </CardContent>
+          </Card>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>{t("common.language")}</CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            <div className="text-sm text-muted-foreground">{t("settings.languageSubtitle")}</div>
-            <LanguageSwitcher placement="bottom" />
-          </CardContent>
-        </Card>
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("common.language")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground">{t("settings.languageSubtitle")}</div>
+              <LanguageSwitcher placement="bottom" />
+            </CardContent>
+          </Card>
+          <PageInlineSlot className="lg:col-span-2" slotKey="primary" />
+        </>}
 
-        <PageInlineSlot className="lg:col-span-2" slotKey="primary" />
-        <Card>
+        {section === "assistant" && <>
+          <Card>
           <CardHeader>
             <CardTitle>{copy.titleGeneration}</CardTitle>
           </CardHeader>
@@ -346,7 +339,7 @@ export default function Settings() {
             </Button>
           </CardContent>
         </Card>
-        <Card>
+          <Card>
           <CardHeader>
             <CardTitle>{copy.connectorApproval}</CardTitle>
           </CardHeader>
@@ -369,7 +362,9 @@ export default function Settings() {
               {saveTitleSettings.isPending ? copy.saving : copy.saveApprovalSettings}
             </Button>
           </CardContent>
-        </Card>
+          </Card>
+        </>}
+        {section === "security" && <>
         {publicSettings.oidc_enabled && (
           <Card>
             <CardHeader>
@@ -495,7 +490,8 @@ export default function Settings() {
           </CardContent>
         </Card>
 
-        <PageInlineSlot className="lg:col-span-2" slotKey="secondary" />
+        </>}
+        {section === "profile" && <PageInlineSlot className="lg:col-span-2" slotKey="secondary" />}
       </div>
     </div>
   )
@@ -675,6 +671,8 @@ const zhSettingsCopy = {
   approvalAssistant: "审批助手",
   noApprovalAssistant: "暂不使用助手审批",
   saveApprovalSettings: "保存审批设置",
+  assistantSettings: "助手设置",
+  securitySettings: "安全设置",
   saving: "保存中...",
 }
 
@@ -752,5 +750,7 @@ const enSettingsCopy: typeof zhSettingsCopy = {
   approvalAssistant: "Approval assistant",
   noApprovalAssistant: "Do not use assistant approval",
   saveApprovalSettings: "Save approval settings",
+  assistantSettings: "Assistant settings",
+  securitySettings: "Security settings",
   saving: "Saving...",
 }

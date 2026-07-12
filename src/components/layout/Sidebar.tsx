@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, ChevronDown, Database, History, KeyRound, LayoutDashboard, MessageSquare, Palette, Puzzle, ScrollText, Settings, Shield, Users, Video, WalletCards } from "lucide-react"
+import { BarChart3, Boxes, ChevronDown, Database, History, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Settings, Shield, Users, WalletCards } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -7,7 +7,7 @@ import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { TranslationKey } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
-import { chatPathForSettings, imagePathForSettings, videoPathForSettings, withPublicSettingsDefaults } from "@/lib/public-settings"
+import { chatPathForSettings, withPublicSettingsDefaults } from "@/lib/public-settings"
 import { cn } from "@/lib/utils"
 
 interface CurrentUser {
@@ -44,9 +44,7 @@ const userMenuItems: MenuItem[] = [
   { icon: WalletCards, labelKey: "nav.wallet", path: "/dashboard/wallet", settingKey: "sidebar_wallet_enabled" },
   { icon: KeyRound, labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
   { icon: MessageSquare, labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
-  { icon: Palette, labelKey: "nav.images", path: "/dashboard/images", settingKey: "sidebar_images_enabled" },
-  { icon: Video, labelKey: "nav.videos", path: "/dashboard/videos" },
-  { icon: Settings, labelKey: "nav.settings", path: "/dashboard/settings", settingKey: "sidebar_settings_enabled" },
+  { icon: Settings, labelKey: "nav.settings", path: "/settings/profile", settingKey: "sidebar_settings_enabled" },
 ]
 
 const adminMenuItems: MenuItem[] = [
@@ -85,18 +83,10 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
   })
   const publicSettings = withPublicSettingsDefaults(settings)
   const chatPath = chatPathForSettings()
-  const imagePath = imagePathForSettings()
-  const videoPath = videoPathForSettings()
   const visibleUserItems = userMenuItems
     .map((item) => {
       if (item.labelKey === "nav.chat") {
         return { ...item, path: chatPath }
-      }
-      if (item.labelKey === "nav.images") {
-        return { ...item, path: imagePath }
-      }
-      if (item.labelKey === "nav.videos") {
-        return { ...item, path: videoPath }
       }
       return item
     })

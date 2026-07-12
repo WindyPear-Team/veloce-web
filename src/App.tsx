@@ -13,7 +13,7 @@ import Login from "./pages/Login"
 import Setup from "./pages/Setup"
 import Home from "./pages/Home"
 import ModelCatalog from "./pages/ModelCatalog"
-import Settings from "./pages/Settings"
+import SettingsWorkspace from "./pages/SettingsWorkspace"
 import Wallet from "./pages/Wallet"
 import APIKeys from "./pages/APIKeys"
 import Plugins from "./pages/Plugins"
@@ -263,7 +263,7 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/dashboard/videos") {
     return language === "zh" ? "AI 视频" : language === "ja" ? "AI Videos" : "AI Videos"
   }
-  if (normalizedPathname === "/dashboard/settings") {
+  if (normalizedPathname === "/settings" || normalizedPathname.startsWith("/settings/")) {
     return t("settings.title")
   }
 
@@ -312,6 +312,14 @@ function App() {
                 element={
                   <ProtectedRoute isAuthenticated={isAuthenticated}>
                     <AdvancedChat />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/settings/*"
+                element={
+                  <ProtectedRoute isAuthenticated={isAuthenticated}>
+                    <SettingsWorkspace />
                   </ProtectedRoute>
                 }
               />
@@ -451,7 +459,7 @@ function App() {
                 <Route path="chat" element={<Navigate to="/chat" replace />} />
                 <Route path="images" element={<Navigate to="/chat/images" replace />} />
                 <Route path="videos" element={<Navigate to="/chat/videos" replace />} />
-                <Route path="settings" element={<Settings />} />
+                <Route path="settings/*" element={<Navigate to="/settings/profile" replace />} />
               </Route>
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
