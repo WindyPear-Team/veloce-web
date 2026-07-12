@@ -4325,20 +4325,16 @@ function AssistantMessageSequence({
 }) {
   const parts = messageContentParts(message, activeRun, copy)
   const toolCallsByRound = groupToolCallsByRound(message.tool_calls || [])
-  const rounds = orderedMessageRounds(parts, toolCallsByRound)
-  if (rounds.length === 0) {
+  const blocks = messageRoundBlocks(parts, toolCallsByRound)
+  if (blocks.length === 0) {
     return null
   }
   return (
     <div className="space-y-1.5">
-      {rounds.map((round) => {
-        const roundParts = parts.filter((part) => normalizedRound(part.round) === round)
-        const roundToolCalls = toolCallsByRound.get(round) || []
-        const roundApprovalTasks = roundToolCalls.some((toolCall) => toolCall.status === "approval_required") ? approvalTasks : []
-        return (
-          <div key={round} className="space-y-1.5">
-            {roundParts.map((part, index) => (
-              <div key={`${round}-part-${index}`} className="group space-y-1.5">
+      {blocks.map((block) => block.kind === "text" ? (
+        <div key={block.id} className="space-y-1.5">
+          {block.parts.map((part, index) => (
+              <div key={`${block.id}-part-${index}`} className="group space-y-1.5">
                 <div className="flex justify-start">
                   <div className="w-fit max-w-full rounded-lg border border-slate-200 bg-background p-3 text-sm shadow-sm">
                     <div className="flex items-start gap-2">
@@ -4367,23 +4363,20 @@ function AssistantMessageSequence({
                 </div>
               </div>
             ))}
-            {roundToolCalls.length > 0 && (
-              <div className="flex justify-start">
-                <div className="w-full max-w-3xl pl-1">
-                  <ToolCallRounds
-                    toolCalls={roundToolCalls}
-                    copy={copy}
-                    approvalTasks={roundApprovalTasks}
-                    decidingTaskID={decidingTaskID}
-                    onDecide={onDecide}
-                    collapseCompleted
-                  />
-                </div>
-              </div>
-            )}
+        </div>
+      ) : (
+        <div key={block.id} className="flex justify-start">
+          <div className="w-full max-w-3xl pl-1">
+            <ToolCallRounds
+              toolCalls={block.toolCalls}
+              copy={copy}
+              approvalTasks={block.toolCalls.some((toolCall) => toolCall.status === "approval_required") ? approvalTasks : []}
+              decidingTaskID={decidingTaskID}
+              onDecide={onDecide}
+            />
           </div>
-        )
-      })}
+        </div>
+      ))}
     </div>
   )
 }
@@ -4425,36 +4418,29 @@ function MessageContent({
     )
   }
   const toolCallsByRound = groupToolCallsByRound(message.tool_calls || [])
-  const rounds = orderedMessageRounds(parts, toolCallsByRound)
-  if (rounds.length === 0) {
+  const blocks = messageRoundBlocks(parts, toolCallsByRound)
+  if (blocks.length === 0) {
     return <MarkdownContent content={messageDisplayContent(message, activeRun, copy)} />
   }
 
   return (
     <div className="space-y-3">
-      {rounds.map((round) => {
-        const roundParts = parts.filter((part) => normalizedRound(part.round) === round)
-        const roundToolCalls = toolCallsByRound.get(round) || []
-        const roundApprovalTasks =
-          isAdvanced && roundToolCalls.some((toolCall) => toolCall.status === "approval_required") ? approvalTasks : []
-        return (
-          <div key={round} className="space-y-2">
-            {roundParts.map((part, index) => (
-              <MarkdownContent key={`${round}-text-${index}`} content={part.content} />
-            ))}
-            {roundToolCalls.length > 0 && (
-              <ToolCallRounds
-                toolCalls={roundToolCalls}
-                copy={copy}
-                approvalTasks={roundApprovalTasks}
-                decidingTaskID={decidingTaskID}
-                onDecide={onDecide}
-                collapseCompleted
-              />
-            )}
-          </div>
-        )
-      })}
+      {blocks.map((block) => block.kind === "text" ? (
+        <div key={block.id} className="space-y-2">
+          {block.parts.map((part, index) => (
+            <MarkdownContent key={`${block.id}-text-${index}`} content={part.content} />
+          ))}
+        </div>
+      ) : (
+        <ToolCallRounds
+          key={block.id}
+          toolCalls={block.toolCalls}
+          copy={copy}
+          approvalTasks={isAdvanced && block.toolCalls.some((toolCall) => toolCall.status === "approval_required") ? approvalTasks : []}
+          decidingTaskID={decidingTaskID}
+          onDecide={onDecide}
+        />
+      ))}
     </div>
   )
 }
@@ -4465,32 +4451,39 @@ function ToolCallRounds({
   approvalTasks = [],
   decidingTaskID = "",
   onDecide,
-  collapseCompleted = false,
 }: {
   toolCalls: ChatToolCall[]
   copy: ChatCopy
   approvalTasks?: ConnectorApprovalTask[]
   decidingTaskID?: string
   onDecide?: (taskID: string, approved: boolean) => void
-  collapseCompleted?: boolean
 }) {
+  const [open, setOpen] = useState(false)
+
   if (toolCalls.length === 0) {
     return null
   }
+
   return (
-    <div className="mb-2 space-y-2">
-      {toolCalls.map((toolCall) => (
-        <ToolCallDetails
-          key={toolCall.id}
-          toolCall={toolCall}
-          copy={copy}
-          approvalTask={findConnectorApprovalTask(toolCall, approvalTasks)}
-          decidingTaskID={decidingTaskID}
-          onDecide={onDecide}
-          collapseCompleted={collapseCompleted}
-        />
-      ))}
-    </div>
+    <details className="mb-2 rounded-md bg-muted/40 px-2 py-1.5" open={open} onToggle={(event) => setOpen(event.currentTarget.open)}>
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs text-muted-foreground [&::-webkit-details-marker]:hidden">
+        <span className="font-medium text-foreground">{copy.toolRound}</span>
+        <span className="min-w-0 flex-1" />
+        <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-90")} />
+      </summary>
+      <div className="mt-2 space-y-2">
+        {toolCalls.map((toolCall) => (
+          <ToolCallDetails
+            key={toolCall.id}
+            toolCall={toolCall}
+            copy={copy}
+            approvalTask={findConnectorApprovalTask(toolCall, approvalTasks)}
+            decidingTaskID={decidingTaskID}
+            onDecide={onDecide}
+          />
+        ))}
+      </div>
+    </details>
   )
 }
 
@@ -4500,17 +4493,14 @@ function ToolCallDetails({
   approvalTask,
   decidingTaskID = "",
   onDecide,
-  collapseCompleted = false,
 }: {
   toolCall: ChatToolCall
   copy: ChatCopy
   approvalTask?: ConnectorApprovalTask
   decidingTaskID?: string
   onDecide?: (taskID: string, approved: boolean) => void
-  collapseCompleted?: boolean
 }) {
-  const shouldAutoOpen = toolCall.status === "running" || toolCall.status === "approval_required"
-  const [open, setOpen] = useState(collapseCompleted ? shouldAutoOpen : true)
+  const [open, setOpen] = useState(false)
   const builtinKind = builtinToolKind(toolCall)
   const path = stringArgument(toolCall.arguments, "path")
   const content = stringArgument(toolCall.arguments, "content")
@@ -4525,10 +4515,6 @@ function ToolCallDetails({
   const title = builtinKind
     ? builtinToolTitle(builtinKind, path, toolTarget, copy, booleanArgument(toolCall.arguments, "preview_old_content_available"))
     : siteTitle || toolLabel(toolCall)
-
-  useEffect(() => {
-    setOpen(collapseCompleted ? shouldAutoOpen : true)
-  }, [collapseCompleted, shouldAutoOpen, toolCall.id])
 
   return (
     <details
@@ -6515,6 +6501,31 @@ function orderedMessageRounds(parts: ChatContentPart[], toolCallsByRound: Map<nu
   parts.forEach((part) => rounds.add(normalizedRound(part.round)))
   toolCallsByRound.forEach((_items, round) => rounds.add(round))
   return Array.from(rounds).sort((a, b) => a - b)
+}
+
+type MessageRoundBlock =
+  | { kind: "text"; id: string; parts: ChatContentPart[] }
+  | { kind: "tools"; id: string; toolCalls: ChatToolCall[] }
+
+function messageRoundBlocks(parts: ChatContentPart[], toolCallsByRound: Map<number, ChatToolCall[]>): MessageRoundBlock[] {
+  const blocks: MessageRoundBlock[] = []
+  for (const round of orderedMessageRounds(parts, toolCallsByRound)) {
+    const roundParts = parts.filter((part) => normalizedRound(part.round) === round)
+    const roundToolCalls = toolCallsByRound.get(round) || []
+    if (roundParts.length > 0) {
+      blocks.push({ kind: "text", id: `text-${round}`, parts: roundParts })
+    }
+    if (roundToolCalls.length === 0) {
+      continue
+    }
+    const previous = blocks.at(-1)
+    if (previous?.kind === "tools" && roundParts.length === 0) {
+      previous.toolCalls.push(...roundToolCalls)
+      continue
+    }
+    blocks.push({ kind: "tools", id: `tools-${round}`, toolCalls: [...roundToolCalls] })
+  }
+  return blocks
 }
 
 function normalizedRound(round?: number) {
