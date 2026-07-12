@@ -505,6 +505,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isStopping, setIsStopping] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
+  const messagesViewportRef = useRef<HTMLDivElement | null>(null)
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null)
   const environmentDeviceButtonRef = useRef<HTMLButtonElement | null>(null)
   const environmentWorkspaceButtonRef = useRef<HTMLButtonElement | null>(null)
@@ -993,6 +994,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [activeSessionID, isAdvanced, storeKeys.selectedSession])
 
   const messagesScrollElement = () => {
+    if (messagesViewportRef.current) {
+      return messagesViewportRef.current
+    }
     const marker = messagesEndRef.current
     if (marker) {
       const main = marker.closest("main")
@@ -3228,7 +3232,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </div>
             <div className={cn(isAdvanced ? "relative flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
-              <div className={cn(isAdvanced ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
+              <div ref={messagesViewportRef} className={cn(isAdvanced ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
                 <div className={cn(isAdvanced ? "mx-auto w-full max-w-3xl space-y-4 px-2 py-5 pb-36 sm:px-4" : "contents")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
@@ -3344,17 +3348,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   </>
                 )}
                 <div ref={messagesEndRef} />
-                {showJumpToLatest && (
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    className="sticky bottom-4 z-10 ml-auto flex gap-1 shadow-sm"
-                    onClick={() => scrollMessagesToLatest()}
-                  >
-                    <ArrowDown size={14} />
-                    {copy.jumpToLatest}
-                  </Button>
-                )}
                 </div>
               </div>
 
@@ -3366,6 +3359,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
               {isAdvanced ? (
                 <div className="absolute inset-x-0 bottom-3 z-20 mx-auto w-full max-w-3xl space-y-2 px-2 sm:px-4">
+                  {showJumpToLatest && (
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="outline"
+                      className="absolute -top-11 right-4 z-30 h-9 w-9 rounded-full border-slate-200 bg-background shadow-md hover:bg-slate-50 sm:right-6"
+                      title={copy.jumpToLatest}
+                      onClick={() => scrollMessagesToLatest()}
+                    >
+                      <ArrowDown size={16} />
+                      <span className="sr-only">{copy.jumpToLatest}</span>
+                    </Button>
+                  )}
                   {pendingConnectorApprovals.length > 0 && (
                     <PendingConnectorApprovalsPanel
                       tasks={pendingConnectorApprovals}

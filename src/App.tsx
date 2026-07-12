@@ -17,6 +17,7 @@ import Settings from "./pages/Settings"
 import Wallet from "./pages/Wallet"
 import APIKeys from "./pages/APIKeys"
 import Plugins from "./pages/Plugins"
+import PluginSettingsPage from "./pages/PluginSettingsPage"
 import PluginRoute from "./pages/PluginRoute"
 import AdvancedChat from "./pages/AdvancedChat"
 import SystemManagement from "./pages/SystemManagement"
@@ -445,6 +446,7 @@ function App() {
                     </AdminRoute>
                   }
                 />
+                <Route path="plugins/:pluginId/settings" element={<PluginSettingsPage />} />
                 <Route path="plugins/:pluginId/*" element={<PluginRoute />} />
                 <Route path="chat" element={<Navigate to="/chat" replace />} />
                 <Route path="images" element={<Navigate to="/chat/images" replace />} />
