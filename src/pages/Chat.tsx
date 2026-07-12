@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, RefreshCw, Search, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -498,6 +498,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectingFileID, setSelectingFileID] = useState("")
   const [attachmentMenuTarget, setAttachmentMenuTarget] = useState<AttachmentTarget | "">("")
   const [composerControlMenu, setComposerControlMenu] = useState<ComposerControlMenu>("")
+  const [composerModelSubmenu, setComposerModelSubmenu] = useState<"" | "model" | "reasoning">("")
   const [sessionMenu, setSessionMenu] = useState<{ sessionID: string; x: number; y: number } | null>(null)
   const [sessionFolderContextMenu, setSessionFolderContextMenu] = useState<{ x: number; y: number } | null>(null)
   const [regeneratingTitleSessionID, setRegeneratingTitleSessionID] = useState("")
@@ -2459,19 +2460,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     )
   }
 
-  const composerModeControl = () => {
+  const composerModeControl = (compact = false) => {
     const open = composerControlMenu === "mode"
     const chatLocked = Boolean((currentSession?.messages.length || 0) > 0 || isActiveRunRunning)
     return (
       <div className="relative min-w-0">
         <Button
           type="button"
-          variant="outline"
-          className="h-8 w-full justify-between gap-2 px-2 text-xs"
+          variant={compact ? "ghost" : "outline"}
+          className={compact ? "h-7 w-auto justify-start px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"}
           onClick={() => setComposerControlMenu((current) => current === "mode" ? "" : "mode")}
         >
           <span className="truncate">{runModeLabel(activeRunMode, copy, agentGroupCopy)}</span>
-          <ArrowDown className="h-3.5 w-3.5 rotate-180" />
+          {!compact && <ArrowDown className="h-3.5 w-3.5 rotate-180" />}
         </Button>
         {open && (
           <div className="absolute bottom-full left-0 z-30 mb-2 w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
@@ -2505,41 +2506,102 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       return null
     }
     const open = composerControlMenu === "model"
+    const reasoningOptions = [
+      { value: "", label: copy.reasoningDefault },
+      { value: "minimal", label: copy.reasoningMinimal },
+      { value: "low", label: copy.reasoningLow },
+      { value: "medium", label: copy.reasoningMedium },
+      { value: "high", label: copy.reasoningHigh },
+    ]
+    const selectedReasoning = currentSession?.reasoning_effort || ""
+    const reasoningLabel = reasoningOptions.find((option) => option.value === selectedReasoning)?.label || copy.reasoningDefault
+    const modelLabel = activeModelName || copy.selectModel
+    const controlLabel = `${modelLabel} ${reasoningLabel}`
+    const selectReasoning = (value: string) => {
+      if (currentSession) {
+        updateSession(currentSession.id, (session) => ({ ...session, reasoning_effort: value }), { persist: true })
+      }
+      setComposerModelSubmenu("")
+      setComposerControlMenu("")
+    }
     return (
       <div className="relative min-w-0">
         <Button
           type="button"
           variant="ghost"
           className="h-5 max-w-36 justify-between gap-1 rounded-lg px-2 text-[11px]"
-          onClick={() => setComposerControlMenu((current) => current === "model" ? "" : "model")}
-          title={activeModelName || copy.selectModel}
+          onClick={() => setComposerControlMenu((current) => {
+            const next = current === "model" ? "" : "model"
+            if (!next) setComposerModelSubmenu("")
+            return next
+          })}
+          title={controlLabel}
         >
-          <span className="truncate">{activeModelName || copy.selectModel}</span>
-          <ArrowDown className="h-3 w-3 shrink-0" />
+          <span className="min-w-0 truncate">
+            <span>{modelLabel}</span>
+            <span className="ml-1 text-muted-foreground">{reasoningLabel}</span>
+          </span>
+          <ChevronDown className="h-3 w-3 shrink-0" />
         </Button>
         {open && (
-          <div className="absolute bottom-full right-0 z-30 mb-2 max-h-56 w-56 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-            {modelSelectOptions.map((model) => (
-              <button
-                key={model}
-                type="button"
-                className={cn("flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-muted", activeModelName === model && "bg-primary/10 text-primary")}
-                onClick={() => {
-                  handleSessionModelChange(model)
-                  setComposerControlMenu("")
-                }}
-              >
-                <span className="truncate">{model}</span>
-                {activeModelName === model && <Check size={13} />}
-              </button>
-            ))}
+          <div className="absolute bottom-full right-0 z-30 mb-2 w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+            <button
+              type="button"
+              className={cn("flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-muted", composerModelSubmenu === "model" && "bg-muted")}
+              onClick={() => setComposerModelSubmenu((current) => current === "model" ? "" : "model")}
+            >
+              <span>{copy.selectModel}</span>
+              <ChevronRight size={14} />
+            </button>
+            <button
+              type="button"
+              className={cn("flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-muted", composerModelSubmenu === "reasoning" && "bg-muted")}
+              onClick={() => setComposerModelSubmenu((current) => current === "reasoning" ? "" : "reasoning")}
+            >
+              <span>{copy.reasoningEffort}</span>
+              <ChevronRight size={14} />
+            </button>
+            {composerModelSubmenu === "model" && (
+              <div className="absolute left-full top-0 ml-1 max-h-56 w-56 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+                {modelSelectOptions.map((model) => (
+                  <button
+                    key={model}
+                    type="button"
+                    className={cn("flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-muted", activeModelName === model && "bg-primary/10 text-primary")}
+                    onClick={() => {
+                      handleSessionModelChange(model)
+                      setComposerModelSubmenu("")
+                      setComposerControlMenu("")
+                    }}
+                  >
+                    <span className="truncate">{model}</span>
+                    {activeModelName === model && <Check size={13} />}
+                  </button>
+                ))}
+              </div>
+            )}
+            {composerModelSubmenu === "reasoning" && (
+              <div className="absolute left-full top-0 ml-1 w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+                {reasoningOptions.map((option) => (
+                  <button
+                    key={option.value || "default"}
+                    type="button"
+                    className={cn("flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-muted", selectedReasoning === option.value && "bg-primary/10 text-primary")}
+                    onClick={() => selectReasoning(option.value)}
+                  >
+                    <span>{option.label}</span>
+                    {selectedReasoning === option.value && <Check size={13} />}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
     )
   }
 
-  const composerApprovalControl = () => {
+  const composerApprovalControl = (compact = false) => {
     if (activeRunMode === "chat") {
       return null
     }
@@ -2565,34 +2627,39 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       full_access: approvalModeCopy.fullAccess,
       assistant: approvalModeCopy.assistant,
     }
+    const icons = { manual: Hand, full_access: ShieldCheck, assistant: Bot }
+    const ApprovalIcon = icons[approvalMode]
     return (
       <div className="relative min-w-0">
         <Button
           type="button"
-          variant="outline"
-          className="h-8 w-full justify-between gap-2 px-2 text-xs"
+          variant={compact ? "ghost" : "outline"}
+          className={compact ? "h-7 w-auto justify-start gap-1.5 px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"}
           onClick={() => setComposerControlMenu((current) => current === "approval" ? "" : "approval")}
         >
+          {compact && <ApprovalIcon size={14} />}
           <span className="truncate">{labels[approvalMode]}</span>
-          <ArrowDown className="h-3.5 w-3.5 rotate-180" />
+          {!compact && <ArrowDown className="h-3.5 w-3.5 rotate-180" />}
         </Button>
         {open && (
           <div className="absolute bottom-full right-0 z-30 mb-2 w-48 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
             {(["manual", "full_access", "assistant"] as const).map((mode) => {
               const disabled = mode === "assistant" && !currentAdvancedSettings.connector_approval_agent_id
+              const ApprovalOptionIcon = icons[mode]
               return (
                 <button
                   key={mode}
                   type="button"
                   className={cn(
-                    "flex min-h-9 w-full items-center justify-between rounded px-2 py-1.5 text-left text-sm hover:bg-muted",
+                    "flex min-h-9 w-full items-center gap-2 rounded px-2 py-1.5 text-left text-sm hover:bg-muted",
                     approvalMode === mode && "bg-primary/10 text-primary",
                     disabled && "cursor-not-allowed opacity-40"
                   )}
                   disabled={disabled}
                   onClick={() => selectApprovalMode(mode)}
                 >
-                  <span>{labels[mode]}</span>
+                  <ApprovalOptionIcon size={15} className="shrink-0" />
+                  <span className="min-w-0 flex-1">{labels[mode]}</span>
                   {approvalMode === mode && <Check size={14} />}
                 </button>
               )
@@ -2700,8 +2767,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     <div
       key={session.id}
       className={cn(
-        "group grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
-        session.id === activeSession?.id ? "bg-white shadow-sm" : "hover:bg-white/70"
+        "group relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
+        session.id === activeSession?.id ? "border-primary/40 bg-primary/15 shadow-sm before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-r before:bg-primary" : "hover:bg-muted"
       )}
       onContextMenu={(event) => {
         event.preventDefault()
@@ -2710,7 +2777,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       }}
     >
       <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
-        <div className="truncate text-sm font-medium text-slate-900">{session.title || copy.untitledSession}</div>
+        <div className={cn("truncate text-sm font-medium", session.id === activeSession?.id ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
       </button>
       <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
         <Trash2 size={15} />
@@ -2878,7 +2945,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       {sessionsSidebarPortal}
       <div className={cn(
         "min-w-0 flex-1",
-        isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:mx-auto xl:mb-4 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-card xl:p-0" : "space-y-5",
+        isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:relative xl:z-10 xl:mx-auto xl:mb-4 xl:overflow-visible xl:rounded-xl xl:border xl:border-slate-200 xl:bg-card xl:p-0" : "space-y-5",
         isAdvanced && (isDesktopSessionsSidebarVisible ? "xl:max-w-[1180px]" : "xl:max-w-none")
       )}>
       <div className="sticky top-0 z-30 -mx-4 flex min-h-10 justify-end bg-transparent px-4 py-0 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:mx-0">
@@ -3169,7 +3236,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
         {isAdvanced && currentSession?.messages.length === 0 ? (
           <div className={cn("flex items-center justify-center px-2 py-8", isDesktop ? "min-h-[calc(100vh-16.25rem)]" : "min-h-[calc(100vh-14rem)]")}>
-            <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-card p-3 shadow-sm">
+            <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-card p-3 shadow-md">
               <div className="relative">
                 <textarea
                   ref={composerTextareaRef}
@@ -3190,7 +3257,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               )}
 
               <div className={cn(
-                "grid gap-2 border-t px-2 pt-3",
+                "grid gap-2 border-t px-2 pt-3 lg:hidden",
                 activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : activeRunMode === "assistant" ? "grid-cols-2" : "grid-cols-1"
               )}>
                 {composerModeControl()}
@@ -3201,6 +3268,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <div className="flex items-center justify-between gap-3 border-t px-2 pt-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
                   {attachmentMenuButton("composer")}
+                  <div className="hidden items-center gap-1 lg:flex">
+                    {composerApprovalControl(true)}
+                    {composerModeControl(true)}
+                  </div>
                   {activeRunMode !== "agent_group" && (
                     <select
                       className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
@@ -3410,7 +3481,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       </span>
                     </button>
                   )}
-                  <div className="rounded-xl border border-slate-200 bg-card p-1 shadow-sm">
+                  <div className="rounded-xl border border-slate-200 bg-card p-1 shadow-md">
                     <div className="relative min-w-0 flex-1">
                       <textarea
                         ref={composerTextareaRef}
@@ -3424,9 +3495,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       />
                       {agentMentionPicker()}
                     </div>
-                    <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
                         {attachmentMenuButton("composer")}
+                        <div className="hidden items-center gap-1 lg:flex">
+                          {composerApprovalControl(true)}
+                          {composerModeControl(true)}
+                        </div>
                         {agentWorkStatusButton("h-5 w-5")}
                       </div>
                       <div className="flex items-center gap-1">
@@ -3435,7 +3510,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       </div>
                     </div>
                   </div>
-                  <div className={cn("grid gap-2", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
+                  <div className={cn("grid gap-2 lg:hidden", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
                     {composerModeControl()}
                     {activeRunMode === "agent_group" && composerAgentGroupControl()}
                     {composerApprovalControl()}
@@ -4128,7 +4203,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       )}
       </div>
       <div className={cn(
-        "hidden h-full shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out xl:flex",
+        "relative z-0 hidden h-full shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out xl:flex",
         isDesktopSessionsSidebarVisible ? "w-80 opacity-100" : "w-0 pointer-events-none opacity-0"
       )}>
         {sessionsSidebar}
