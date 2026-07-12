@@ -108,7 +108,7 @@ export default function AdvancedChat() {
       onEditingChange={setIsLayoutEditing}
     >
     <div className={cn("flex flex-col overflow-hidden bg-background", viewportHeightClass)}>
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6">
+      <header className="z-30 flex h-16 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button
             className="lg:hidden"
@@ -151,9 +151,9 @@ export default function AdvancedChat() {
       </header>
       {user?.is_admin && <PageLayoutEditBar />}
 
-      <div className="flex min-h-0 flex-1">
+      <div className={cn("flex min-h-0 flex-1", isChatRoute && "bg-background")}>
         <div className="hidden lg:block lg:h-full lg:shrink-0">
-          <AdvancedChatSidebar publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} />
+          <AdvancedChatSidebar className={isChatRoute ? "border-r-0 bg-background" : undefined} publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} />
         </div>
 
         {isSidebarOpen && (
@@ -165,7 +165,7 @@ export default function AdvancedChat() {
               onClick={() => setIsSidebarOpen(false)}
             />
             <div className="relative z-50 h-full w-72 max-w-[85vw]">
-              <AdvancedChatSidebar className="w-full" publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} onNavigate={() => setIsSidebarOpen(false)} />
+              <AdvancedChatSidebar className={cn("w-full", isChatRoute && "border-r-0 bg-background")} publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} onNavigate={() => setIsSidebarOpen(false)} />
             </div>
           </div>
         )}
@@ -389,7 +389,7 @@ function AdvancedChatSidebar({
         <div className={cn("h-full overflow-y-auto transition-transform duration-200 ease-out", showingGroup && "-translate-x-full")}>
           <div className="flex flex-col gap-1">
             {renderSidebarLink(homeItem)}
-            <div className="my-2 border-t" />
+            <div className="my-2" />
             {groups.map((group) => {
               const firstItem = group.items[0]
               return (

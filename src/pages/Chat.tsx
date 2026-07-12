@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, Bot, Check, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, Monitor, MoreHorizontal, Paperclip, Pencil, Plus, RefreshCw, Search, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, RefreshCw, Search, Send, Server, Settings, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -339,7 +339,7 @@ type ChatRunMode = "chat" | "assistant" | "agent_group"
 type ConnectorApprovalMode = "manual" | "full_access" | "assistant"
 type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "mcp" | "device"
 type AttachmentTarget = "composer" | "editor"
-type ComposerControlMenu = "" | "mode" | "device" | "workspace" | "agent_group" | "approval"
+type ComposerControlMenu = "" | "mode" | "model" | "device" | "workspace" | "agent_group" | "approval"
 type WorkspacePickerTarget = "session" | "pending"
 
 interface ChatProps {
@@ -459,6 +459,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isAgentWorkOpen, setIsAgentWorkOpen] = useState(false)
   const [selectedWorkAgentID, setSelectedWorkAgentID] = useState("")
   const [isSessionsSidebarOpen, setIsSessionsSidebarOpen] = useState(false)
+  const [isDesktopSessionsSidebarVisible, setIsDesktopSessionsSidebarVisible] = useState(true)
   const [sessionSearch, setSessionSearch] = useState("")
   const [sessionFolders, setSessionFolders] = useState<SessionFolder[]>(readSessionFolders)
   const [sessionFolderAssignments, setSessionFolderAssignments] = useState<Record<string, string>>(readSessionFolderAssignments)
@@ -1057,8 +1058,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || !textarea || currentSession?.messages.length === 0) {
       return
     }
-    textarea.style.height = "40px"
-    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 40), 160)}px`
+    textarea.style.height = "32px"
+    textarea.style.height = `${Math.min(Math.max(textarea.scrollHeight, 32), 160)}px`
   }, [prompt, currentSession?.id, currentSession?.messages.length, isAdvanced])
 
   useEffect(() => {
@@ -2358,8 +2359,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <div className={cn("relative shrink-0", className)}>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="icon"
+          className="h-5 w-5 rounded-full"
           disabled={disabled}
           aria-label={copy.addAttachment}
           aria-expanded={open}
@@ -2429,7 +2431,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         title={title}
         aria-label={title}
       >
-        <Send size={16} />
+        <ArrowUp size={16} />
       </Button>
     )
   }
@@ -2492,6 +2494,45 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </button>
               )
             })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const composerModelControl = () => {
+    if (activeRunMode === "agent_group") {
+      return null
+    }
+    const open = composerControlMenu === "model"
+    return (
+      <div className="relative min-w-0">
+        <Button
+          type="button"
+          variant="ghost"
+          className="h-5 max-w-36 justify-between gap-1 rounded-lg px-2 text-[11px]"
+          onClick={() => setComposerControlMenu((current) => current === "model" ? "" : "model")}
+          title={activeModelName || copy.selectModel}
+        >
+          <span className="truncate">{activeModelName || copy.selectModel}</span>
+          <ArrowDown className="h-3 w-3 shrink-0" />
+        </Button>
+        {open && (
+          <div className="absolute bottom-full right-0 z-30 mb-2 max-h-56 w-56 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+            {modelSelectOptions.map((model) => (
+              <button
+                key={model}
+                type="button"
+                className={cn("flex h-8 w-full items-center justify-between rounded px-2 text-left text-xs hover:bg-muted", activeModelName === model && "bg-primary/10 text-primary")}
+                onClick={() => {
+                  handleSessionModelChange(model)
+                  setComposerControlMenu("")
+                }}
+              >
+                <span className="truncate">{model}</span>
+                {activeModelName === model && <Check size={13} />}
+              </button>
+            ))}
           </div>
         )}
       </div>
@@ -2679,7 +2720,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const sessionsSidebar = (
     <aside
-      className="flex h-full w-80 max-w-[85vw] flex-col border-l border-slate-200 bg-slate-100/95 text-slate-900 shadow-sm"
+      className="flex h-full w-80 max-w-[85vw] flex-col bg-background text-foreground"
       onContextMenu={(event) => {
         if (event.defaultPrevented) {
           return
@@ -2835,8 +2876,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   return (
     <div className={cn("flex min-w-0", isAdvanced && "h-full min-h-0")}>
       {sessionsSidebarPortal}
-      <div className={cn("min-w-0 flex-1", isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8" : "space-y-5")}>
-      <div className="sticky top-0 z-30 -mx-4 flex min-h-14 justify-end border-b border-slate-200/80 bg-background/95 px-4 py-2 backdrop-blur sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8">
+      <div className={cn(
+        "min-w-0 flex-1",
+        isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:mx-auto xl:mb-4 xl:rounded-xl xl:border xl:border-slate-200 xl:bg-card xl:p-0" : "space-y-5",
+        isAdvanced && (isDesktopSessionsSidebarVisible ? "xl:max-w-[1180px]" : "xl:max-w-none")
+      )}>
+      <div className="sticky top-0 z-30 -mx-4 flex min-h-10 justify-end bg-transparent px-4 py-0 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:mx-0">
         <div className="relative flex items-center gap-2">
           <Button
             variant="outline"
@@ -3104,6 +3149,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               )}
             </>
           )}
+          <Button
+            variant="outline"
+            size="icon"
+            className="hidden h-9 w-9 border-slate-200 bg-white xl:inline-flex"
+            onClick={() => setIsDesktopSessionsSidebarVisible((visible) => !visible)}
+            aria-label={isDesktopSessionsSidebarVisible ? copy.closeSessions : copy.openSessions}
+            aria-expanded={isDesktopSessionsSidebarVisible}
+            title={isDesktopSessionsSidebarVisible ? copy.closeSessions : copy.openSessions}
+          >
+            {isDesktopSessionsSidebarVisible ? <PanelRightClose size={17} /> : <PanelRightOpen size={17} />}
+          </Button>
         </div>
       </div>
 
@@ -3113,7 +3169,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
         {isAdvanced && currentSession?.messages.length === 0 ? (
           <div className={cn("flex items-center justify-center px-2 py-8", isDesktop ? "min-h-[calc(100vh-16.25rem)]" : "min-h-[calc(100vh-14rem)]")}>
-            <div className="w-full max-w-2xl rounded-2xl border border-slate-200 bg-card p-3 shadow-sm">
+            <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-card p-3 shadow-sm">
               <div className="relative">
                 <textarea
                   ref={composerTextareaRef}
@@ -3142,22 +3198,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 {composerApprovalControl()}
               </div>
 
-              <div className="flex flex-col gap-3 border-t px-2 pt-3 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center justify-between gap-3 border-t px-2 pt-3">
                 <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {activeRunMode !== "agent_group" && (
-                    <select
-                      className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
-                      value={activeModelName}
-                      onChange={(event) => handleSessionModelChange(event.target.value)}
-                    >
-                      <option value="">{copy.selectModel}</option>
-                      {modelSelectOptions.map((model) => (
-                        <option key={model} value={model}>
-                          {model}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                  {attachmentMenuButton("composer")}
                   {activeRunMode !== "agent_group" && (
                     <select
                       className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
@@ -3172,46 +3215,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       ))}
                     </select>
                   )}
-                  <label className="inline-flex h-9 cursor-pointer items-center gap-2 rounded-md border bg-background px-3 text-sm font-medium text-foreground hover:bg-muted">
-                    <Paperclip size={15} />
-                    {isUploadingAttachments ? fileCopy.uploading : copy.addAttachment}
-                    <input
-                      className="sr-only"
-                      type="file"
-                      multiple
-                      disabled={isUploadingAttachments || !currentAdvancedSettings.file_storage_enabled}
-                      onChange={(event) => {
-                        handleAttachmentFiles(event.target.files, "composer")
-                        event.target.value = ""
-                      }}
-                    />
-                  </label>
-                  <Button
-                    variant="outline"
-                    className="h-9 gap-2"
-                    disabled={!currentAdvancedSettings.file_storage_enabled}
-                    onClick={() => openFilePicker("composer")}
-                  >
-                    <FileText size={15} />
-                    {fileCopy.selectFile}
-                  </Button>
                   {agentWorkStatusButton("h-9 w-9")}
                 </div>
 
-                {isStreamActive || isActiveRunRunning || isSending ? (
-                  <div className="flex items-center justify-end gap-2">
-                    <Button variant="outline" className="gap-2" disabled={isStopping} onClick={stopActiveTask}>
-                      <X size={16} />
-                      {copy.stopTask}
-                    </Button>
-                    <span className="text-xs text-muted-foreground">{copy.sending}</span>
-                  </div>
-                ) : (
-                  <Button className="gap-2" disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning} onClick={sendMessage}>
-                    <Send size={16} />
-                    {activeRunMode === "assistant" ? copy.runAssistant : activeRunMode === "agent_group" ? agentGroupCopy.runAgentGroup : copy.send}
-                  </Button>
-                )}
+                <div className="flex shrink-0 items-center gap-1">
+                  {composerModelControl()}
+                  {advancedComposerActionButton("h-5 w-5 rounded-full")}
+                </div>
               </div>
             </div>
           </div>
@@ -3400,13 +3410,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       </span>
                     </button>
                   )}
-                  <div className="flex items-end gap-2 rounded-2xl border border-slate-200 bg-card p-2 shadow-sm">
-                    {attachmentMenuButton("composer")}
-                    {agentWorkStatusButton()}
+                  <div className="rounded-xl border border-slate-200 bg-card p-1 shadow-sm">
                     <div className="relative min-w-0 flex-1">
                       <textarea
                         ref={composerTextareaRef}
-                        className="h-10 max-h-40 min-h-10 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-2 text-sm leading-5 outline-none focus:ring-0"
+                        className="h-8 max-h-40 min-h-8 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-1 text-sm leading-5 outline-none focus:ring-0"
                         rows={1}
                         value={prompt}
                         placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
@@ -3416,7 +3424,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       />
                       {agentMentionPicker()}
                     </div>
-                    {advancedComposerActionButton("h-10 w-10 rounded-md")}
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        {attachmentMenuButton("composer")}
+                        {agentWorkStatusButton("h-5 w-5")}
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {composerModelControl()}
+                        {advancedComposerActionButton("h-5 w-5 rounded-full")}
+                      </div>
+                    </div>
                   </div>
                   <div className={cn("grid gap-2", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
                     {composerModeControl()}
@@ -4110,7 +4127,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         </Dialog>
       )}
       </div>
-      <div className="hidden h-full w-80 shrink-0 xl:flex">{sessionsSidebar}</div>
+      <div className={cn(
+        "hidden h-full shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out xl:flex",
+        isDesktopSessionsSidebarVisible ? "w-80 opacity-100" : "w-0 pointer-events-none opacity-0"
+      )}>
+        {sessionsSidebar}
+      </div>
     </div>
   )
 }
