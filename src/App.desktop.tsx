@@ -224,6 +224,7 @@ function DocumentTitle() {
 function DesktopTitleBar({
   tabs,
   activeTabID,
+  showTabs = true,
   onSelectTab,
   onAddTab,
   onCloseTab,
@@ -233,6 +234,7 @@ function DesktopTitleBar({
 }: {
   tabs: DesktopTab[]
   activeTabID: string
+  showTabs?: boolean
   onSelectTab: (tabID: string) => void
   onAddTab: () => void
   onCloseTab: (tabID: string) => void
@@ -444,7 +446,7 @@ function DesktopTitleBar({
         <div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold">
           <img src={logoURL} alt="" className="h-5 w-5 rounded object-cover" />
           <span className="shrink-0 truncate">{copy.title}</span>
-          <div className="ml-1 flex min-w-0 max-w-[55vw] items-center gap-1 overflow-hidden [-webkit-app-region:no-drag]">
+          {showTabs && <div className="ml-1 flex min-w-0 max-w-[55vw] items-center gap-1 overflow-hidden [-webkit-app-region:no-drag]">
             {tabs.map((tab) => {
               const active = tab.id === activeTabID
               return (
@@ -506,7 +508,7 @@ function DesktopTitleBar({
             <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title={copy.newTab} aria-label={copy.newTab} onClick={onAddTab}>
               <Plus size={14} />
             </Button>
-          </div>
+          </div>}
         </div>
         <div className="flex items-center gap-1 [-webkit-app-region:no-drag]">
         <Button
@@ -878,41 +880,60 @@ function DesktopRoutes() {
   const embeddedTabID = getDesktopTabID()
   if (embeddedTabID) {
     mirrorDesktopBridge()
-    return (
-      <HashRouter>
-        <TokenBridge />
-        <DocumentTitle />
-        <div className="fixed inset-0 overflow-hidden">
-          <SetupGate>
-            <Routes>
-              <Route path="/" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
-              <Route path="/login" element={<Login />} />
-              <Route path="/setup" element={<Setup />} />
-              <Route
-                path="/chat/*"
-                element={
-                  <ProtectedRoute>
-                    <AdvancedChat />
-                  </ProtectedRoute>
-                }
-              />
-              <Route
-                path="/settings/*"
-                element={
-                  <ProtectedRoute>
-                    <SettingsWorkspace />
-                  </ProtectedRoute>
-                }
-              />
-              <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
-            </Routes>
-          </SetupGate>
-        </div>
-      </HashRouter>
-    )
+    return <DesktopPageRoutes className="fixed inset-0 overflow-hidden" />
   }
 
-  return <DesktopTabbedShell />
+  return <DesktopSingleWindow />
+}
+
+function DesktopPageRoutes({ className }: { className: string }) {
+  return (
+    <HashRouter>
+      <TokenBridge />
+      <DocumentTitle />
+      <div className={className}>
+        <SetupGate>
+          <Routes>
+            <Route path="/" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
+            <Route path="/login" element={<Login />} />
+            <Route path="/setup" element={<Setup />} />
+            <Route path="/chat/*" element={<ProtectedRoute><AdvancedChat /></ProtectedRoute>} />
+            <Route path="/settings/*" element={<ProtectedRoute><SettingsWorkspace /></ProtectedRoute>} />
+            <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
+          </Routes>
+        </SetupGate>
+      </div>
+    </HashRouter>
+  )
+}
+
+function DesktopSingleWindow() {
+  const queryClient = useQueryClient()
+  const [serverURL, setServerURL] = useState(() => getDesktopServerURL())
+  const tab: DesktopTab = { id: "desktop", title: "Chat", serverURL, path: "/chat" }
+  const updateServer = (_tabID: string, value: string) => {
+    const nextURL = normalizeServerURL(value)
+    setDesktopServerURL(nextURL)
+    setServerURL(nextURL)
+    queryClient.clear()
+  }
+
+  return (
+    <>
+      <DesktopTitleBar
+        tabs={[tab]}
+        activeTabID={tab.id}
+        showTabs={false}
+        onSelectTab={() => undefined}
+        onAddTab={() => undefined}
+        onCloseTab={() => undefined}
+        onMoveTab={() => undefined}
+        onDetachTab={() => undefined}
+        onUpdateTabServer={updateServer}
+      />
+      <DesktopPageRoutes className="fixed inset-x-0 bottom-0 top-9 overflow-hidden bg-background" />
+    </>
+  )
 }
 
 function mirrorDesktopBridge() {
@@ -921,7 +942,7 @@ function mirrorDesktopBridge() {
   }
 }
 
-function DesktopTabbedShell() {
+export function DesktopTabbedShell() {
   const queryClient = useQueryClient()
   const [tabs, setTabs] = useState<DesktopTab[]>([])
   const [activeTabID, setActiveTabID] = useState("")
