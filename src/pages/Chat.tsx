@@ -51,6 +51,7 @@ interface ChatMessage {
   content_parts?: ChatContentPart[]
   created_at: string
   updated_at?: string
+  processing_duration_ms?: number
   tool_calls?: ChatToolCall[]
 }
 
@@ -435,6 +436,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const fileCopy = useMemo(() => (language === "zh" ? zhFileAttachmentCopy : enFileAttachmentCopy), [language])
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
   const approvalModeCopy = useMemo(() => (language === "zh" ? zhConnectorApprovalModeCopy : enConnectorApprovalModeCopy), [language])
+  const newSessionGreeting = greetingForHour(language)
   const gitCopy = useMemo(() => (language === "zh" ? zhGitWorkspaceCopy : enGitWorkspaceCopy), [language])
   const workspacePickerCopy = useMemo(() => (language === "zh" ? zhWorkspacePickerCopy : enWorkspacePickerCopy), [language])
   const taskChangeCopy = useMemo(() => (language === "zh" ? zhTaskChangeCopy : enTaskChangeCopy), [language])
@@ -1056,7 +1058,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   useEffect(() => {
     const textarea = composerTextareaRef.current
-    if (!isAdvanced || !textarea || currentSession?.messages.length === 0) {
+    if (!isAdvanced || !textarea) {
       return
     }
     textarea.style.height = "32px"
@@ -1859,7 +1861,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         return
       }
     }
-    if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+    if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
       sendMessage()
     }
@@ -1950,6 +1952,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       return
     }
 
+    const processingStartedAt = Date.now()
     const messageContent = messageContentWithAttachments(content, attachments)
     const userMessage = createMessage("user", messageContent)
     const nextMessages = [...session.messages, userMessage]
@@ -1966,6 +1969,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setAttachments([])
     setIsSending(true)
     cancelEdit()
+
+    const recordProcessingDuration = () => {
+      const duration = Math.max(0, Date.now() - processingStartedAt)
+      updateSession(session.id, (current) => ({
+        ...current,
+        messages: current.messages.map((message) => message.id === userMessage.id ? { ...message, processing_duration_ms: duration } : message),
+      }))
+    }
 
     try {
       if (isAdvanced) {
@@ -2218,6 +2229,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     } catch (err) {
       error(apiErrorMessage(err, err instanceof Error ? err.message : copy.sendFailed))
     } finally {
+      recordProcessingDuration()
       setIsSending(false)
     }
   }
@@ -2409,7 +2421,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       return (
         <Button
           type="button"
-          variant="outline"
           size="icon"
           className={className}
           disabled={isStopping}
@@ -2417,7 +2428,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           title={copy.stopTask}
           aria-label={copy.stopTask}
         >
-          <X size={16} />
+          <span className="h-2.5 w-2.5 rounded-[1px] bg-current" />
         </Button>
       )
     }
@@ -2785,6 +2796,45 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     </div>
   )
 
+  const advancedComposer = () => (
+    <>
+      <div className="rounded-xl border border-slate-200 bg-card p-1 shadow-md">
+        <div className="relative min-w-0 flex-1">
+          <textarea
+            ref={composerTextareaRef}
+            className="h-8 max-h-40 min-h-8 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-1 text-sm leading-5 outline-none focus:ring-0"
+            rows={1}
+            value={prompt}
+            placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
+            onChange={handleComposerPromptChange}
+            onKeyDown={handleComposerPromptKeyDown}
+            onClick={(event) => updateAgentMention(prompt, event.currentTarget.selectionStart)}
+          />
+          {agentMentionPicker()}
+        </div>
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            {attachmentMenuButton("composer")}
+            <div className="hidden items-center gap-1 lg:flex">
+              {composerApprovalControl(true)}
+              {composerModeControl(true)}
+            </div>
+            {agentWorkStatusButton("h-5 w-5")}
+          </div>
+          <div className="flex items-center gap-1">
+            {composerModelControl()}
+            {advancedComposerActionButton("h-5 w-5 rounded-full")}
+          </div>
+        </div>
+      </div>
+      <div className={cn("grid gap-2 lg:hidden", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
+        {composerModeControl()}
+        {activeRunMode === "agent_group" && composerAgentGroupControl()}
+        {composerApprovalControl()}
+      </div>
+    </>
+  )
+
   const sessionsSidebar = (
     <aside
       className="flex h-full w-80 max-w-[85vw] flex-col bg-background text-foreground"
@@ -2863,15 +2913,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           </div>
         )}
         {searchedSessions.length === 0 && <div className="px-3 py-10 text-center text-sm text-slate-500">{sessionSidebarCopy.noSessions}</div>}
-        {sessionMenu && (() => {
+        {sessionMenu && typeof document !== "undefined" && (() => {
           const session = sessions.find((item) => item.id === sessionMenu.sessionID)
           if (!session) {
             return null
           }
-          return (
+          return createPortal(
             <div
               className="fixed z-[80] max-h-[calc(100vh-1rem)] w-56 overflow-y-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
-              style={{ left: Math.min(sessionMenu.x, window.innerWidth - 240), top: Math.min(sessionMenu.y, window.innerHeight - 160) }}
+              style={{ left: Math.max(8, Math.min(sessionMenu.x, window.innerWidth - 240)), top: Math.max(8, Math.min(sessionMenu.y, window.innerHeight - 160)) }}
               onClick={(event) => event.stopPropagation()}
             >
               <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => renameSessionTitle(session)}>
@@ -2897,13 +2947,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <span className="truncate">{folder.name}</span>
                 </button>
               ))}
-            </div>
+            </div>,
+            document.body
           )
         })()}
-        {sessionFolderContextMenu && (
+        {sessionFolderContextMenu && typeof document !== "undefined" && createPortal(
           <div
             className="fixed z-[80] w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
-            style={{ left: Math.min(sessionFolderContextMenu.x, window.innerWidth - 184), top: Math.min(sessionFolderContextMenu.y, window.innerHeight - 48) }}
+            style={{ left: Math.max(8, Math.min(sessionFolderContextMenu.x, window.innerWidth - 184)), top: Math.max(8, Math.min(sessionFolderContextMenu.y, window.innerHeight - 48)) }}
             onClick={(event) => event.stopPropagation()}
           >
             <button
@@ -2917,7 +2968,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <FolderPlus size={15} />
               {sessionSidebarCopy.newFolder}
             </button>
-          </div>
+          </div>,
+          document.body
         )}
       </div>
     </aside>
@@ -3234,70 +3286,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col" : "space-y-4")}>
         {!isAdvanced && basicConfig}
 
-        {isAdvanced && currentSession?.messages.length === 0 ? (
-          <div className={cn("flex items-center justify-center px-2 py-8", isDesktop ? "min-h-[calc(100vh-16.25rem)]" : "min-h-[calc(100vh-14rem)]")}>
-            <div className="w-full max-w-2xl rounded-xl border border-slate-200 bg-card p-3 shadow-md">
-              <div className="relative">
-                <textarea
-                  ref={composerTextareaRef}
-                  className="min-h-36 w-full resize-none rounded-md border-0 bg-transparent px-3 py-3 text-base outline-none placeholder:text-muted-foreground focus:ring-0"
-                  value={prompt}
-                  placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
-                  onChange={handleComposerPromptChange}
-                  onKeyDown={handleComposerPromptKeyDown}
-                  onClick={(event) => updateAgentMention(prompt, event.currentTarget.selectionStart)}
-                />
-                {agentMentionPicker()}
-              </div>
-
-              {attachments.length > 0 && (
-                <div className="flex flex-wrap gap-2 px-2 pb-3">
-                  <AttachmentChips attachments={attachments} removeLabel={copy.removeAttachment} onRemove={removeAttachment} />
-                </div>
-              )}
-
-              <div className={cn(
-                "grid gap-2 border-t px-2 pt-3 lg:hidden",
-                activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : activeRunMode === "assistant" ? "grid-cols-2" : "grid-cols-1"
-              )}>
-                {composerModeControl()}
-                {activeRunMode === "agent_group" && composerAgentGroupControl()}
-                {composerApprovalControl()}
-              </div>
-
-              <div className="flex items-center justify-between gap-3 border-t px-2 pt-3">
-                <div className="flex min-w-0 flex-wrap items-center gap-2">
-                  {attachmentMenuButton("composer")}
-                  <div className="hidden items-center gap-1 lg:flex">
-                    {composerApprovalControl(true)}
-                    {composerModeControl(true)}
-                  </div>
-                  {activeRunMode !== "agent_group" && (
-                    <select
-                      className="h-9 max-w-[min(15rem,100%)] rounded-md border bg-background px-3 text-sm"
-                      value={currentSession?.agent_id || defaultAgentID}
-                      onChange={(event) => setSessionAgent(event.target.value)}
-                    >
-                      {agents.length === 0 && <option value="">{copy.noAgents}</option>}
-                      {agents.map((agent) => (
-                        <option key={agent.id} value={agent.id}>
-                          {agent.name}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {agentWorkStatusButton("h-9 w-9")}
-                </div>
-
-                <div className="flex shrink-0 items-center gap-1">
-                  {composerModelControl()}
-                  {advancedComposerActionButton("h-5 w-5 rounded-full")}
-                </div>
-              </div>
-            </div>
-          </div>
-        ) : (
-          <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col" : "rounded-lg border bg-card text-card-foreground shadow-sm")}>
+        <div className={cn(isAdvanced ? "flex min-h-0 flex-1 flex-col" : "rounded-lg border bg-card text-card-foreground shadow-sm")}>
             <div className={cn(isAdvanced ? (isActiveRunRunning && activeRun ? "shrink-0 pb-2" : "sr-only") : "flex flex-col space-y-1.5 p-6")}>
               <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <CardTitle className={cn(isAdvanced && "sr-only")}>{copy.conversation}</CardTitle>
@@ -3316,10 +3305,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <div ref={messagesViewportRef} className={cn(isAdvanced ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
                 <div className={cn(isAdvanced ? "mx-auto w-full max-w-3xl space-y-4 px-2 py-5 pb-36 sm:px-4" : "contents")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
-                  <div className="py-20 text-center text-sm text-muted-foreground">{copy.noMessages}</div>
+                  <div className="flex min-h-0 flex-1 flex-col items-center justify-center py-20 text-center">
+                    <Sparkles className="mb-3 h-7 w-7 text-primary" />
+                    <div className="text-lg font-semibold text-foreground">{newSessionGreeting}</div>
+                    <div className="mt-1 text-sm text-muted-foreground">{language === "zh" ? "输入消息开始对话" : "Send a message to begin"}</div>
+                  </div>
                 ) : (
                   <>
-                    {currentSession.messages.map((message) => {
+                    {currentSession.messages.map((message, messageIndex) => {
+                      const processingDuration = message.role === "user" ? processingDurationForUserMessage(currentSession.messages, messageIndex) : undefined
                       if (message.role === "assistant" && editingMessageID !== message.id) {
                         return (
                           <AssistantMessageSequence
@@ -3423,6 +3417,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                               </>
                             )}
                           </div>
+                          {message.role === "user" && processingDuration !== undefined && (
+                            <div className="pl-1 text-xs text-muted-foreground">{formatProcessingDuration(processingDuration)}</div>
+                          )}
                         </div>
                       )
                     })}
@@ -3481,40 +3478,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       </span>
                     </button>
                   )}
-                  <div className="rounded-xl border border-slate-200 bg-card p-1 shadow-md">
-                    <div className="relative min-w-0 flex-1">
-                      <textarea
-                        ref={composerTextareaRef}
-                        className="h-8 max-h-40 min-h-8 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-1 text-sm leading-5 outline-none focus:ring-0"
-                        rows={1}
-                        value={prompt}
-                        placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
-                        onChange={handleComposerPromptChange}
-                        onKeyDown={handleComposerPromptKeyDown}
-                        onClick={(event) => updateAgentMention(prompt, event.currentTarget.selectionStart)}
-                      />
-                      {agentMentionPicker()}
-                    </div>
-                  <div className="flex items-center justify-between gap-2">
-                      <div className="flex items-center gap-2">
-                        {attachmentMenuButton("composer")}
-                        <div className="hidden items-center gap-1 lg:flex">
-                          {composerApprovalControl(true)}
-                          {composerModeControl(true)}
-                        </div>
-                        {agentWorkStatusButton("h-5 w-5")}
-                      </div>
-                      <div className="flex items-center gap-1">
-                        {composerModelControl()}
-                        {advancedComposerActionButton("h-5 w-5 rounded-full")}
-                      </div>
-                    </div>
-                  </div>
-                  <div className={cn("grid gap-2 lg:hidden", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
-                    {composerModeControl()}
-                    {activeRunMode === "agent_group" && composerAgentGroupControl()}
-                    {composerApprovalControl()}
-                  </div>
+                  {advancedComposer()}
                 </div>
               ) : (
                 <div className="grid gap-3 lg:grid-cols-[1fr_auto]">
@@ -3524,7 +3488,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     placeholder={copy.promptPlaceholder}
                     onChange={(event) => setPrompt(event.target.value)}
                     onKeyDown={(event) => {
-                      if ((event.ctrlKey || event.metaKey) && event.key === "Enter") {
+                      if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
                         event.preventDefault()
                         sendMessage()
                       }
@@ -3542,8 +3506,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </div>
               )}
             </div>
-          </div>
-        )}
+        </div>
       </div>
 
       <PageInlineSlot slotKey="primary" />
@@ -5462,25 +5425,12 @@ function streamStatusText(payload: any, copy: ChatCopy) {
   const message = typeof payload?.message === "string" ? payload.message : ""
   const retryMatch = message.match(/^retrying:(\d+)\/(\d+)$/)
   if (message === "retrying" || retryMatch) {
-    const attempt = Number(payload?.attempt || retryMatch?.[1] || 0)
-    const max = Number(payload?.max || retryMatch?.[2] || 0)
-    return copy.streamRetrying
-      .replace("{attempt}", String(attempt || 1))
-      .replace("{max}", String(max || 10))
+    return copy.streamThinking
   }
-  if (message === "stream_started") {
-    return copy.streamStarted
+  if (["stream_started", "loading_tools", "assistant_started", "model_round"].includes(message)) {
+    return copy.streamThinking
   }
-  if (message === "loading_tools") {
-    return copy.streamLoadingTools
-  }
-  if (message === "assistant_started") {
-    return copy.assistantStarted
-  }
-  if (message === "model_round") {
-    return copy.streamModelRound || copy.streamThinking
-  }
-  return ""
+  return message ? copy.streamThinking : ""
 }
 
 function responseTextFromPayload(payload: any): string {
@@ -6167,6 +6117,7 @@ function normalizeMessage(value: unknown): ChatMessage | null {
     content_parts: normalizeContentParts(value.content_parts, value.content),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : undefined,
+    processing_duration_ms: typeof value.processing_duration_ms === "number" && Number.isFinite(value.processing_duration_ms) && value.processing_duration_ms >= 0 ? value.processing_duration_ms : undefined,
     tool_calls: normalizeToolCalls(value.tool_calls),
   }
 }
@@ -6406,10 +6357,10 @@ function isRunActive(run?: ChatRun) {
 
 function runStatusText(run: ChatRun, copy: ChatCopy) {
   if (run.status === "queued") {
-    return copy.assistantStarted
+    return copy.streamThinking
   }
   const text = streamStatusText({ message: run.status_message || "assistant_started", round: run.current_round }, copy)
-  return text || copy.runningAssistant
+  return text || copy.streamThinking
 }
 
 function agentWorkStatusText(status: string, copy: AgentGroupCopy) {
@@ -6473,7 +6424,7 @@ function messageDisplayContent(message: ChatMessage, run: ChatRun | undefined, c
     return ""
   }
   if (message.role === "assistant") {
-    return copy.emptyResponse
+    return copy.streamThinking
   }
   return message.content
 }
@@ -6530,6 +6481,53 @@ function messageRoundBlocks(parts: ChatContentPart[], toolCallsByRound: Map<numb
 
 function normalizedRound(round?: number) {
   return typeof round === "number" && Number.isFinite(round) && round > 0 ? round : 1
+}
+
+function processingDurationForUserMessage(messages: ChatMessage[], messageIndex: number) {
+  const message = messages[messageIndex]
+  if (!message || message.role !== "user") {
+    return undefined
+  }
+  if (typeof message.processing_duration_ms === "number" && Number.isFinite(message.processing_duration_ms)) {
+    return Math.max(0, message.processing_duration_ms)
+  }
+  const startedAt = Date.parse(message.created_at)
+  if (!Number.isFinite(startedAt)) {
+    return undefined
+  }
+  let finishedAt = 0
+  for (let index = messageIndex + 1; index < messages.length; index += 1) {
+    const candidate = messages[index]
+    if (candidate.role === "user") {
+      break
+    }
+    if (candidate.role === "assistant") {
+      const timestamp = Date.parse(candidate.updated_at || candidate.created_at)
+      if (Number.isFinite(timestamp)) {
+        finishedAt = Math.max(finishedAt, timestamp)
+      }
+    }
+  }
+  return finishedAt > 0 ? Math.max(0, finishedAt - startedAt) : undefined
+}
+
+function formatProcessingDuration(durationMs: number) {
+  const totalSeconds = Math.max(0, Math.floor(durationMs / 1000))
+  return `已处理${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
+}
+
+function greetingForHour(language: string, hour = new Date().getHours()) {
+  if (language === "zh") {
+    if (hour >= 5 && hour < 9) return "早上好"
+    if (hour < 12) return "上午好"
+    if (hour < 14) return "中午好"
+    if (hour < 18) return "下午好"
+    if (hour < 20) return "傍晚好"
+    return "晚上好"
+  }
+  if (hour >= 5 && hour < 12) return "Good morning"
+  if (hour < 18) return "Good afternoon"
+  return "Good evening"
 }
 
 function upsertSession(current: ChatSession[], next: ChatSession) {

@@ -76,6 +76,22 @@ export const clearAuthToken = () => {
   }
 };
 
+export const handleUnauthorized = () => {
+  if (typeof window === "undefined") {
+    return;
+  }
+  clearAuthToken();
+  if (isDesktopTarget()) {
+    if (window.location.hash !== "#/login") {
+      window.location.hash = "#/login";
+    }
+    return;
+  }
+  if (window.location.pathname !== "/login") {
+    window.location.assign("/login");
+  }
+};
+
 export const setDesktopServerURL = (serverURL: string, tabID = getDesktopTabID()) => {
   if (typeof window === "undefined") {
     return defaultDesktopServerURL;
@@ -151,5 +167,15 @@ api.interceptors.request.use((config) => {
   }
   return config;
 });
+
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error?.response?.status === 401) {
+      handleUnauthorized();
+    }
+    return Promise.reject(error);
+  }
+);
 
 export default api;

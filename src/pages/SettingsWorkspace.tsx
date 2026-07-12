@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query"
-import { Bot, LayoutDashboard, LogOut, Menu, MessageSquare, Shield, UserCircle } from "lucide-react"
+import { Bot, LogOut, Menu, MessageSquare, Shield, UserCircle } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
 import Settings, { type SettingsSection } from "./Settings"
@@ -40,7 +40,6 @@ export default function SettingsWorkspace() {
   })
   const publicSettings = withPublicSettingsDefaults(settings)
   const copy = settingsWorkspaceCopy(language)
-  const dashboardPath = isDesktopTarget() ? "/chat" : "/dashboard"
 
   useEffect(() => {
     if (isDesktopTarget()) {
@@ -54,7 +53,7 @@ export default function SettingsWorkspace() {
   }
 
   return (
-    <div className="flex h-screen flex-col overflow-hidden bg-background">
+    <div className={cn("flex flex-col overflow-hidden bg-background", isDesktopTarget() ? "h-full min-h-0" : "h-screen")}>
       <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button
@@ -81,11 +80,11 @@ export default function SettingsWorkspace() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <SettingsSidebar pathname={location.pathname} copy={copy} dashboardPath={dashboardPath} onLogout={logout} />
+        <SettingsSidebar pathname={location.pathname} copy={copy} onLogout={logout} />
         {isSidebarOpen && (
           <div className="fixed inset-0 top-16 z-40 lg:hidden">
             <button type="button" className="absolute inset-0 bg-black/50" aria-label={copy.closeMenu} onClick={() => setIsSidebarOpen(false)} />
-            <SettingsSidebar className="relative z-50 h-full w-72 max-w-[85vw]" pathname={location.pathname} copy={copy} dashboardPath={dashboardPath} onLogout={logout} onNavigate={() => setIsSidebarOpen(false)} />
+            <SettingsSidebar className="relative z-50 h-full w-72 max-w-[85vw]" pathname={location.pathname} copy={copy} onLogout={logout} onNavigate={() => setIsSidebarOpen(false)} />
           </div>
         )}
         <main className="min-h-0 flex-1 overflow-y-auto">
@@ -106,10 +105,9 @@ export default function SettingsWorkspace() {
   )
 }
 
-function SettingsSidebar({ pathname, copy, dashboardPath, onLogout, className, onNavigate }: {
+function SettingsSidebar({ pathname, copy, onLogout, className, onNavigate }: {
   pathname: string
   copy: ReturnType<typeof settingsWorkspaceCopy>
-  dashboardPath: string
   onLogout: () => void
   className?: string
   onNavigate?: () => void
@@ -122,9 +120,9 @@ function SettingsSidebar({ pathname, copy, dashboardPath, onLogout, className, o
   ]
 
   return (
-    <aside className={cn(visibilityClass, "h-full w-60 shrink-0 border-r bg-background", className)}>
-      <div className="px-4 pb-3 pt-5 text-sm font-semibold">{copy.title}</div>
-      <nav className="space-y-1 px-3">
+    <aside className={cn(visibilityClass, "h-full min-h-0 w-60 shrink-0 border-r bg-background", className)}>
+      <div className="shrink-0 px-4 pb-3 pt-5 text-sm font-semibold">{copy.title}</div>
+      <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
         {items.map((item) => {
           const Icon = item.icon
           const active = pathname === item.href
@@ -141,14 +139,10 @@ function SettingsSidebar({ pathname, copy, dashboardPath, onLogout, className, o
           )
         })}
       </nav>
-      <div className="mt-auto space-y-1 border-t p-3">
+      <div className="mt-auto shrink-0 space-y-1 border-t p-3">
         <Link to="/chat" onClick={onNavigate} className="flex h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
           <MessageSquare size={17} />
           <span>{copy.chat}</span>
-        </Link>
-        <Link to={dashboardPath} onClick={onNavigate} className="flex h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <LayoutDashboard size={17} />
-          <span>{copy.dashboard}</span>
         </Link>
         <button type="button" onClick={onLogout} className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
           <LogOut size={17} />
@@ -165,9 +159,9 @@ function avatarInitials(value: string) {
 }
 
 function settingsWorkspaceCopy(language: string) {
-  if (language === "zh") return { title: "设置", account: "账户", assistant: "助手", security: "安全", chat: "聊天", dashboard: "仪表盘", signOut: "退出登录", openMenu: "打开设置菜单", closeMenu: "关闭设置菜单" }
-  if (language === "ja") return { title: "設定", account: "アカウント", assistant: "アシスタント", security: "セキュリティ", chat: "チャット", dashboard: "ダッシュボード", signOut: "ログアウト", openMenu: "設定メニューを開く", closeMenu: "設定メニューを閉じる" }
-  return { title: "Settings", account: "Account", assistant: "Assistant", security: "Security", chat: "Chat", dashboard: "Dashboard", signOut: "Sign out", openMenu: "Open settings menu", closeMenu: "Close settings menu" }
+  if (language === "zh") return { title: "设置", account: "账户", assistant: "助手", security: "安全", chat: "聊天", signOut: "退出登录", openMenu: "打开设置菜单", closeMenu: "关闭设置菜单" }
+  if (language === "ja") return { title: "設定", account: "アカウント", assistant: "アシスタント", security: "セキュリティ", chat: "チャット", signOut: "ログアウト", openMenu: "設定メニューを開く", closeMenu: "設定メニューを閉じる" }
+  return { title: "Settings", account: "Account", assistant: "Assistant", security: "Security", chat: "Chat", signOut: "Sign out", openMenu: "Open settings menu", closeMenu: "Close settings menu" }
 }
 
 function desktopSettingsTitle(pathname: string, language: string) {
