@@ -246,8 +246,10 @@ function DesktopTitleBar({
   const queryClient = useQueryClient()
   const serverPopupRef = useRef<HTMLDivElement | null>(null)
   const statusPopupRef = useRef<HTMLDivElement | null>(null)
+  const applicationMenuRef = useRef<HTMLDivElement | null>(null)
   const [isServerOpen, setIsServerOpen] = useState(false)
   const [isStatusOpen, setIsStatusOpen] = useState(false)
+  const [openApplicationMenu, setOpenApplicationMenu] = useState<"file" | "edit" | "help" | null>(null)
   const [isSettingsOpen, setIsSettingsOpen] = useState(false)
   const [value, setValue] = useState(() => getDesktopServerURL())
   const [servers, setServers] = useState(readServerList)
@@ -263,8 +265,8 @@ function DesktopTitleBar({
   const activeTab = tabs.find((tab) => tab.id === activeTabID) || tabs[0]
   const currentServer = normalizeServerURL(activeTab?.serverURL || getDesktopServerURL())
   const copy = language === "zh"
-    ? { title: "Veloce", label: "服务器", settings: "设置", status: "服务状态", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪", newTab: "新标签页", closeTab: "关闭标签页" }
-    : { title: "Veloce", label: "Server", settings: "Settings", status: "Service status", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready", newTab: "New tab", closeTab: "Close tab" }
+    ? { title: "Veloce", file: "文件", edit: "编辑", help: "帮助", newWindow: "新窗口", quit: "退出", closeWindow: "关闭", home: "返回主页", copyText: "复制", paste: "粘贴", cut: "剪切", deleteText: "删除", undo: "撤销", redo: "还原", officialSite: "官网", github: "GitHub", label: "服务器", settings: "设置", status: "服务状态", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪", newTab: "新标签页", closeTab: "关闭标签页" }
+    : { title: "Veloce", file: "File", edit: "Edit", help: "Help", newWindow: "New window", quit: "Quit", closeWindow: "Close", home: "Home", copyText: "Copy", paste: "Paste", cut: "Cut", deleteText: "Delete", undo: "Undo", redo: "Redo", officialSite: "Official website", github: "GitHub", label: "Server", settings: "Settings", status: "Service status", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready", newTab: "New tab", closeTab: "Close tab" }
 
   const { data: user } = useQuery<{ username?: string; email?: string }>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
@@ -288,23 +290,24 @@ function DesktopTitleBar({
   }, [currentServer, user?.email, user?.username])
 
   useEffect(() => {
-    if (!isServerOpen && !isStatusOpen) {
+    if (!isServerOpen && !isStatusOpen && !openApplicationMenu) {
       return
     }
     const closeOnOutsidePointer = (event: PointerEvent) => {
       const target = event.target
       if (
         target instanceof Node &&
-        (serverPopupRef.current?.contains(target) || statusPopupRef.current?.contains(target))
+          (serverPopupRef.current?.contains(target) || statusPopupRef.current?.contains(target) || applicationMenuRef.current?.contains(target))
       ) {
         return
       }
       setIsServerOpen(false)
       setIsStatusOpen(false)
+      setOpenApplicationMenu(null)
     }
     document.addEventListener("pointerdown", closeOnOutsidePointer)
     return () => document.removeEventListener("pointerdown", closeOnOutsidePointer)
-  }, [isServerOpen, isStatusOpen])
+  }, [isServerOpen, isStatusOpen, openApplicationMenu])
 
   useEffect(() => {
     let cancelled = false
@@ -439,6 +442,19 @@ function DesktopTitleBar({
     await window.veloceDesktop?.installPreparedDesktopUpdate()
   }
 
+  const runMenuAction = (action: "new-window" | "quit" | "close-window" | "copy" | "paste" | "cut" | "delete" | "undo" | "redo" | "official-site" | "github" | "home") => {
+    setOpenApplicationMenu(null)
+    if (action === "home") {
+      window.location.hash = "#/chat"
+      return
+    }
+    if (action === "official-site" || action === "github") {
+      void window.veloceDesktop?.openDesktopLink(action)
+      return
+    }
+    void window.veloceDesktop?.runDesktopMenuAction(action)
+  }
+
   return (
     <>
     <div className="fixed inset-x-0 top-0 z-50 h-9 select-none border-b bg-background/95 backdrop-blur [-webkit-app-region:drag]">
@@ -446,6 +462,26 @@ function DesktopTitleBar({
         <div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold">
           <img src={logoURL} alt="" className="h-5 w-5 rounded object-cover" />
           <span className="shrink-0 truncate">{copy.title}</span>
+          <div ref={applicationMenuRef} className="ml-2 flex h-full items-center gap-1 [-webkit-app-region:no-drag]">
+            <DesktopMenu label={copy.file} open={openApplicationMenu === "file"} onOpenChange={() => setOpenApplicationMenu((current) => current === "file" ? null : "file")} items={[
+              { label: copy.newWindow, action: () => runMenuAction("new-window") },
+              { label: copy.closeWindow, action: () => runMenuAction("close-window") },
+              { label: copy.home, action: () => runMenuAction("home") },
+              { label: copy.quit, action: () => runMenuAction("quit") },
+            ]} />
+            <DesktopMenu label={copy.edit} open={openApplicationMenu === "edit"} onOpenChange={() => setOpenApplicationMenu((current) => current === "edit" ? null : "edit")} items={[
+              { label: copy.copyText, action: () => runMenuAction("copy") },
+              { label: copy.paste, action: () => runMenuAction("paste") },
+              { label: copy.cut, action: () => runMenuAction("cut") },
+              { label: copy.deleteText, action: () => runMenuAction("delete") },
+              { label: copy.undo, action: () => runMenuAction("undo") },
+              { label: copy.redo, action: () => runMenuAction("redo") },
+            ]} />
+            <DesktopMenu label={copy.help} open={openApplicationMenu === "help"} onOpenChange={() => setOpenApplicationMenu((current) => current === "help" ? null : "help")} items={[
+              { label: copy.officialSite, action: () => runMenuAction("official-site") },
+              { label: copy.github, action: () => runMenuAction("github") },
+            ]} />
+          </div>
           {showTabs && <div className="ml-1 flex min-w-0 max-w-[55vw] items-center gap-1 overflow-hidden [-webkit-app-region:no-drag]">
             {tabs.map((tab) => {
               const active = tab.id === activeTabID
@@ -669,6 +705,44 @@ function DesktopTitleBar({
       />
     )}
     </>
+  )
+}
+
+function DesktopMenu({
+  label,
+  open,
+  onOpenChange,
+  items,
+}: {
+  label: string
+  open: boolean
+  onOpenChange: () => void
+  items: Array<{ label: string; action: () => void }>
+}) {
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        className={`h-7 rounded px-2 text-xs font-medium ${open ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+        onClick={onOpenChange}
+      >
+        {label}
+      </button>
+      {open && (
+        <div className="absolute left-0 top-8 z-[70] min-w-32 rounded-md bg-popover p-1 text-popover-foreground shadow-lg">
+          {items.map((item) => (
+            <button
+              key={item.label}
+              type="button"
+              className="flex h-8 w-full items-center rounded px-2 text-left text-xs hover:bg-muted"
+              onClick={item.action}
+            >
+              {item.label}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 

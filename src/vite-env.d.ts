@@ -61,6 +61,8 @@ interface Window {
     chooseDesktopFile: () => Promise<string>
     getDesktopSystemInfo: () => Promise<{ hostname: string; platform: string }>
     openInVSCode: (workspacePath: string) => Promise<{ ok: boolean; message: string }>
+    runDesktopMenuAction: (action: "new-window" | "quit" | "close-window" | "copy" | "paste" | "cut" | "delete" | "undo" | "redo") => Promise<{ ok: boolean }>
+    openDesktopLink: (target: "official-site" | "github") => Promise<{ ok: boolean }>
     checkDesktopUpdate: () => Promise<DesktopUpdateResult>
     installPreparedDesktopUpdate: () => Promise<{ ok: boolean; message: string }>
     getDesktopTabInitialState: () => Promise<{ windowID: number; tab: DesktopTabState | null }>
