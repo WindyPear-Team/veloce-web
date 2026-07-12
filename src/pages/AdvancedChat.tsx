@@ -89,7 +89,7 @@ export default function AdvancedChat() {
     if (!isDesktopTarget()) {
       return
     }
-    window.parent?.postMessage({ type: "veloce-desktop-tab-title", title: desktopPageTitle(location.pathname, language) }, "*")
+    window.parent?.postMessage({ type: "veloce-desktop-tab-title", title: desktopPageTitle(location.pathname, language), path: location.pathname }, "*")
   }, [language, location.pathname])
 
   if (isSettingsLoading) {

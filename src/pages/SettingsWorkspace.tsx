@@ -44,7 +44,7 @@ export default function SettingsWorkspace() {
 
   useEffect(() => {
     if (isDesktopTarget()) {
-      window.parent?.postMessage({ type: "veloce-desktop-tab-title", title: desktopSettingsTitle(location.pathname, language) }, "*")
+      window.parent?.postMessage({ type: "veloce-desktop-tab-title", title: desktopSettingsTitle(location.pathname, language), path: location.pathname }, "*")
     }
   }, [language, location.pathname])
 

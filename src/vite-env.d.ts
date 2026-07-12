@@ -44,6 +44,13 @@ interface DesktopUpdateResult {
   filePath?: string
 }
 
+interface DesktopTabState {
+  id: string
+  title: string
+  serverURL: string
+  path: string
+}
+
 interface Window {
   veloceDesktop?: {
     getBuiltinServerStatus: () => Promise<BuiltinServerStatus>
@@ -56,6 +63,8 @@ interface Window {
     openInVSCode: (workspacePath: string) => Promise<{ ok: boolean; message: string }>
     checkDesktopUpdate: () => Promise<DesktopUpdateResult>
     installPreparedDesktopUpdate: () => Promise<{ ok: boolean; message: string }>
+    getDesktopTabInitialState: () => Promise<{ windowID: number; tab: DesktopTabState | null }>
+    detachDesktopTab: (input: DesktopTabState & { screenX: number; screenY: number }) => Promise<{ moved: boolean; targetWindowID?: number }>
     setBuiltinServerEnabled: (enabled: boolean) => Promise<BuiltinServerStatus>
     startConnector: (input: {
       serverURL: string
@@ -65,5 +74,6 @@ interface Window {
     }) => Promise<{ ok: boolean; message: string; version: string }>
     onBuiltinServerStatus: (callback: (status: BuiltinServerStatus) => void) => () => void
     onDesktopProcessStatus: (callback: (status: DesktopProcessStatus) => void) => () => void
+    onDesktopTabReceived: (callback: (tab: DesktopTabState) => void) => () => void
   }
 }

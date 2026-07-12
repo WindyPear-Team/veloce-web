@@ -33,6 +33,7 @@ interface DesktopTab {
   id: string
   title: string
   serverURL: string
+  path: string
 }
 
 interface BuiltinServerStatus {
@@ -100,6 +101,7 @@ function newDesktopTab(serverURL = getDesktopServerURL()): DesktopTab {
     id: `tab_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`,
     title: "Chat",
     serverURL: normalizeServerURL(serverURL),
+    path: "/chat",
   }
 }
 
@@ -121,6 +123,7 @@ function readDesktopTabs(): DesktopTab[] {
             id,
             title: typeof raw.title === "string" && raw.title.trim() ? raw.title.trim().slice(0, 40) : "Chat",
             serverURL: normalizeServerURL(typeof raw.serverURL === "string" ? raw.serverURL : getDesktopServerURL()),
+            path: normalizeDesktopTabPath(raw.path),
           }
         })
         .filter((item): item is DesktopTab => Boolean(item))
@@ -138,6 +141,10 @@ function writeDesktopTabs(tabs: DesktopTab[]) {
 function readActiveDesktopTabID(tabs: DesktopTab[]) {
   const stored = localStorage.getItem(desktopActiveTabStorageKey) || ""
   return tabs.some((tab) => tab.id === stored) ? stored : tabs[0]?.id || ""
+}
+
+function normalizeDesktopTabPath(value: unknown) {
+  return typeof value === "string" && value.startsWith("/") ? value.slice(0, 1024) : "/chat"
 }
 
 function TokenBridge() {
@@ -220,6 +227,8 @@ function DesktopTitleBar({
   onSelectTab,
   onAddTab,
   onCloseTab,
+  onMoveTab,
+  onDetachTab,
   onUpdateTabServer,
 }: {
   tabs: DesktopTab[]
@@ -227,6 +236,8 @@ function DesktopTitleBar({
   onSelectTab: (tabID: string) => void
   onAddTab: () => void
   onCloseTab: (tabID: string) => void
+  onMoveTab: (tabID: string, targetTabID: string) => void
+  onDetachTab: (tabID: string, screenX: number, screenY: number) => void
   onUpdateTabServer: (tabID: string, serverURL: string) => void
 }) {
   const { language } = useI18n()
@@ -245,6 +256,8 @@ function DesktopTitleBar({
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
+  const draggingTabID = useRef("")
+  const droppedInStrip = useRef(false)
   const activeTab = tabs.find((tab) => tab.id === activeTabID) || tabs[0]
   const currentServer = normalizeServerURL(activeTab?.serverURL || getDesktopServerURL())
   const copy = language === "zh"
@@ -438,8 +451,38 @@ function DesktopTitleBar({
                 <button
                   key={tab.id}
                   type="button"
+                  draggable
                   className={`flex min-w-0 max-w-44 items-center gap-1 border px-2 text-left text-[11px] ${active ? "h-8 self-end rounded-t-md rounded-b-none border-border border-b-background bg-background text-foreground shadow-sm" : "h-7 rounded-md border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   onClick={() => onSelectTab(tab.id)}
+                  onDragStart={(event) => {
+                    draggingTabID.current = tab.id
+                    droppedInStrip.current = false
+                    event.dataTransfer.effectAllowed = "move"
+                    event.dataTransfer.setData("text/plain", tab.id)
+                  }}
+                  onDragOver={(event) => {
+                    const draggedID = draggingTabID.current
+                    if (!draggedID || draggedID === tab.id) {
+                      return
+                    }
+                    event.preventDefault()
+                    onMoveTab(draggedID, tab.id)
+                  }}
+                  onDrop={(event) => {
+                    event.preventDefault()
+                    droppedInStrip.current = true
+                    if (draggingTabID.current) {
+                      onSelectTab(draggingTabID.current)
+                    }
+                  }}
+                  onDragEnd={(event) => {
+                    const draggedID = draggingTabID.current
+                    draggingTabID.current = ""
+                    if (draggedID && !droppedInStrip.current) {
+                      onDetachTab(draggedID, event.screenX, event.screenY)
+                    }
+                    droppedInStrip.current = false
+                  }}
                   title={`${tab.title} · ${tab.serverURL}`}
                 >
                   <span className="truncate">{tab.title}</span>
@@ -880,23 +923,45 @@ function mirrorDesktopBridge() {
 
 function DesktopTabbedShell() {
   const queryClient = useQueryClient()
-  const initialTabsRef = useRef<DesktopTab[] | null>(null)
-  if (!initialTabsRef.current) {
-    initialTabsRef.current = readDesktopTabs()
-  }
-  const [tabs, setTabs] = useState<DesktopTab[]>(() => initialTabsRef.current || [newDesktopTab()])
-  const [activeTabID, setActiveTabID] = useState(() => readActiveDesktopTabID(initialTabsRef.current || []))
+  const [tabs, setTabs] = useState<DesktopTab[]>([])
+  const [activeTabID, setActiveTabID] = useState("")
+  const [isReady, setIsReady] = useState(false)
+  const [isDetachedWindow, setIsDetachedWindow] = useState(false)
 
   useEffect(() => {
-    writeDesktopTabs(tabs)
+    let cancelled = false
+    void window.veloceDesktop?.getDesktopTabInitialState().then((state) => {
+      if (cancelled) {
+        return
+      }
+      const initialTabs = state?.tab ? [state.tab] : readDesktopTabs()
+      setTabs(initialTabs)
+      setActiveTabID(readActiveDesktopTabID(initialTabs))
+      setIsDetachedWindow(Boolean(state?.tab))
+      setIsReady(true)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isReady) {
+      return
+    }
+    if (!isDetachedWindow) {
+      writeDesktopTabs(tabs)
+    }
     for (const tab of tabs) {
       setDesktopTabServerURL(tab.id, tab.serverURL)
     }
     if (!tabs.some((tab) => tab.id === activeTabID) && tabs[0]) {
       setActiveTabID(tabs[0].id)
-      localStorage.setItem(desktopActiveTabStorageKey, tabs[0].id)
+      if (!isDetachedWindow) {
+        localStorage.setItem(desktopActiveTabStorageKey, tabs[0].id)
+      }
     }
-  }, [activeTabID, tabs])
+  }, [activeTabID, isDetachedWindow, isReady, tabs])
 
   useEffect(() => {
     const activeTab = tabs.find((tab) => tab.id === activeTabID)
@@ -918,10 +983,18 @@ function DesktopTabbedShell() {
         return
       }
       const title = typeof data.title === "string" && data.title.trim() ? data.title.trim().slice(0, 40) : "Chat"
-      setTabs((current) => current.map((tab) => tab.id === tabID ? { ...tab, title } : tab))
+      const pagePath = normalizeDesktopTabPath(data.path)
+      setTabs((current) => current.map((tab) => tab.id === tabID ? { ...tab, title, path: pagePath } : tab))
     }
     window.addEventListener("message", handleMessage)
     return () => window.removeEventListener("message", handleMessage)
+  }, [])
+
+  useEffect(() => {
+    return window.veloceDesktop?.onDesktopTabReceived((tab) => {
+      setTabs((current) => current.some((item) => item.id === tab.id) ? current : [...current, tab])
+      setActiveTabID(tab.id)
+    })
   }, [])
 
   const selectTab = (tabID: string) => {
@@ -931,7 +1004,9 @@ function DesktopTabbedShell() {
       queryClient.clear()
     }
     setActiveTabID(tabID)
-    localStorage.setItem(desktopActiveTabStorageKey, tabID)
+    if (!isDetachedWindow) {
+      localStorage.setItem(desktopActiveTabStorageKey, tabID)
+    }
   }
 
   const addTab = () => {
@@ -951,7 +1026,9 @@ function DesktopTabbedShell() {
         const fallback = next[Math.max(0, current.findIndex((tab) => tab.id === tabID) - 1)] || next[0]
         if (fallback) {
           setActiveTabID(fallback.id)
-          localStorage.setItem(desktopActiveTabStorageKey, fallback.id)
+          if (!isDetachedWindow) {
+            localStorage.setItem(desktopActiveTabStorageKey, fallback.id)
+          }
         }
       }
       return next
@@ -968,6 +1045,47 @@ function DesktopTabbedShell() {
     setTabs((current) => current.map((tab) => tab.id === tabID ? { ...tab, serverURL: nextURL } : tab))
   }
 
+  const moveTab = (tabID: string, targetTabID: string) => {
+    setTabs((current) => {
+      const sourceIndex = current.findIndex((tab) => tab.id === tabID)
+      const targetIndex = current.findIndex((tab) => tab.id === targetTabID)
+      if (sourceIndex < 0 || targetIndex < 0 || sourceIndex === targetIndex) {
+        return current
+      }
+      const next = [...current]
+      const [tab] = next.splice(sourceIndex, 1)
+      next.splice(targetIndex, 0, tab)
+      return next
+    })
+  }
+
+  const detachTab = async (tabID: string, screenX: number, screenY: number) => {
+    const tab = tabs.find((item) => item.id === tabID)
+    if (!tab || !window.veloceDesktop) {
+      return
+    }
+    const result = await window.veloceDesktop.detachDesktopTab({ ...tab, screenX, screenY })
+    if (!result.moved) {
+      return
+    }
+    setTabs((current) => {
+      const next = current.filter((item) => item.id !== tabID)
+      if (next.length > 0) {
+        return next
+      }
+      const replacement = newDesktopTab(tab.serverURL)
+      setActiveTabID(replacement.id)
+      return [replacement]
+    })
+    if (activeTabID === tabID) {
+      setActiveTabID((current) => current === tabID ? "" : current)
+    }
+  }
+
+  if (!isReady) {
+    return <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">Loading...</div>
+  }
+
   return (
     <>
       <DesktopTitleBar
@@ -976,6 +1094,8 @@ function DesktopTabbedShell() {
         onSelectTab={selectTab}
         onAddTab={addTab}
         onCloseTab={closeTab}
+        onMoveTab={moveTab}
+        onDetachTab={detachTab}
         onUpdateTabServer={updateTabServer}
       />
       <div className="fixed inset-x-0 bottom-0 top-9 overflow-hidden bg-background">
@@ -984,7 +1104,7 @@ function DesktopTabbedShell() {
             key={`${tab.id}:${tab.serverURL}`}
             title={tab.title}
             data-tab-id={tab.id}
-            src={`./index.html?desktop_tab_id=${encodeURIComponent(tab.id)}#/chat`}
+            src={`./index.html?desktop_tab_id=${encodeURIComponent(tab.id)}#${tab.path}`}
             className={`h-full w-full border-0 ${tab.id === activeTabID ? "block" : "hidden"}`}
           />
         ))}
