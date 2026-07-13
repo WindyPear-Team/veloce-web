@@ -200,6 +200,8 @@ interface ConnectorDevice {
   os?: string
   arch?: string
   version?: string
+  kind?: "cli" | "desktop" | string
+  desktop_instance_id?: string
   status: string
   online: boolean
   last_seen_at?: string
@@ -456,7 +458,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(storeKeys.apiKey) || 0))
   const [selectedUserChannelID, setSelectedUserChannelID] = useState(() => Number(localStorage.getItem(storeKeys.userChannel) || 0))
   const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
-  const [desktopHostname, setDesktopHostname] = useState("")
+  const [desktopInstanceID, setDesktopInstanceID] = useState("")
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isAgentWorkOpen, setIsAgentWorkOpen] = useState(false)
   const [selectedWorkAgentID, setSelectedWorkAgentID] = useState("")
@@ -790,9 +792,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const currentConnectorDevice = connectorDevices.find((device) => device.id === currentConnectorDeviceID)
   const isCurrentConnectorLocal = Boolean(
     isDesktop &&
-    desktopHostname &&
-    currentConnectorDevice?.hostname &&
-    desktopHostname.trim().toLowerCase() === currentConnectorDevice.hostname.trim().toLowerCase()
+    currentConnectorDevice?.kind === "desktop" &&
+    desktopInstanceID &&
+    currentConnectorDevice.desktop_instance_id === desktopInstanceID
   )
   const canOpenWorkspaceInVSCode = Boolean(isAdvanced && isCurrentConnectorLocal && currentSession?.connector_workspace_path)
   useEffect(() => {
@@ -800,8 +802,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       return
     }
     void window.veloceDesktop.getDesktopSystemInfo()
-      .then((info) => setDesktopHostname(info.hostname.trim()))
-      .catch(() => setDesktopHostname(""))
+      .then((info) => setDesktopInstanceID(info.instanceID.trim()))
+      .catch(() => setDesktopInstanceID(""))
   }, [isDesktop])
   const workspacePickerDevice = connectorDevices.find((device) => device.id === workspacePickerDeviceID)
   const workspaceDirectoriesQuery = useQuery<WorkspaceDirectories>({
@@ -5562,6 +5564,8 @@ function normalizeConnectorDevice(value: unknown): ConnectorDevice | null {
     os: stringFromUnknown(value.os) || undefined,
     arch: stringFromUnknown(value.arch) || undefined,
     version: stringFromUnknown(value.version) || undefined,
+    kind: stringFromUnknown(value.kind) || "cli",
+    desktop_instance_id: stringFromUnknown(value.desktop_instance_id) || undefined,
     status: stringFromUnknown(value.status) || "offline",
     online: value.online === true,
     last_seen_at: stringFromUnknown(value.last_seen_at) || undefined,

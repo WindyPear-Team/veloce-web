@@ -59,7 +59,7 @@ interface Window {
     getDesktopSettings: () => Promise<DesktopSettings>
     saveDesktopSettings: (settings: DesktopSettings) => Promise<DesktopSettings>
     chooseDesktopFile: () => Promise<string>
-    getDesktopSystemInfo: () => Promise<{ hostname: string; platform: string }>
+    getDesktopSystemInfo: () => Promise<{ hostname: string; platform: string; instanceID: string }>
     openInVSCode: (workspacePath: string) => Promise<{ ok: boolean; message: string }>
     runDesktopMenuAction: (action: "new-window" | "quit" | "close-window" | "copy" | "paste" | "cut" | "delete" | "undo" | "redo") => Promise<{ ok: boolean }>
     openDesktopLink: (target: "official-site" | "github") => Promise<{ ok: boolean }>
@@ -74,6 +74,7 @@ interface Window {
       mode: "platform" | "web_server"
       webPort?: number
     }) => Promise<{ ok: boolean; message: string; version: string }>
+    ensureDesktopConnector: (input: { serverURL: string; authToken: string }) => Promise<{ ok: boolean; message: string; version: string }>
     onBuiltinServerStatus: (callback: (status: BuiltinServerStatus) => void) => () => void
     onDesktopProcessStatus: (callback: (status: DesktopProcessStatus) => void) => () => void
     onDesktopTabReceived: (callback: (tab: DesktopTabState) => void) => () => void

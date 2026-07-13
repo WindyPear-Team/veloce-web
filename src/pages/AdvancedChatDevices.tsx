@@ -21,6 +21,8 @@ interface ConnectorDevice {
   os?: string
   arch?: string
   version?: string
+  kind?: "cli" | "desktop" | string
+  desktop_instance_id?: string
   mode: string
   listen_port?: number
   status: string
@@ -423,12 +425,12 @@ export default function AdvancedChatDevices() {
                         </span>
                       </div>
                       <div className="mt-1 truncate text-xs text-muted-foreground">
-                        {[device.hostname, device.os, device.arch, device.version, device.mode === "web_server" ? `web:${device.listen_port || 8080}` : "platform"].filter(Boolean).join(" / ") || "-"}
+                        {[device.kind === "desktop" ? (language === "zh" ? "桌面端设备" : "Desktop device") : (language === "zh" ? "CLI 设备" : "CLI device"), device.hostname, device.os, device.arch, device.version, device.mode === "web_server" ? `web:${device.listen_port || 8080}` : "platform"].filter(Boolean).join(" / ") || "-"}
                       </div>
                       <div className="mt-1 text-xs text-muted-foreground">{copy.lastSeen}: {formatDateTime(device.last_seen_at) || "-"}</div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end" onClick={(event) => event.stopPropagation()}>
-                      {window.veloceDesktop && (
+                      {window.veloceDesktop && device.kind !== "desktop" && (
                         <Button
                           size="sm"
                           className="h-8 gap-2"
@@ -439,18 +441,20 @@ export default function AdvancedChatDevices() {
                           {connectingDeviceID === device.id ? copy.connecting : copy.connectNow}
                         </Button>
                       )}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="h-8 gap-2"
-                        onClick={() => regenerateDeviceCommand(device)}
-                        disabled={Boolean(generatingDeviceID) || deletingDeviceID === device.id}
-                        aria-label={copy.regenerateCommand}
-                        title={copy.regenerateCommand}
-                      >
-                        <KeyRound size={15} />
-                        {generatingDeviceID === device.id ? copy.regeneratingCommand : copy.regenerateCommand}
-                      </Button>
+                      {device.kind !== "desktop" && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="h-8 gap-2"
+                          onClick={() => regenerateDeviceCommand(device)}
+                          disabled={Boolean(generatingDeviceID) || deletingDeviceID === device.id}
+                          aria-label={copy.regenerateCommand}
+                          title={copy.regenerateCommand}
+                        >
+                          <KeyRound size={15} />
+                          {generatingDeviceID === device.id ? copy.regeneratingCommand : copy.regenerateCommand}
+                        </Button>
+                      )}
                       <Button
                         variant="outline"
                         size="icon"
@@ -785,6 +789,8 @@ function normalizeDevice(value: unknown): ConnectorDevice | null {
     os: stringFromUnknown(value.os) || undefined,
     arch: stringFromUnknown(value.arch) || undefined,
     version: stringFromUnknown(value.version) || undefined,
+    kind: stringFromUnknown(value.kind) || "cli",
+    desktop_instance_id: stringFromUnknown(value.desktop_instance_id) || undefined,
     mode: normalizeDeviceMode(value.mode),
     listen_port: typeof value.listen_port === "number" ? value.listen_port : undefined,
     status: stringFromUnknown(value.status) || "offline",

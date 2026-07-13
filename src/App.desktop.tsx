@@ -746,6 +746,25 @@ function DesktopMenu({
   )
 }
 
+// Every open desktop tab owns a server context. Once it has a valid login,
+// ask the main process to keep that server's local desktop connector online.
+function DesktopConnectorBridge() {
+  const location = useLocation()
+
+  useEffect(() => {
+    const authToken = getAuthToken()
+    if (!authToken || !window.veloceDesktop?.ensureDesktopConnector) {
+      return
+    }
+    void window.veloceDesktop.ensureDesktopConnector({
+      serverURL: getDesktopServerURL(),
+      authToken,
+    })
+  }, [location.key])
+
+  return null
+}
+
 function DesktopSettingsModal({
   copy,
   settings,
@@ -964,6 +983,7 @@ function DesktopPageRoutes({ className }: { className: string }) {
   return (
     <HashRouter>
       <TokenBridge />
+      <DesktopConnectorBridge />
       <DocumentTitle />
       <div className={className}>
         <SetupGate>
