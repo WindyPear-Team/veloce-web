@@ -65,6 +65,8 @@ interface Window {
     runDesktopMenuAction: (action: "new-window" | "quit" | "close-window" | "copy" | "paste" | "cut" | "delete" | "undo" | "redo") => Promise<{ ok: boolean }>
     openDesktopLink: (target: "official-site" | "github") => Promise<{ ok: boolean }>
     openExternalURL: (url: string) => Promise<{ ok: boolean }>
+    openDesktopBrowser: (url?: string) => Promise<{ ok: boolean }>
+    onBrowserAskPage: (callback: (page: { title?: string; url?: string }) => void) => () => void
     checkDesktopUpdate: () => Promise<DesktopUpdateResult>
     installPreparedDesktopUpdate: () => Promise<{ ok: boolean; message: string }>
     getDesktopTabInitialState: () => Promise<{ windowID: number; tab: DesktopTabState | null }>

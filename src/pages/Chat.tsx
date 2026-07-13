@@ -1263,6 +1263,42 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
+  const startBrowserPageConversation = (title: string, url: string) => {
+    const pageURL = url.trim()
+    if (!pageURL) {
+      return
+    }
+    const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
+    const session = createSession({
+      agentID: defaultAgent?.id,
+      modelName: isAdvanced ? modelName || defaultAgent?.default_model || modelOptions[0] || "" : undefined,
+    })
+    setDraftSession(session)
+    setActiveSessionID("")
+    setIsSessionsSidebarOpen(false)
+    setPrompt(language === "zh"
+      ? `请帮我阅读并回答这个页面：${title.trim() || pageURL}\n${pageURL}\n`
+      : `Please read and answer questions about this page: ${title.trim() || pageURL}\n${pageURL}\n`)
+    setAttachments([])
+    cancelEdit()
+    if (isAdvanced && location.pathname !== "/chat") {
+      navigate("/chat")
+    }
+    window.setTimeout(() => composerTextareaRef.current?.focus(), 0)
+  }
+
+  useEffect(() => {
+    const receiveBrowserPage = (event: MessageEvent) => {
+      const data = event.data
+      if (!data || typeof data !== "object" || data.type !== "veloce-browser-ask-page") {
+        return
+      }
+      startBrowserPageConversation(typeof data.title === "string" ? data.title : "", typeof data.url === "string" ? data.url : "")
+    }
+    window.addEventListener("message", receiveBrowserPage)
+    return () => window.removeEventListener("message", receiveBrowserPage)
+  }, [agents, isAdvanced, language, location.pathname, modelName, modelOptions])
+
   const chooseWelcomeSuggestion = (promptText: string) => {
     setPrompt(promptText)
     window.setTimeout(() => composerTextareaRef.current?.focus(), 0)
@@ -2392,8 +2428,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         : `https://www.baidu.com/s?wd=${query}`
     setMessageSelectionMenu(null)
     setIsMessageSelectionSearchOpen(false)
-    if (isDesktop && window.veloceDesktop?.openExternalURL) {
-      await window.veloceDesktop.openExternalURL(url)
+    if (isDesktop && window.veloceDesktop?.openDesktopBrowser) {
+      await window.veloceDesktop.openDesktopBrowser(url)
       return
     }
     window.open(url, "_blank", "noopener,noreferrer")
@@ -4451,6 +4487,7 @@ type MarkdownBlock =
   | { type: "quote"; lines: string[] }
   | { type: "ul" | "ol"; items: string[] }
   | { type: "code"; language: string; text: string }
+  | { type: "table"; headers: string[]; alignments: Array<"left" | "center" | "right">; rows: string[][] }
   | { type: "hr" }
 
 function MarkdownContent({ content }: { content: string }) {
@@ -5249,6 +5286,25 @@ function parseMarkdownBlocks(content: string): MarkdownBlock[] {
       continue
     }
 
+    const headerCells = parseMarkdownTableRow(line)
+    const separatorCells = index + 1 < lines.length ? parseMarkdownTableRow(lines[index + 1]) : null
+    if (headerCells && separatorCells && headerCells.length > 0 && headerCells.length === separatorCells.length && markdownTableSeparator(separatorCells)) {
+      flushParagraph()
+      const alignments = separatorCells.slice(0, headerCells.length).map(markdownTableAlignment)
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length) {
+        const row = parseMarkdownTableRow(lines[index])
+        if (!row) {
+          break
+        }
+        rows.push(Array.from({ length: headerCells.length }, (_, cellIndex) => row[cellIndex] || ""))
+        index += 1
+      }
+      blocks.push({ type: "table", headers: headerCells, alignments, rows })
+      continue
+    }
+
     const unordered = line.match(/^\s*[-*+]\s+(.+)$/)
     if (unordered) {
       flushParagraph()
@@ -5350,6 +5406,33 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number) {
           </pre>
         </div>
       )
+    case "table":
+      return (
+        <div key={index} className="max-w-full overflow-x-auto rounded-md border">
+          <table className="min-w-full border-collapse text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                {block.headers.map((header, cellIndex) => (
+                  <th key={cellIndex} className={cn("border-b px-3 py-2 font-medium", markdownTableAlignmentClass(block.alignments[cellIndex]))}>
+                    {renderInlineMarkdown(header, `th-${index}-${cellIndex}`)}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {block.rows.map((row, rowIndex) => (
+                <tr key={rowIndex} className="border-b last:border-b-0 hover:bg-muted/30">
+                  {row.map((cell, cellIndex) => (
+                    <td key={cellIndex} className={cn("px-3 py-2 align-top", markdownTableAlignmentClass(block.alignments[cellIndex]))}>
+                      {renderInlineMarkdown(cell, `td-${index}-${rowIndex}-${cellIndex}`)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )
     case "hr":
       return <hr key={index} className="border-border" />
     default:
@@ -5364,6 +5447,60 @@ function renderMarkdownBlock(block: MarkdownBlock, index: number) {
         </p>
       )
   }
+}
+
+function parseMarkdownTableRow(line: string) {
+  if (!line.includes("|")) {
+    return null
+  }
+  let source = line.trim()
+  if (source.startsWith("|")) {
+    source = source.slice(1)
+  }
+  if (source.endsWith("|") && !source.endsWith("\\|")) {
+    source = source.slice(0, -1)
+  }
+  const cells: string[] = []
+  let cell = ""
+  let escaped = false
+  for (const character of source) {
+    if (escaped) {
+      cell += character
+      escaped = false
+      continue
+    }
+    if (character === "\\") {
+      escaped = true
+      continue
+    }
+    if (character === "|") {
+      cells.push(cell.trim())
+      cell = ""
+      continue
+    }
+    cell += character
+  }
+  if (escaped) {
+    cell += "\\"
+  }
+  cells.push(cell.trim())
+  return cells.length > 1 ? cells : null
+}
+
+function markdownTableSeparator(cells: string[]) {
+  return cells.length > 0 && cells.every((cell) => /^:?-{3,}:?$/.test(cell.trim()))
+}
+
+function markdownTableAlignment(cell: string): "left" | "center" | "right" {
+  const value = cell.trim()
+  if (value.startsWith(":") && value.endsWith(":")) {
+    return "center"
+  }
+  return value.endsWith(":") ? "right" : "left"
+}
+
+function markdownTableAlignmentClass(alignment?: "left" | "center" | "right") {
+  return alignment === "center" ? "text-center" : alignment === "right" ? "text-right" : "text-left"
 }
 
 function renderInlineMarkdown(text: string, keyPrefix: string): ReactNode[] {
