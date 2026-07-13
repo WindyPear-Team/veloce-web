@@ -59,10 +59,12 @@ interface Window {
     getDesktopSettings: () => Promise<DesktopSettings>
     saveDesktopSettings: (settings: DesktopSettings) => Promise<DesktopSettings>
     chooseDesktopFile: () => Promise<string>
+    chooseDesktopFolder: (initialPath?: string) => Promise<string>
     getDesktopSystemInfo: () => Promise<{ hostname: string; platform: string; instanceID: string }>
     openInVSCode: (workspacePath: string) => Promise<{ ok: boolean; message: string }>
     runDesktopMenuAction: (action: "new-window" | "quit" | "close-window" | "copy" | "paste" | "cut" | "delete" | "undo" | "redo") => Promise<{ ok: boolean }>
     openDesktopLink: (target: "official-site" | "github") => Promise<{ ok: boolean }>
+    openExternalURL: (url: string) => Promise<{ ok: boolean }>
     checkDesktopUpdate: () => Promise<DesktopUpdateResult>
     installPreparedDesktopUpdate: () => Promise<{ ok: boolean; message: string }>
     getDesktopTabInitialState: () => Promise<{ windowID: number; tab: DesktopTabState | null }>

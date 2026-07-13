@@ -219,34 +219,6 @@ export default function AdvancedChatDevices() {
     })
   }
 
-  const regenerateAndConnectDevice = async (device: ConnectorDevice) => {
-    setGeneratingDeviceID(device.id)
-    setConnectingDeviceID(device.id)
-    try {
-      const res = await api.post(`/user/advanced-chat/devices/${encodeURIComponent(device.id)}/token`)
-      const nextToken = typeof res.data?.token === "string" ? res.data.token : ""
-      if (!nextToken) {
-        throw new Error(copy.regenerateFailed)
-      }
-      const nextMode = normalizeDeviceMode(device.mode)
-      setDeviceName(device.name)
-      setDeviceMode(nextMode)
-      setListenPort(nextMode === "web_server" ? device.listen_port || 8080 : 8080)
-      setToken(nextToken)
-      await connectToken({
-        connectionToken: nextToken,
-        mode: nextMode,
-        port: nextMode === "web_server" ? device.listen_port || 8080 : 8080,
-        deviceID: device.id,
-      })
-    } catch (err) {
-      error(apiErrorMessage(err, copy.connectFailed))
-    } finally {
-      setGeneratingDeviceID("")
-      setConnectingDeviceID("")
-    }
-  }
-
   const deleteDevice = async (device: ConnectorDevice) => {
     if (!window.confirm(copy.deleteConfirm.replace("{name}", device.name))) {
       return
@@ -430,17 +402,6 @@ export default function AdvancedChatDevices() {
                       <div className="mt-1 text-xs text-muted-foreground">{copy.lastSeen}: {formatDateTime(device.last_seen_at) || "-"}</div>
                     </div>
                     <div className="flex flex-wrap gap-2 lg:justify-end" onClick={(event) => event.stopPropagation()}>
-                      {window.veloceDesktop && device.kind !== "desktop" && (
-                        <Button
-                          size="sm"
-                          className="h-8 gap-2"
-                          onClick={() => regenerateAndConnectDevice(device)}
-                          disabled={Boolean(connectingDeviceID) || Boolean(generatingDeviceID) || deletingDeviceID === device.id}
-                        >
-                          <Play size={15} />
-                          {connectingDeviceID === device.id ? copy.connecting : copy.connectNow}
-                        </Button>
-                      )}
                       {device.kind !== "desktop" && (
                         <Button
                           variant="outline"

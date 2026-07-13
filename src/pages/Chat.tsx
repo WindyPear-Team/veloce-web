@@ -1,9 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from "react"
-import type { ChangeEvent, KeyboardEvent, ReactNode } from "react"
+import type { ChangeEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, Quote, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -342,7 +342,7 @@ type ChatRunMode = "chat" | "assistant" | "agent_group"
 type ConnectorApprovalMode = "manual" | "full_access" | "assistant"
 type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "mcp" | "device"
 type AttachmentTarget = "composer" | "editor"
-type ComposerControlMenu = "" | "mode" | "model" | "device" | "workspace" | "agent_group" | "approval"
+type ComposerControlMenu = "" | "mode" | "model" | "device" | "workspace" | "agent" | "agent_group" | "approval"
 type WorkspacePickerTarget = "session" | "pending"
 
 interface ChatProps {
@@ -505,6 +505,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [composerModelSubmenu, setComposerModelSubmenu] = useState<"" | "model" | "reasoning">("")
   const [sessionMenu, setSessionMenu] = useState<{ sessionID: string; x: number; y: number } | null>(null)
   const [sessionFolderContextMenu, setSessionFolderContextMenu] = useState<{ x: number; y: number } | null>(null)
+  const [messageSelectionMenu, setMessageSelectionMenu] = useState<{ text: string; x: number; y: number } | null>(null)
+  const [isMessageSelectionSearchOpen, setIsMessageSelectionSearchOpen] = useState(false)
   const [regeneratingTitleSessionID, setRegeneratingTitleSessionID] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isStreamActive, setIsStreamActive] = useState(false)
@@ -641,6 +643,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const currentSession = currentSessionRaw ? normalizeRuntimeSession(currentSessionRaw) : undefined
   const currentMessages = currentSession?.messages || []
   const latestMessage = currentMessages[currentMessages.length - 1]
+  const welcomeSuggestions = useMemo(
+    () => welcomeSuggestionsFor(language, currentSession?.id || draftSession.id),
+    [currentSession?.id, draftSession.id, language]
+  )
 
   useEffect(() => {
     if (!isDesktopTarget()) {
@@ -790,6 +796,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const selectableConnectorDevices = assistantConnectorToolsEnabled ? connectorDevices : []
   const currentConnectorDeviceID = currentSession?.connector_device_id || ""
   const currentConnectorDevice = connectorDevices.find((device) => device.id === currentConnectorDeviceID)
+  const localDesktopConnectorDevice = useMemo(
+    () => connectorDevices.find((device) => device.kind === "desktop" && Boolean(desktopInstanceID) && device.desktop_instance_id === desktopInstanceID),
+    [connectorDevices, desktopInstanceID]
+  )
   const isCurrentConnectorLocal = Boolean(
     isDesktop &&
     currentConnectorDevice?.kind === "desktop" &&
@@ -915,12 +925,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }, [activeRunMode, configTab])
 
   useEffect(() => {
-    if (!sessionMenu && !sessionFolderContextMenu) {
+    if (!sessionMenu && !sessionFolderContextMenu && !messageSelectionMenu) {
       return
     }
     const close = () => {
       setSessionMenu(null)
       setSessionFolderContextMenu(null)
+      setMessageSelectionMenu(null)
+      setIsMessageSelectionSearchOpen(false)
     }
     window.addEventListener("click", close)
     window.addEventListener("scroll", close, true)
@@ -928,7 +940,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       window.removeEventListener("click", close)
       window.removeEventListener("scroll", close, true)
     }
-  }, [sessionFolderContextMenu, sessionMenu])
+  }, [messageSelectionMenu, sessionFolderContextMenu, sessionMenu])
 
   useEffect(() => {
     if (isAdvanced) {
@@ -1251,6 +1263,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
+  const chooseWelcomeSuggestion = (promptText: string) => {
+    setPrompt(promptText)
+    window.setTimeout(() => composerTextareaRef.current?.focus(), 0)
+  }
+
   const openCurrentWorkspaceInVSCode = async () => {
     const workspacePath = currentSession?.connector_workspace_path || ""
     if (!canOpenWorkspaceInVSCode || !window.veloceDesktop?.openInVSCode) {
@@ -1417,6 +1434,23 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
+  const autoLocalAssistantSessionIDsRef = useRef(new Set<string>())
+
+  useEffect(() => {
+    if (!isAdvanced || !isDesktop || activeRunMode !== "assistant" || !currentSession || !localDesktopConnectorDevice) {
+      return
+    }
+    if (currentSession.connector_device_id === localDesktopConnectorDevice.id || autoLocalAssistantSessionIDsRef.current.has(currentSession.id)) {
+      return
+    }
+    autoLocalAssistantSessionIDsRef.current.add(currentSession.id)
+    updateSession(currentSession.id, (session) => ({
+      ...session,
+      connector_device_id: localDesktopConnectorDevice.id,
+      connector_workspace_path: session.connector_device_id === localDesktopConnectorDevice.id ? session.connector_workspace_path : undefined,
+    }), { persist: true })
+  }, [activeRunMode, currentSession, isAdvanced, isDesktop, localDesktopConnectorDevice])
+
   const selectSession = (sessionID: string) => {
     setSessionMenu(null)
     setActiveSessionID(sessionID)
@@ -1486,13 +1520,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       error(copy.assistantModeDisabled)
       return
     }
+    const localDeviceID = mode === "assistant" && isDesktop ? localDesktopConnectorDevice?.id || "" : ""
+    if (mode === "assistant" && localDeviceID) {
+      autoLocalAssistantSessionIDsRef.current.add(currentSession.id)
+    }
     updateSession(currentSession.id, (session) => ({
       ...session,
       run_mode: mode,
       agent_id: mode === "agent_group" ? undefined : session.agent_id || defaultAgentID,
       agent_group_id: mode === "agent_group" ? session.agent_group_id : undefined,
-      connector_device_id: mode === "chat" ? undefined : session.connector_device_id,
-      connector_workspace_path: mode === "chat" ? undefined : session.connector_workspace_path,
+      connector_device_id: mode === "chat" ? undefined : localDeviceID || session.connector_device_id,
+      connector_workspace_path: mode === "chat" ? undefined : localDeviceID && session.connector_device_id !== localDeviceID ? undefined : session.connector_workspace_path,
       connector_auto_approve: mode === "chat" ? false : session.connector_auto_approve,
       connector_approval_mode: mode === "chat" ? "manual" : connectorApprovalModeFor(session),
       connector_command_prefixes: mode === "chat" ? [] : session.connector_command_prefixes || [],
@@ -1618,7 +1656,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setComposerControlMenu("")
   }
 
-  const openWorkspacePicker = (target: WorkspacePickerTarget = "session") => {
+  const openWorkspacePicker = async (target: WorkspacePickerTarget = "session") => {
     const deviceID = target === "session" ? currentSession?.connector_device_id || "" : pendingConnectorDeviceID
     const device = connectorDevices.find((item) => item.id === deviceID)
     if (!deviceID || !device) {
@@ -1628,6 +1666,23 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     const currentPath = target === "session"
       ? currentSession?.connector_workspace_path || ""
       : pendingConnectorWorkspace.trim()
+    const isCurrentDesktopDevice = isDesktop && device.kind === "desktop" && Boolean(desktopInstanceID) && device.desktop_instance_id === desktopInstanceID
+    if (isCurrentDesktopDevice && window.veloceDesktop?.chooseDesktopFolder) {
+      try {
+        const selectedPath = (await window.veloceDesktop.chooseDesktopFolder(currentPath)).trim()
+        if (!selectedPath) {
+          return
+        }
+        if (target === "pending") {
+          setPendingConnectorWorkspace(selectedPath)
+        } else {
+          setSessionWorkspacePath(selectedPath)
+        }
+      } catch (err) {
+        error(err instanceof Error ? err.message : workspacePickerCopy.title)
+      }
+      return
+    }
     setWorkspacePickerTarget(target)
     setWorkspacePickerDeviceID(deviceID)
     setWorkspacePickerPath(currentPath || (device.os?.toLowerCase() === "windows" ? "" : "/"))
@@ -2284,6 +2339,66 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
+  const handleMessageSelectionContextMenu = (event: ReactMouseEvent<HTMLDivElement>) => {
+    const selection = window.getSelection()
+    const rawText = selection?.toString().replace(/\s+/g, " ").trim() || ""
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null
+    if (!rawText || !range || !messagesViewportRef.current?.contains(range.commonAncestorContainer)) {
+      return
+    }
+    event.preventDefault()
+    setSessionMenu(null)
+    setSessionFolderContextMenu(null)
+    setMessageSelectionMenu({ text: rawText.slice(0, 12000), x: event.clientX, y: event.clientY })
+    setIsMessageSelectionSearchOpen(false)
+  }
+
+  const copySelectedMessageText = async () => {
+    if (!messageSelectionMenu) {
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(messageSelectionMenu.text)
+      success(copy.messageCopied)
+    } catch {
+      error(copy.copyFailed)
+    } finally {
+      setMessageSelectionMenu(null)
+    }
+  }
+
+  const quoteSelectedMessageText = () => {
+    if (!messageSelectionMenu) {
+      return
+    }
+    const quoted = language === "zh"
+      ? `对于你所说的“${messageSelectionMenu.text}”，`
+      : `Regarding what you know about ${messageSelectionMenu.text}, `
+    setPrompt(quoted)
+    setMessageSelectionMenu(null)
+    setIsMessageSelectionSearchOpen(false)
+    window.setTimeout(() => composerTextareaRef.current?.focus(), 0)
+  }
+
+  const searchSelectedMessageText = async (provider: "bing" | "google" | "baidu") => {
+    if (!messageSelectionMenu) {
+      return
+    }
+    const query = encodeURIComponent(messageSelectionMenu.text)
+    const url = provider === "bing"
+      ? `https://www.bing.com/search?q=${query}`
+      : provider === "google"
+        ? `https://www.google.com/search?q=${query}`
+        : `https://www.baidu.com/s?wd=${query}`
+    setMessageSelectionMenu(null)
+    setIsMessageSelectionSearchOpen(false)
+    if (isDesktop && window.veloceDesktop?.openExternalURL) {
+      await window.veloceDesktop.openExternalURL(url)
+      return
+    }
+    window.open(url, "_blank", "noopener,noreferrer")
+  }
+
   const handleAttachmentFiles = async (files: FileList | null, target: AttachmentTarget = "composer") => {
     if (!isAdvanced || !files?.length) {
       return
@@ -2508,6 +2623,54 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </button>
               )
             })}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const composerAgentControl = (compact = false) => {
+    if (!isAdvanced || activeRunMode === "agent_group") {
+      return null
+    }
+    const open = composerControlMenu === "agent"
+    const label = selectedAgent?.name || copy.selectAgent
+    return (
+      <div className="relative min-w-0">
+        <Button
+          type="button"
+          variant={compact ? "ghost" : "outline"}
+          className={compact ? "h-7 max-w-32 justify-start gap-1 px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"}
+          onClick={() => setComposerControlMenu((current) => current === "agent" ? "" : "agent")}
+          title={label}
+        >
+          <Bot size={14} className="shrink-0" />
+          <span className="truncate">{label}</span>
+          {!compact && <ArrowDown className="h-3.5 w-3.5 shrink-0 rotate-180" />}
+        </Button>
+        {open && (
+          <div className="absolute bottom-full left-0 z-30 mb-2 max-h-56 w-52 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+            {agents.length === 0 ? (
+              <div className="px-2 py-4 text-center text-xs text-muted-foreground">{copy.noAgents}</div>
+            ) : (
+              agents.map((agent) => {
+                const selected = agent.id === (currentSession?.agent_id || defaultAgentID)
+                return (
+                  <button
+                    key={agent.id}
+                    type="button"
+                    className={cn("flex min-h-9 w-full items-center justify-between gap-2 rounded px-2 text-left text-sm hover:bg-muted", selected && "bg-primary/10 text-primary")}
+                    onClick={() => {
+                      setSessionAgent(agent.id)
+                      setComposerControlMenu("")
+                    }}
+                  >
+                    <span className="min-w-0 truncate">{agent.name || agent.id}</span>
+                    {selected && <Check size={14} className="shrink-0" />}
+                  </button>
+                )
+              })
+            )}
           </div>
         )}
       </div>
@@ -2820,6 +2983,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             <div className="hidden items-center gap-1 lg:flex">
               {composerApprovalControl(true)}
               {composerModeControl(true)}
+              {composerAgentControl(true)}
             </div>
             {agentWorkStatusButton("h-5 w-5")}
           </div>
@@ -2829,8 +2993,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           </div>
         </div>
       </div>
-      <div className={cn("grid gap-2 lg:hidden", activeRunMode === "agent_group" ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
+      <div className={cn("grid gap-2 lg:hidden", activeRunMode === "agent_group" || isAdvanced ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2")}>
         {composerModeControl()}
+        {composerAgentControl()}
         {activeRunMode === "agent_group" && composerAgentGroupControl()}
         {composerApprovalControl()}
       </div>
@@ -2920,59 +3085,75 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           if (!session) {
             return null
           }
+          const placement = sessionContextMenuPlacement(sessionMenu.x, sessionMenu.y, 224)
           return createPortal(
             <div
-              className="fixed z-[80] max-h-[calc(100vh-1rem)] w-56 overflow-y-auto rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
-              style={{ left: Math.max(8, Math.min(sessionMenu.x, window.innerWidth - 240)), top: Math.max(8, Math.min(sessionMenu.y, window.innerHeight - 160)) }}
-              onClick={(event) => event.stopPropagation()}
+              className="pointer-events-none fixed z-[80] w-56 overflow-hidden"
+              style={placement.opensUp
+                ? { left: placement.left, top: 8, bottom: window.innerHeight - placement.lineY }
+                : { left: placement.left, top: placement.lineY, bottom: 8 }}
             >
-              <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => renameSessionTitle(session)}>
-                {copy.customTitle}
-              </button>
-              <button
-                type="button"
-                className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
-                disabled={!isAdvanced || regeneratingTitleSessionID === session.id}
-                onClick={() => void regenerateSessionTitle(session)}
+              <div
+                className={cn("session-context-surface pointer-events-auto absolute inset-x-0 max-h-full overflow-y-auto rounded-md border p-1 text-sm text-popover-foreground will-change-transform", placement.animationClass, placement.opensUp ? "bottom-0" : "top-0")}
+                onClick={(event) => event.stopPropagation()}
               >
-                {regeneratingTitleSessionID === session.id ? copy.regeneratingTitle : copy.regenerateTitle}
-              </button>
-              <div className="my-1 border-t" />
-              <div className="px-2 py-1 text-xs text-muted-foreground">{sessionSidebarCopy.moveToFolder}</div>
-              <button type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id)}>
-                <Folder size={14} />
-                {sessionSidebarCopy.uncategorized}
-              </button>
-              {sessionFolders.map((folder) => (
-                <button key={folder.id} type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id, folder.id)}>
-                  <Folder size={14} className="text-amber-600" />
-                  <span className="truncate">{folder.name}</span>
+                <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => renameSessionTitle(session)}>
+                  {copy.customTitle}
                 </button>
-              ))}
+                <button
+                  type="button"
+                  className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted disabled:pointer-events-none disabled:opacity-50"
+                  disabled={!isAdvanced || regeneratingTitleSessionID === session.id}
+                  onClick={() => void regenerateSessionTitle(session)}
+                >
+                  {regeneratingTitleSessionID === session.id ? copy.regeneratingTitle : copy.regenerateTitle}
+                </button>
+                <div className="my-1 border-t" />
+                <div className="px-2 py-1 text-xs text-muted-foreground">{sessionSidebarCopy.moveToFolder}</div>
+                <button type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id)}>
+                  <Folder size={14} />
+                  {sessionSidebarCopy.uncategorized}
+                </button>
+                {sessionFolders.map((folder) => (
+                  <button key={folder.id} type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id, folder.id)}>
+                    <Folder size={14} className="text-amber-600" />
+                    <span className="truncate">{folder.name}</span>
+                  </button>
+                ))}
+              </div>
             </div>,
             document.body
           )
         })()}
-        {sessionFolderContextMenu && typeof document !== "undefined" && createPortal(
-          <div
-            className="fixed z-[80] w-44 rounded-md border bg-popover p-1 text-sm text-popover-foreground shadow-lg"
-            style={{ left: Math.max(8, Math.min(sessionFolderContextMenu.x, window.innerWidth - 184)), top: Math.max(8, Math.min(sessionFolderContextMenu.y, window.innerHeight - 48)) }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <button
-              type="button"
-              className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted"
-              onClick={() => {
-                setSessionFolderContextMenu(null)
-                setIsSessionFolderDialogOpen(true)
-              }}
+        {sessionFolderContextMenu && typeof document !== "undefined" && (() => {
+          const placement = sessionContextMenuPlacement(sessionFolderContextMenu.x, sessionFolderContextMenu.y, 176)
+          return createPortal(
+            <div
+              className="pointer-events-none fixed z-[80] w-44 overflow-hidden"
+              style={placement.opensUp
+                ? { left: placement.left, top: 8, bottom: window.innerHeight - placement.lineY }
+                : { left: placement.left, top: placement.lineY, bottom: 8 }}
             >
-              <FolderPlus size={15} />
-              {sessionSidebarCopy.newFolder}
-            </button>
-          </div>,
-          document.body
-        )}
+              <div
+                className={cn("session-context-surface pointer-events-auto absolute inset-x-0 max-h-full overflow-y-auto rounded-md border p-1 text-sm text-popover-foreground will-change-transform", placement.animationClass, placement.opensUp ? "bottom-0" : "top-0")}
+                onClick={(event) => event.stopPropagation()}
+              >
+                <button
+                  type="button"
+                  className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted"
+                  onClick={() => {
+                    setSessionFolderContextMenu(null)
+                    setIsSessionFolderDialogOpen(true)
+                  }}
+                >
+                  <FolderPlus size={15} />
+                  {sessionSidebarCopy.newFolder}
+                </button>
+              </div>
+            </div>,
+            document.body
+          )
+        })()}
       </div>
     </aside>
   )
@@ -2993,10 +3174,70 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           ),
           document.body
         )
+  const messageSelectionContextMenuPortal = messageSelectionMenu && typeof document !== "undefined" && (() => {
+    const labels = language === "zh"
+      ? { copy: "复制", quote: "引用", search: "搜索" }
+      : { copy: "Copy", quote: "Quote", search: "Search" }
+    const placement = sessionContextMenuPlacement(messageSelectionMenu.x, messageSelectionMenu.y, 176)
+    const searchPlacement = sessionContextSubmenuPlacement(placement.left, 176, placement.lineY, 176)
+    return createPortal(
+      <>
+        <div
+          className="pointer-events-none fixed z-[90] w-44 overflow-hidden"
+          style={placement.opensUp
+            ? { left: placement.left, top: 8, bottom: window.innerHeight - placement.lineY }
+            : { left: placement.left, top: placement.lineY, bottom: 8 }}
+        >
+          <div
+            className={cn("session-context-surface pointer-events-auto absolute inset-x-0 max-h-full overflow-y-auto rounded-md border p-1 text-sm text-popover-foreground will-change-transform", placement.animationClass, placement.opensUp ? "bottom-0" : "top-0")}
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void copySelectedMessageText()}>
+              <Copy size={15} />
+              {labels.copy}
+            </button>
+            <button type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={quoteSelectedMessageText}>
+              <Quote size={15} />
+              {labels.quote}
+            </button>
+            <button
+              type="button"
+              className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted"
+              onMouseEnter={() => setIsMessageSelectionSearchOpen(true)}
+              onClick={() => setIsMessageSelectionSearchOpen((open) => !open)}
+            >
+              <Search size={15} />
+              <span className="flex-1">{labels.search}</span>
+              {searchPlacement.opensLeft ? <ChevronLeft size={15} /> : <ChevronRight size={15} />}
+            </button>
+          </div>
+        </div>
+        {isMessageSelectionSearchOpen && (
+          <div
+            className="pointer-events-none fixed z-[91] w-44 overflow-hidden"
+            style={searchPlacement.opensUp
+              ? { left: searchPlacement.left, top: 8, bottom: window.innerHeight - searchPlacement.lineY }
+              : { left: searchPlacement.left, top: searchPlacement.lineY, bottom: 8 }}
+          >
+            <div
+              className={cn("session-context-surface pointer-events-auto absolute inset-x-0 max-h-full overflow-y-auto rounded-md border p-1 text-sm text-popover-foreground will-change-transform", searchPlacement.animationClass, searchPlacement.opensUp ? "bottom-0" : "top-0")}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => void searchSelectedMessageText("bing")}>Bing</button>
+              <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => void searchSelectedMessageText("google")}>Google</button>
+              <button type="button" className="flex h-9 w-full items-center rounded px-2 text-left hover:bg-muted" onClick={() => void searchSelectedMessageText("baidu")}>Baidu</button>
+            </div>
+          </div>
+        )}
+      </>,
+      document.body
+    )
+  })()
 
   return (
     <div className={cn("flex min-w-0", isAdvanced && "h-full min-h-0")}>
       {sessionsSidebarPortal}
+      {messageSelectionContextMenuPortal}
       <div className={cn(
         "min-w-0 flex-1",
         isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:relative xl:z-10 xl:mx-auto xl:mb-4 xl:overflow-visible xl:rounded-xl xl:border xl:border-slate-200 xl:bg-card xl:p-0" : "space-y-5",
@@ -3304,13 +3545,29 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               </div>
             </div>
             <div className={cn(isAdvanced ? "relative flex min-h-0 flex-1 flex-col gap-3" : "space-y-4 p-6 pt-0")}>
-              <div ref={messagesViewportRef} className={cn(isAdvanced ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[360px] space-y-3 rounded-md border p-3")}>
+              <div ref={messagesViewportRef} className={cn(isAdvanced ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[360px] space-y-3 rounded-md border p-3")} onContextMenu={handleMessageSelectionContextMenu}>
                 <div className={cn(isAdvanced ? "mx-auto w-full max-w-3xl space-y-4 px-2 py-5 pb-36 sm:px-4" : "contents")}>
                 {!currentSession || currentSession.messages.length === 0 ? (
                   <div className="flex min-h-0 flex-1 flex-col items-center justify-center py-20 text-center">
                     <Sparkles className="mb-3 h-7 w-7 text-primary" />
                     <div className="text-lg font-semibold text-foreground">{newSessionGreeting}</div>
                     <div className="mt-1 text-sm text-muted-foreground">{language === "zh" ? "输入消息开始对话" : "Send a message to begin"}</div>
+                    <div className="mt-6 grid w-full max-w-xl grid-cols-2 gap-2 text-left sm:grid-cols-3">
+                      {welcomeSuggestions.map((suggestion, index) => {
+                        const Icon = [Folder, Search, FileText, GitBranch, Sparkles, Server][index % 6]
+                        return (
+                          <button
+                            key={suggestion.title}
+                            type="button"
+                            className="flex min-h-16 items-center gap-2 rounded-md border border-slate-200 bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors hover:bg-muted"
+                            onClick={() => chooseWelcomeSuggestion(suggestion.prompt)}
+                          >
+                            <Icon size={16} className="shrink-0 text-muted-foreground" />
+                            <span className="line-clamp-2 text-left">{suggestion.title}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
                   </div>
                 ) : (
                   <>
@@ -6520,6 +6777,33 @@ function formatProcessingDuration(durationMs: number) {
   return `已处理${Math.floor(totalSeconds / 60)}m ${totalSeconds % 60}s`
 }
 
+function sessionContextMenuPlacement(x: number, y: number, width: number) {
+  const edge = 8
+  const opensLeft = x > window.innerWidth - x
+  const opensUp = y > window.innerHeight - y
+  const lineY = Math.max(edge, Math.min(y, window.innerHeight - edge))
+  return {
+    left: Math.max(edge, Math.min(opensLeft ? x - width : x, window.innerWidth - width - edge)),
+    lineY,
+    opensUp,
+    animationClass: opensUp ? "animate-session-context-up" : "animate-session-context-down",
+  }
+}
+
+function sessionContextSubmenuPlacement(anchorLeft: number, anchorWidth: number, y: number, width: number) {
+  const edge = 8
+  const opensLeft = window.innerWidth - (anchorLeft + anchorWidth) < anchorLeft
+  const lineY = Math.max(edge, Math.min(y, window.innerHeight - edge))
+  const opensUp = lineY > window.innerHeight - lineY
+  return {
+    left: Math.max(edge, Math.min(opensLeft ? anchorLeft - width : anchorLeft + anchorWidth, window.innerWidth - width - edge)),
+    lineY,
+    opensLeft,
+    opensUp,
+    animationClass: opensUp ? "animate-session-context-up" : "animate-session-context-down",
+  }
+}
+
 function greetingForHour(language: string, hour = new Date().getHours()) {
   if (language === "zh") {
     if (hour >= 5 && hour < 9) return "早上好"
@@ -6532,6 +6816,98 @@ function greetingForHour(language: string, hour = new Date().getHours()) {
   if (hour >= 5 && hour < 12) return "Good morning"
   if (hour < 18) return "Good afternoon"
   return "Good evening"
+}
+
+function welcomeSuggestionsFor(language: string, seed: string) {
+  const chinese = language === "zh"
+  const options: Array<[string, string]> = chinese ? [
+    ["查看项目", "查看当前项目的结构，并说明各个主要目录的职责。"],
+    ["了解当前目录", "列出当前工作目录中的重要文件，并给出开始阅读的建议。"],
+    ["排查测试失败", "运行相关测试，定位失败原因并提出修复方案。"],
+    ["实现一个功能", "请先分析现有代码结构，然后帮我实现一个新功能。"],
+    ["审查改动", "审查当前工作区的改动，找出潜在缺陷和遗漏的测试。"],
+    ["整理任务", "根据当前项目状态，整理一份按优先级排序的待办事项。"],
+    ["查找 Bug", "检查当前项目中可能导致运行错误或边界问题的代码。"],
+    ["解释代码", "解释当前项目的核心执行流程和关键模块。"],
+    ["补充单元测试", "为最近的功能改动设计并补充覆盖关键路径的单元测试。"],
+    ["优化性能", "分析当前实现的性能瓶颈，并给出可执行的优化建议。"],
+    ["修复构建", "运行构建并修复出现的编译、类型或打包错误。"],
+    ["比较分支", "比较当前分支与主分支的差异，并总结需要关注的改动。"],
+    ["准备提交", "检查工作区改动，建议合适的提交拆分和提交信息。"],
+    ["查看时事", "查看今天值得关注的国内外时事，并简要总结。"],
+    ["总结新闻", "汇总今天科技领域的重要新闻和趋势。"],
+    ["研究技术", "调研一个与当前项目相关的技术方案，并比较取舍。"],
+    ["撰写文档", "为当前功能撰写清晰的使用文档和示例。"],
+    ["起草方案", "针对一个新需求，起草实施方案、风险和验收标准。"],
+    ["评估风险", "识别当前改动可能带来的兼容性、安全性和发布风险。"],
+    ["设计 API", "为一个新能力设计简洁一致的 API 接口和数据结构。"],
+    ["规划重构", "分析可以重构的模块，并给出渐进式重构计划。"],
+    ["生成 README", "为当前项目生成或完善 README，包括启动和开发说明。"],
+    ["搜索最佳实践", "查找当前技术栈的最佳实践，并结合项目给出建议。"],
+    ["更新依赖", "检查项目依赖的可更新项、兼容性风险和升级顺序。"],
+    ["分析日志", "分析最近的错误日志，归纳根因和下一步排查路径。"],
+    ["处理数据库问题", "检查数据库相关实现，分析潜在的并发、迁移或查询问题。"],
+    ["设计数据模型", "为一个新业务场景设计数据模型、关系和索引。"],
+    ["准备发布说明", "根据当前改动起草面向用户的发布说明。"],
+    ["翻译文本", "帮我把一段产品或技术文本翻译得自然准确。"],
+    ["起草邮件", "帮我起草一封清晰、专业的工作邮件。"],
+    ["制定学习计划", "根据一个技术目标制定循序渐进的学习计划。"],
+    ["头脑风暴", "围绕一个产品或技术问题，提供多个可行方向。"],
+    ["设计页面", "根据业务目标设计一个清晰、高效的页面信息架构。"],
+    ["检查安全性", "检查当前实现中常见的认证、输入和数据安全风险。"],
+    ["整理会议纪要", "把零散的会议记录整理为结论、行动项和负责人。"],
+    ["制定排期", "把一个需求拆分为可交付任务，并估算实施顺序。"],
+  ] : [
+    ["Explore this project", "Inspect the current project structure and explain the responsibility of each major directory."],
+    ["Review this folder", "List the important files in the current working directory and suggest where to start reading."],
+    ["Investigate test failures", "Run the relevant tests, identify the failure, and propose a fix."],
+    ["Build a feature", "Analyze the existing code structure, then help me implement a new feature."],
+    ["Review changes", "Review the current workspace changes for defects and missing tests."],
+    ["Organize tasks", "Create a prioritized task list based on the current project state."],
+    ["Find bugs", "Inspect the project for likely runtime errors and edge cases."],
+    ["Explain the code", "Explain the core execution flow and the important modules in this project."],
+    ["Add unit tests", "Design and add unit tests that cover the important paths of recent changes."],
+    ["Improve performance", "Analyze the implementation for performance bottlenecks and propose actionable improvements."],
+    ["Fix the build", "Run the build and fix compilation, type, or packaging errors."],
+    ["Compare branches", "Compare the current branch with the main branch and summarize notable changes."],
+    ["Prepare a commit", "Review workspace changes and suggest sensible commit splits and messages."],
+    ["Check current events", "Summarize notable current events from today."],
+    ["Summarize news", "Summarize important technology news and trends from today."],
+    ["Research a technology", "Research a technical approach relevant to this project and compare tradeoffs."],
+    ["Write documentation", "Write clear usage documentation and examples for the current feature."],
+    ["Draft a proposal", "Draft an implementation proposal for a new requirement, including risks and acceptance criteria."],
+    ["Assess risks", "Identify compatibility, security, and release risks in the current changes."],
+    ["Design an API", "Design a concise, consistent API and data model for a new capability."],
+    ["Plan a refactor", "Identify modules worth refactoring and propose an incremental plan."],
+    ["Improve the README", "Create or improve the README with setup and development instructions."],
+    ["Find best practices", "Find best practices for this stack and adapt them to the current project."],
+    ["Update dependencies", "Review available dependency updates, compatibility risks, and upgrade order."],
+    ["Analyze logs", "Analyze recent error logs and identify root causes and next investigation steps."],
+    ["Check database code", "Review database code for concurrency, migration, and query issues."],
+    ["Design a data model", "Design a data model, relations, and indexes for a new business scenario."],
+    ["Prepare release notes", "Draft user-facing release notes based on the current changes."],
+    ["Translate text", "Help translate product or technical text naturally and accurately."],
+    ["Draft an email", "Draft a clear, professional work email."],
+    ["Make a study plan", "Create a gradual study plan for a technical goal."],
+    ["Brainstorm ideas", "Generate several feasible directions for a product or technical problem."],
+    ["Design a page", "Design a clear, efficient information architecture for a page."],
+    ["Check security", "Review the implementation for common authentication, input, and data security risks."],
+    ["Organize meeting notes", "Turn rough meeting notes into decisions, action items, and owners."],
+    ["Make a schedule", "Break a requirement into deliverable tasks and estimate their implementation order."],
+  ]
+  const shuffled = [...options]
+  let value = 2166136261
+  for (const character of seed) {
+    value = Math.imul(value ^ character.charCodeAt(0), 16777619)
+  }
+  for (let index = shuffled.length - 1; index > 0; index -= 1) {
+    value = Math.imul(value ^ (value >>> 13), 1274126177)
+    const target = Math.abs(value) % (index + 1)
+    const current = shuffled[index]
+    shuffled[index] = shuffled[target]
+    shuffled[target] = current
+  }
+  return shuffled.slice(0, 6).map(([title, prompt]) => ({ title, prompt }))
 }
 
 function upsertSession(current: ChatSession[], next: ChatSession) {
