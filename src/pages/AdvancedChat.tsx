@@ -78,6 +78,7 @@ export default function AdvancedChat() {
     },
   })
   const publicSettings = withPublicSettingsDefaults(settings)
+  const isDesktop = isDesktopTarget()
   const topNavItems = parseTopNavItems(publicSettings.top_nav_items)
   const currentPageKey = pageKeyFromPathname(location.pathname)
   const isChatRoute = location.pathname === "/chat" || location.pathname.startsWith("/chat/session/")
@@ -108,7 +109,7 @@ export default function AdvancedChat() {
       onEditingChange={setIsLayoutEditing}
     >
     <div className={cn("flex flex-col overflow-hidden bg-background", viewportHeightClass)}>
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur sm:px-6">
+      {!isDesktop && <header className="z-30 flex h-16 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button
             className="lg:hidden"
@@ -148,8 +149,8 @@ export default function AdvancedChat() {
           <ThemeSwitcher />
           <UserAvatar user={user} />
         </div>
-      </header>
-      {user?.is_admin && <PageLayoutEditBar />}
+      </header>}
+      {!isDesktop && user?.is_admin && <PageLayoutEditBar />}
 
       <div className={cn("flex min-h-0 flex-1", isChatRoute && "bg-background")}>
         <div className="hidden lg:block lg:h-full lg:shrink-0">
@@ -157,7 +158,7 @@ export default function AdvancedChat() {
         </div>
 
         {isSidebarOpen && (
-          <div className="fixed inset-0 top-16 z-40 lg:hidden">
+          <div className={cn("fixed inset-0 z-40 lg:hidden", isDesktop ? "top-0" : "top-16")}>
             <button
               type="button"
               className="absolute inset-0 bg-black/50"

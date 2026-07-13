@@ -2,13 +2,14 @@ import { useEffect, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { HashRouter, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { QueryClient, QueryClientProvider, useQuery, useQueryClient } from "@tanstack/react-query"
-import { Activity, Check, FolderOpen, Globe2, PanelTop, Plus, Server, Settings } from "lucide-react"
+import { Activity, Check, CreditCard, FolderOpen, Globe2, HardDrive, LogOut, PanelTop, Plus, Server, Settings, UserCircle } from "lucide-react"
 import Login from "./pages/Login"
 import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
 import SettingsWorkspace from "./pages/SettingsWorkspace"
 import api, {
   getAuthToken,
+  clearAuthToken,
   getDesktopTabID,
   getDesktopServerURL,
   normalizeServerURL,
@@ -47,6 +48,22 @@ interface BuiltinServerStatus {
 
 interface SetupStatus {
   required: boolean
+}
+
+interface DesktopCurrentUser {
+  username?: string
+  email?: string
+  avatar_url?: string
+  balance?: string | number
+}
+
+interface DesktopUserStats {
+  balance?: string | number
+}
+
+interface DesktopStorageSettings {
+  file_storage_total_mb?: number
+  file_storage_used_bytes?: number
 }
 
 type DesktopProcessItem = DesktopProcessStatus["processes"][number]
@@ -231,6 +248,8 @@ function DesktopTitleBar({
   onMoveTab,
   onDetachTab,
   onUpdateTabServer,
+  onNavigateActive,
+  onLogout,
 }: {
   tabs: DesktopTab[]
   activeTabID: string
@@ -241,6 +260,8 @@ function DesktopTitleBar({
   onMoveTab: (tabID: string, targetTabID: string) => void
   onDetachTab: (tabID: string, screenX: number, screenY: number) => void
   onUpdateTabServer: (tabID: string, serverURL: string) => void
+  onNavigateActive: (path: "/settings" | "/settings/wallet") => void
+  onLogout: () => void
 }) {
   const { language } = useI18n()
   const queryClient = useQueryClient()
@@ -260,18 +281,39 @@ function DesktopTitleBar({
   const [isSavingSettings, setIsSavingSettings] = useState(false)
   const [isCheckingUpdate, setIsCheckingUpdate] = useState(false)
   const [isBuiltinBusy, setIsBuiltinBusy] = useState(false)
+  const [isAccountOpen, setIsAccountOpen] = useState(false)
   const draggingTabID = useRef("")
   const droppedInStrip = useRef(false)
   const activeTab = tabs.find((tab) => tab.id === activeTabID) || tabs[0]
   const currentServer = normalizeServerURL(activeTab?.serverURL || getDesktopServerURL())
   const copy = language === "zh"
-    ? { title: "Veloce", file: "文件", edit: "编辑", help: "帮助", newWindow: "新窗口", quit: "退出", closeWindow: "关闭", home: "返回主页", copyText: "复制", paste: "粘贴", cut: "剪切", deleteText: "删除", undo: "撤销", redo: "还原", officialSite: "官网", github: "GitHub", label: "服务器", settings: "设置", status: "服务状态", browser: "浏览器", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪", newTab: "新标签页", closeTab: "关闭标签页" }
-    : { title: "Veloce", file: "File", edit: "Edit", help: "Help", newWindow: "New window", quit: "Quit", closeWindow: "Close", home: "Home", copyText: "Copy", paste: "Paste", cut: "Cut", deleteText: "Delete", undo: "Undo", redo: "Redo", officialSite: "Official website", github: "GitHub", label: "Server", settings: "Settings", status: "Service status", browser: "Browser", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready", newTab: "New tab", closeTab: "Close tab" }
+    ? { title: "Veloce", file: "文件", edit: "编辑", help: "帮助", newWindow: "新窗口", quit: "退出", closeWindow: "关闭", home: "返回主页", copyText: "复制", paste: "粘贴", cut: "剪切", deleteText: "删除", undo: "撤销", redo: "还原", officialSite: "官网", github: "GitHub", label: "服务器", settings: "设置", status: "服务状态", browser: "浏览器", account: "账户", recharge: "充值", storage: "存储", signOut: "退出登录", placeholder: "http://localhost:8080", save: "保存", close: "关闭", browse: "选择", current: "当前", anonymous: "未登录", builtin: "运行内置服务器", connector: "连接器", running: "运行中", stopped: "未运行", terminate: "终止", pid: "进程", version: "版本", mode: "模式", noProcess: "暂无运行中的受管进程", httpProxy: "全局 HTTP 代理", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "内置服务器文件路径", connectorPath: "内置连接器文件路径", checkUpdate: "检查更新", checkingUpdate: "正在检查...", updateReady: "更新已准备", updateReadyDescription: "点击确定将退出当前应用并运行安装程序。", installNow: "确定", cancel: "取消", noUpdate: "没有可用更新", settingsSaved: "设置已保存", builtinStarting: "正在准备内置服务器...", builtinWaiting: "正在等待内置服务器就绪...", builtinUnavailable: "桌面桥接未就绪", newTab: "新标签页", closeTab: "关闭标签页" }
+    : { title: "Veloce", file: "File", edit: "Edit", help: "Help", newWindow: "New window", quit: "Quit", closeWindow: "Close", home: "Home", copyText: "Copy", paste: "Paste", cut: "Cut", deleteText: "Delete", undo: "Undo", redo: "Redo", officialSite: "Official website", github: "GitHub", label: "Server", settings: "Settings", status: "Service status", browser: "Browser", account: "Account", recharge: "Recharge", storage: "Storage", signOut: "Sign out", placeholder: "http://localhost:8080", save: "Save", close: "Close", browse: "Choose", current: "Current", anonymous: "Not signed in", builtin: "Run built-in server", connector: "Connector", running: "Running", stopped: "Stopped", terminate: "Terminate", pid: "PID", version: "Version", mode: "Mode", noProcess: "No managed process is running", httpProxy: "Global HTTP proxy", httpProxyPlaceholder: "http://127.0.0.1:7890", builtinPath: "Built-in server file path", connectorPath: "Built-in connector file path", checkUpdate: "Check for updates", checkingUpdate: "Checking...", updateReady: "Update is ready", updateReadyDescription: "Confirm to quit this app and run the installer.", installNow: "OK", cancel: "Cancel", noUpdate: "No update available", settingsSaved: "Settings saved", builtinStarting: "Preparing built-in server...", builtinWaiting: "Waiting for built-in server...", builtinUnavailable: "Desktop bridge is not ready", newTab: "New tab", closeTab: "Close tab" }
 
-  const { data: user } = useQuery<{ username?: string; email?: string }>({
+  const { data: user } = useQuery<DesktopCurrentUser>({
     queryKey: ["desktop-me", currentServer, getAuthToken()],
     queryFn: async () => {
       const res = await api.get("/user/me")
+      return res.data
+    },
+    enabled: Boolean(getAuthToken()),
+    retry: false,
+  })
+
+  const { data: userStats } = useQuery<DesktopUserStats>({
+    queryKey: ["desktop-user-stats", currentServer, getAuthToken()],
+    queryFn: async () => {
+      const res = await api.get("/user/stats")
+      return res.data
+    },
+    enabled: Boolean(getAuthToken()),
+    retry: false,
+  })
+
+  const { data: storageSettings } = useQuery<DesktopStorageSettings>({
+    queryKey: ["desktop-storage-settings", currentServer, getAuthToken()],
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/settings")
       return res.data
     },
     enabled: Boolean(getAuthToken()),
@@ -454,6 +496,13 @@ function DesktopTitleBar({
     }
     void window.veloceDesktop?.runDesktopMenuAction(action)
   }
+
+  const accountLabel = user?.username || user?.email || copy.anonymous
+  const accountInitial = accountLabel.trim().slice(0, 1).toUpperCase() || "U"
+  const balance = userStats?.balance ?? user?.balance ?? 0
+  const storageUsed = Math.max(0, Number(storageSettings?.file_storage_used_bytes || 0))
+  const storageTotal = Math.max(0, Number(storageSettings?.file_storage_total_mb || 0)) * 1024 * 1024
+  const storagePercent = storageTotal > 0 ? Math.min(100, Math.round((storageUsed / storageTotal) * 100)) : 0
 
   return (
     <>
@@ -695,6 +744,72 @@ function DesktopTitleBar({
         >
           <PanelTop size={16} />
         </Button>
+        <div
+          className="relative ml-3 border-l pl-3"
+          onMouseEnter={() => setIsAccountOpen(true)}
+          onMouseLeave={() => setIsAccountOpen(false)}
+        >
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 overflow-hidden rounded-full"
+            title={copy.account}
+            aria-label={copy.account}
+            onClick={() => setIsAccountOpen((open) => !open)}
+          >
+            {user?.avatar_url ? (
+              <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+            ) : user ? (
+              <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{accountInitial}</span>
+            ) : (
+              <UserCircle size={19} />
+            )}
+          </Button>
+          {isAccountOpen && (
+            <div className="absolute right-0 top-9 z-[70] w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
+              <div className="flex min-w-0 items-center gap-3">
+                {user?.avatar_url ? (
+                  <img src={user.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                ) : (
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">{accountInitial}</span>
+                )}
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-semibold">{accountLabel}</div>
+                  {user?.email && <div className="truncate text-xs text-muted-foreground">{user.email}</div>}
+                </div>
+              </div>
+              <div className="mt-3 space-y-3 border-t pt-3 text-xs">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-muted-foreground">{language === "zh" ? "余额" : "Balance"}</span>
+                  <span className="font-medium">{formatDesktopBalance(balance)}</span>
+                </div>
+                <div>
+                  <div className="mb-1.5 flex items-center justify-between gap-3">
+                    <span className="flex items-center gap-1.5 text-muted-foreground"><HardDrive size={13} />{copy.storage}</span>
+                    <span>{storageTotal > 0 ? `${formatDesktopBytes(storageUsed)} / ${formatDesktopBytes(storageTotal)}` : "-"}</span>
+                  </div>
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full rounded-full bg-primary transition-[width]" style={{ width: `${storagePercent}%` }} />
+                  </div>
+                </div>
+              </div>
+              <div className="mt-3 grid grid-cols-2 gap-2">
+                <Button size="sm" className="h-8 gap-1.5" onClick={() => { setIsAccountOpen(false); onNavigateActive("/settings/wallet") }}>
+                  <CreditCard size={14} />
+                  {copy.recharge}
+                </Button>
+                <Button size="sm" variant="outline" className="h-8 gap-1.5" onClick={() => { setIsAccountOpen(false); onNavigateActive("/settings") }}>
+                  <Settings size={14} />
+                  {copy.settings}
+                </Button>
+              </div>
+              <Button variant="ghost" size="sm" className="mt-2 h-8 w-full justify-start gap-2 text-destructive hover:text-destructive" onClick={() => { setIsAccountOpen(false); onLogout() }}>
+                <LogOut size={14} />
+                {copy.signOut}
+              </Button>
+            </div>
+          )}
+        </div>
         </div>
       </div>
     </div>
@@ -771,6 +886,30 @@ function DesktopConnectorBridge() {
       authToken,
     })
   }, [location.key])
+
+  return null
+}
+
+function DesktopNavigationBridge() {
+  const navigate = useNavigate()
+
+  useEffect(() => {
+    const receiveNavigation = (event: MessageEvent) => {
+      const data = event.data
+      if (!data || typeof data !== "object") {
+        return
+      }
+      if (data.type === "veloce-desktop-navigate" && (data.path === "/settings" || data.path === "/settings/wallet")) {
+        navigate(data.path)
+      }
+      if (data.type === "veloce-desktop-logout") {
+        clearAuthToken()
+        navigate("/login", { replace: true })
+      }
+    }
+    window.addEventListener("message", receiveNavigation)
+    return () => window.removeEventListener("message", receiveNavigation)
+  }, [navigate])
 
   return null
 }
@@ -989,11 +1128,25 @@ function DesktopRoutes() {
   return <DesktopSingleWindow />
 }
 
+function formatDesktopBalance(value: string | number) {
+  const amount = Number(value)
+  return Number.isFinite(amount) ? amount.toLocaleString(undefined, { maximumFractionDigits: 4 }) : String(value || 0)
+}
+
+function formatDesktopBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B"
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  if (value < 1024 * 1024 * 1024) return `${(value / 1024 / 1024).toFixed(1)} MB`
+  return `${(value / 1024 / 1024 / 1024).toFixed(1)} GB`
+}
+
 function DesktopPageRoutes({ className }: { className: string }) {
   return (
     <HashRouter>
       <TokenBridge />
       <DesktopConnectorBridge />
+      <DesktopNavigationBridge />
       <DocumentTitle />
       <div className={className}>
         <SetupGate>
@@ -1034,6 +1187,11 @@ function DesktopSingleWindow() {
         onMoveTab={() => undefined}
         onDetachTab={() => undefined}
         onUpdateTabServer={updateServer}
+        onNavigateActive={(path) => { window.location.hash = `#${path}` }}
+        onLogout={() => {
+          clearAuthToken()
+          window.location.hash = "#/login"
+        }}
       />
       <DesktopPageRoutes className="fixed inset-x-0 bottom-0 top-9 overflow-hidden bg-background" />
     </>
@@ -1214,6 +1372,11 @@ export function DesktopTabbedShell() {
     }
   }
 
+  const sendToActiveTab = (message: Record<string, unknown>) => {
+    const frame = document.querySelector<HTMLIFrameElement>(`iframe[data-tab-id="${activeTabID}"]`)
+    frame?.contentWindow?.postMessage(message, "*")
+  }
+
   if (!isReady) {
     return <div className="flex h-screen items-center justify-center bg-background text-sm text-muted-foreground">Loading...</div>
   }
@@ -1229,6 +1392,8 @@ export function DesktopTabbedShell() {
         onMoveTab={moveTab}
         onDetachTab={detachTab}
         onUpdateTabServer={updateTabServer}
+        onNavigateActive={(path) => sendToActiveTab({ type: "veloce-desktop-navigate", path })}
+        onLogout={() => sendToActiveTab({ type: "veloce-desktop-logout" })}
       />
       <div className="fixed inset-x-0 bottom-0 top-9 overflow-hidden bg-background">
         {tabs.map((tab) => (

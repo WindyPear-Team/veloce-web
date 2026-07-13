@@ -1,8 +1,9 @@
 import { useQuery } from "@tanstack/react-query"
-import { Bot, LogOut, Menu, MessageSquare, Shield, UserCircle } from "lucide-react"
+import { Bot, CreditCard, LogOut, Menu, MessageSquare, Shield, UserCircle } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom"
 import { useEffect, useState } from "react"
 import Settings, { type SettingsSection } from "./Settings"
+import Wallet from "./Wallet"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { PageTransition } from "@/components/layout/PageTransition"
 import { Button } from "@/components/ui/button"
@@ -20,7 +21,7 @@ interface CurrentUser {
 
 interface SettingsNavItem {
   href: string
-  section: SettingsSection
+  section?: SettingsSection
   label: string
   icon: typeof UserCircle
 }
@@ -30,6 +31,7 @@ export default function SettingsWorkspace() {
   const location = useLocation()
   const navigate = useNavigate()
   const { language } = useI18n()
+  const isDesktop = isDesktopTarget()
   const { data: settings } = useQuery<PublicSettings>({
     queryKey: ["public-settings"],
     queryFn: async () => (await api.get("/public/settings")).data,
@@ -53,8 +55,8 @@ export default function SettingsWorkspace() {
   }
 
   return (
-    <div className={cn("flex flex-col overflow-hidden bg-background", isDesktopTarget() ? "h-full min-h-0" : "h-screen")}>
-      <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-4 sm:px-6">
+    <div className={cn("flex flex-col overflow-hidden bg-background", isDesktop ? "h-full min-h-0" : "h-screen")}>
+      {!isDesktop && <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button
             className="lg:hidden"
@@ -77,12 +79,12 @@ export default function SettingsWorkspace() {
             {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : avatarInitials(user?.username || user?.email || "") || <UserCircle size={20} />}
           </button>
         </div>
-      </header>
+      </header>}
 
       <div className="flex min-h-0 flex-1">
         <SettingsSidebar pathname={location.pathname} copy={copy} onLogout={logout} />
         {isSidebarOpen && (
-          <div className="fixed inset-0 top-16 z-40 lg:hidden">
+          <div className={cn("fixed inset-0 z-40 lg:hidden", isDesktop ? "top-0" : "top-16")}>
             <button type="button" className="absolute inset-0 bg-black/50" aria-label={copy.closeMenu} onClick={() => setIsSidebarOpen(false)} />
             <SettingsSidebar className="relative z-50 h-full w-72 max-w-[85vw]" pathname={location.pathname} copy={copy} onLogout={logout} onNavigate={() => setIsSidebarOpen(false)} />
           </div>
@@ -95,6 +97,7 @@ export default function SettingsWorkspace() {
                 <Route path="profile" element={<Settings section="profile" />} />
                 <Route path="assistant" element={<Settings section="assistant" />} />
                 <Route path="security" element={<Settings section="security" />} />
+                <Route path="wallet" element={<Wallet />} />
                 <Route path="*" element={<Navigate to="profile" replace />} />
               </Routes>
             </PageTransition>
@@ -117,6 +120,7 @@ function SettingsSidebar({ pathname, copy, onLogout, className, onNavigate }: {
     { href: "/settings/profile", section: "profile", label: copy.account, icon: UserCircle },
     { href: "/settings/assistant", section: "assistant", label: copy.assistant, icon: Bot },
     { href: "/settings/security", section: "security", label: copy.security, icon: Shield },
+    { href: "/settings/wallet", label: copy.wallet, icon: CreditCard },
   ]
 
   return (
@@ -128,7 +132,7 @@ function SettingsSidebar({ pathname, copy, onLogout, className, onNavigate }: {
           const active = pathname === item.href
           return (
             <Link
-              key={item.section}
+              key={item.href}
               to={item.href}
               onClick={onNavigate}
               className={cn("flex h-10 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-muted", active && "bg-accent font-medium text-accent-foreground")}
@@ -159,14 +163,15 @@ function avatarInitials(value: string) {
 }
 
 function settingsWorkspaceCopy(language: string) {
-  if (language === "zh") return { title: "设置", account: "账户", assistant: "助手", security: "安全", chat: "聊天", signOut: "退出登录", openMenu: "打开设置菜单", closeMenu: "关闭设置菜单" }
-  if (language === "ja") return { title: "設定", account: "アカウント", assistant: "アシスタント", security: "セキュリティ", chat: "チャット", signOut: "ログアウト", openMenu: "設定メニューを開く", closeMenu: "設定メニューを閉じる" }
-  return { title: "Settings", account: "Account", assistant: "Assistant", security: "Security", chat: "Chat", signOut: "Sign out", openMenu: "Open settings menu", closeMenu: "Close settings menu" }
+  if (language === "zh") return { title: "设置", account: "账户", assistant: "助手", security: "安全", wallet: "钱包", chat: "聊天", signOut: "退出登录", openMenu: "打开设置菜单", closeMenu: "关闭设置菜单" }
+  if (language === "ja") return { title: "設定", account: "アカウント", assistant: "アシスタント", security: "セキュリティ", wallet: "ウォレット", chat: "チャット", signOut: "ログアウト", openMenu: "設定メニューを開く", closeMenu: "設定メニューを閉じる" }
+  return { title: "Settings", account: "Account", assistant: "Assistant", security: "Security", wallet: "Wallet", chat: "Chat", signOut: "Sign out", openMenu: "Open settings menu", closeMenu: "Close settings menu" }
 }
 
 function desktopSettingsTitle(pathname: string, language: string) {
   const zh = language === "zh"
   if (pathname === "/settings/assistant") return zh ? "助手设置" : "Assistant settings"
   if (pathname === "/settings/security") return zh ? "安全设置" : "Security settings"
+  if (pathname === "/settings/wallet") return zh ? "钱包" : "Wallet"
   return zh ? "账户设置" : "Account settings"
 }
