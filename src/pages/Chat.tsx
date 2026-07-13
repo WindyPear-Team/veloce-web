@@ -1833,6 +1833,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setDecidingConnectorTaskID(taskID)
     try {
       await api.post(`/user/advanced-chat/connector-tasks/${encodeURIComponent(taskID)}/decision`, { approved })
+      void window.veloceDesktop?.dismissConnectorApproval(taskID)
       if (activeSessionID) {
         updateSession(activeSessionID, (session) => ({
           ...session,
@@ -4783,7 +4784,7 @@ function ToolCallRounds({
         <span className="min-w-0 flex-1" />
         <ChevronRight className={cn("h-3.5 w-3.5 shrink-0 transition-transform", open && "rotate-90")} />
       </summary>
-      <div className="mt-2 space-y-2">
+      <div className={cn("mt-2 space-y-2", toolCalls.length > 6 && "max-h-[30rem] overflow-y-auto overscroll-contain pr-1")}>
         {toolCalls.map((toolCall) => (
           <ToolCallDetails
             key={toolCall.id}
