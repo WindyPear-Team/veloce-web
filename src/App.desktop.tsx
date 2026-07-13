@@ -8,6 +8,7 @@ import Setup from "./pages/Setup"
 import AdvancedChat from "./pages/AdvancedChat"
 import SettingsWorkspace from "./pages/SettingsWorkspace"
 import api, {
+  apiURL,
   getAuthToken,
   clearAuthToken,
   getDesktopTabID,
@@ -758,7 +759,7 @@ function DesktopTitleBar({
             onClick={() => setIsAccountOpen((open) => !open)}
           >
             {user?.avatar_url ? (
-              <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+              <img src={apiURL(user.avatar_url)} alt="" className="h-full w-full object-cover" />
             ) : user ? (
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">{accountInitial}</span>
             ) : (
@@ -769,7 +770,7 @@ function DesktopTitleBar({
             <div className="absolute right-0 top-9 z-[70] w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
               <div className="flex min-w-0 items-center gap-3">
                 {user?.avatar_url ? (
-                  <img src={user.avatar_url} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
+                  <img src={apiURL(user.avatar_url)} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
                 ) : (
                   <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-primary text-sm font-semibold text-primary-foreground">{accountInitial}</span>
                 )}

@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
-import api from "@/lib/api"
+import api, { apiURL } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { pageKeyFromPathname } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -149,7 +149,7 @@ function UserAvatar({ user }: { user?: CurrentUser }) {
       aria-label={label}
     >
       {user?.avatar_url ? (
-        <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+        <img src={apiURL(user.avatar_url)} alt="" className="h-full w-full object-cover" />
       ) : initials ? (
         initials
       ) : (

@@ -1,8 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { KeyRound } from "lucide-react"
-import { useEffect, useMemo, useState } from "react"
+import { Camera, KeyRound, UserCircle } from "lucide-react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
-import api from "@/lib/api"
+import api, { apiURL } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -81,6 +81,9 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
   const [titleUserChannelID, setTitleUserChannelID] = useState(0)
   const [titleGenerationScope, setTitleGenerationScope] = useState<"all" | "recent">("recent")
   const [connectorApprovalAgentID, setConnectorApprovalAgentID] = useState("")
+  const [avatarPreview, setAvatarPreview] = useState("")
+  const [avatarStatus, setAvatarStatus] = useState("")
+  const avatarInputRef = useRef<HTMLInputElement>(null)
 
   const { data: user, isLoading } = useQuery<CurrentUser>({
     queryKey: ["me"],
@@ -149,6 +152,14 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
     setTitleGenerationScope(advancedChatSettings.title_generation_scope || "recent")
     setConnectorApprovalAgentID(advancedChatSettings.connector_approval_agent_id || "")
   }, [advancedChatSettings])
+
+  useEffect(() => {
+    return () => {
+      if (avatarPreview.startsWith("blob:")) {
+        URL.revokeObjectURL(avatarPreview)
+      }
+    }
+  }, [avatarPreview])
 
   const bindOIDC = useMutation({
     mutationFn: async () => {
@@ -229,6 +240,40 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
     onError: (error) => setPasskeyStatus(apiErrorMessage(error, copy.passkeyDeleteFailed)),
   })
 
+  const uploadAvatar = useMutation({
+    mutationFn: async (file: File) => {
+      const formData = new FormData()
+      formData.append("file", file)
+      const res = await api.post("/user/avatar", formData)
+      return res.data as CurrentUser
+    },
+    onSuccess: (updatedUser) => {
+      setAvatarPreview("")
+      setAvatarStatus(copy.avatarUpdated)
+      queryClient.setQueryData(["me"], updatedUser)
+      queryClient.invalidateQueries({ queryKey: ["me"] })
+    },
+    onError: (error) => {
+      setAvatarPreview("")
+      setAvatarStatus(apiErrorMessage(error, copy.avatarUploadFailed))
+    },
+  })
+
+  const selectAvatar = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    event.target.value = ""
+    if (!file) {
+      return
+    }
+    if (!/image\/(jpeg|png|gif|webp)/.test(file.type) || file.size > 2 * 1024 * 1024) {
+      setAvatarStatus(copy.avatarInvalid)
+      return
+    }
+    setAvatarPreview(URL.createObjectURL(file))
+    setAvatarStatus(copy.avatarUploading)
+    uploadAvatar.mutate(file)
+  }
+
   const saveTitleSettings = useMutation({
     mutationFn: async () => {
       const res = await api.put("/user/advanced-chat/settings", {
@@ -264,6 +309,33 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
                 <div className="text-sm text-muted-foreground">{t("common.loading")}</div>
               ) : (
                 <>
+                  <div className="flex items-center gap-4 border-b pb-4">
+                    <div className="relative shrink-0">
+                      <div className="flex h-20 w-20 items-center justify-center overflow-hidden rounded-full border bg-muted text-lg font-semibold text-foreground">
+                        {avatarPreview || user?.avatar_url ? (
+                          <img src={avatarPreview || apiURL(user?.avatar_url || "")} alt="" className="h-full w-full object-cover" />
+                        ) : (
+                          avatarInitials(user?.username || user?.email || "") || <UserCircle size={30} />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border bg-background text-foreground shadow-sm transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
+                        aria-label={copy.uploadAvatar}
+                        title={copy.uploadAvatar}
+                        disabled={uploadAvatar.isPending}
+                        onClick={() => avatarInputRef.current?.click()}
+                      >
+                        <Camera size={15} />
+                      </button>
+                      <input ref={avatarInputRef} type="file" accept="image/jpeg,image/png,image/gif,image/webp" className="hidden" onChange={selectAvatar} />
+                    </div>
+                    <div className="min-w-0 space-y-1">
+                      <div className="text-sm font-medium">{copy.avatar}</div>
+                      <div className="text-xs text-muted-foreground">{uploadAvatar.isPending ? copy.avatarUploading : copy.avatarHint}</div>
+                      {avatarStatus && <div className="text-xs text-muted-foreground">{avatarStatus}</div>}
+                    </div>
+                  </div>
                   <Field label={t("common.username")} value={user?.username || "-"} />
                   <Field label={t("common.email")} value={user?.email || "-"} />
                   <Field label={copy.oidcAccount} value={user?.oidc_sub ? copy.bound : copy.notBound} />
@@ -554,6 +626,18 @@ function formatDateTime(value: string) {
   return date.toLocaleString()
 }
 
+function avatarInitials(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ""
+  }
+  const parts = trimmed.split(/\s+/).filter(Boolean)
+  if (parts.length >= 2) {
+    return `${parts[0][0]}${parts[1][0]}`.toUpperCase()
+  }
+  return trimmed.slice(0, 2).toUpperCase()
+}
+
 function normalizeCatalogItem(value: unknown): UserChannelCatalog {
   const item = isRecord(value) ? value : {}
   return {
@@ -598,6 +682,13 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 const zhSettingsCopy = {
+  avatar: "头像",
+  uploadAvatar: "上传头像",
+  avatarHint: "支持 JPEG、PNG、GIF 或 WebP，最大 2 MB。",
+  avatarUploading: "正在上传头像...",
+  avatarUpdated: "头像已更新",
+  avatarInvalid: "请选择不超过 2 MB 的 JPEG、PNG、GIF 或 WebP 图片。",
+  avatarUploadFailed: "头像上传失败",
   referral: "推广返佣",
   referralCode: "推广码",
   inviteCount: "邀请人数",
@@ -677,6 +768,13 @@ const zhSettingsCopy = {
 }
 
 const enSettingsCopy: typeof zhSettingsCopy = {
+  avatar: "Avatar",
+  uploadAvatar: "Upload avatar",
+  avatarHint: "JPEG, PNG, GIF, or WebP up to 2 MB.",
+  avatarUploading: "Uploading avatar...",
+  avatarUpdated: "Avatar updated",
+  avatarInvalid: "Choose a JPEG, PNG, GIF, or WebP image up to 2 MB.",
+  avatarUploadFailed: "Failed to upload avatar",
   referral: "Referral",
   referralCode: "Referral code",
   inviteCount: "Invites",

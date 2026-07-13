@@ -7,7 +7,7 @@ import Wallet from "./Wallet"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { PageTransition } from "@/components/layout/PageTransition"
 import { Button } from "@/components/ui/button"
-import api, { isDesktopTarget } from "@/lib/api"
+import api, { apiURL, isDesktopTarget } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
@@ -76,7 +76,7 @@ export default function SettingsWorkspace() {
         <div className="flex items-center gap-2">
           <ThemeSwitcher />
           <button type="button" className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border bg-muted text-sm font-semibold" title={user?.username || user?.email || copy.account}>
-            {user?.avatar_url ? <img src={user.avatar_url} alt="" className="h-full w-full object-cover" /> : avatarInitials(user?.username || user?.email || "") || <UserCircle size={20} />}
+            {user?.avatar_url ? <img src={apiURL(user.avatar_url)} alt="" className="h-full w-full object-cover" /> : avatarInitials(user?.username || user?.email || "") || <UserCircle size={20} />}
           </button>
         </div>
       </header>}

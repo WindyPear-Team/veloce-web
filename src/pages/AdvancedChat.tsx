@@ -30,7 +30,7 @@ import { Button } from "@/components/ui/button"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
 import { PageTransition } from "@/components/layout/PageTransition"
-import api, { isDesktopTarget } from "@/lib/api"
+import api, { apiURL, isDesktopTarget } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { pageKeyFromPathname } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -451,7 +451,7 @@ function UserAvatar({ user }: { user?: CurrentUser }) {
       aria-label={label}
     >
       {user?.avatar_url ? (
-        <img src={user.avatar_url} alt="" className="h-full w-full object-cover" />
+        <img src={apiURL(user.avatar_url)} alt="" className="h-full w-full object-cover" />
       ) : initials ? (
         initials
       ) : (
