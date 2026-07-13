@@ -512,6 +512,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
   const abortControllerRef = useRef<AbortController | null>(null)
+  const observedTaskRunStatesRef = useRef<Map<string, { runID: string; status: string }>>(new Map())
+  const hasObservedTaskRunStatesRef = useRef(false)
+  const notifiedConnectorApprovalTaskIDsRef = useRef(new Set<string>())
   const messagesEndRef = useRef<HTMLDivElement | null>(null)
   const messagesViewportRef = useRef<HTMLDivElement | null>(null)
   const composerTextareaRef = useRef<HTMLTextAreaElement | null>(null)
@@ -745,6 +748,28 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         : []
     },
   })
+  useEffect(() => {
+    if (!isDesktop || !window.veloceDesktop?.notifyConnectorApproval) {
+      return
+    }
+    for (const task of pendingConnectorApprovals) {
+      if (notifiedConnectorApprovalTaskIDsRef.current.has(task.id)) {
+        continue
+      }
+      notifiedConnectorApprovalTaskIDsRef.current.add(task.id)
+      const action = task.action || (language === "zh" ? "操作" : "action")
+      const deviceName = task.device_name || (language === "zh" ? "连接器" : "Connector")
+      const workspace = task.workspace_path ? `\n${task.workspace_path}` : ""
+      void window.veloceDesktop.notifyConnectorApproval({
+        id: `connector-approval:${task.id}`,
+        taskID: task.id,
+        title: language === "zh" ? "需要审批" : "Approval required",
+        body: language === "zh" ? `${deviceName} 请求执行 ${action}${workspace}` : `${deviceName} requests ${action}${workspace}`,
+        approveLabel: language === "zh" ? "批准" : "Approve",
+        rejectLabel: language === "zh" ? "拒绝" : "Reject",
+      })
+    }
+  }, [isDesktop, language, pendingConnectorApprovals])
   const activeModelName = isAdvanced ? currentSession?.model_name || selectedAgent?.default_model || modelName : modelName
   const channelModelOptions = useMemo(() => {
     const channelID = currentSession?.user_channel_id || selectedAgent?.user_channel_id || 0
@@ -986,6 +1011,31 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     setSessions((current) => mergeServerSessions(current, serverSessions, activeSessionID))
   }, [activeSessionID, isAdvanced, serverSessions, serverSessionsFetched])
+
+  useEffect(() => {
+    if (!isAdvanced || !isDesktop || !window.veloceDesktop?.notifyTaskComplete) {
+      return
+    }
+    const nextStates = new Map<string, { runID: string; status: string }>()
+    for (const session of sessions) {
+      const run = session.latest_run
+      if (!run?.status) {
+        continue
+      }
+      const nextState = { runID: run.id, status: run.status }
+      const previousState = observedTaskRunStatesRef.current.get(session.id)
+      if (hasObservedTaskRunStatesRef.current && previousState && isRunActiveStatus(previousState.status) && run.status === "completed") {
+        const sessionTitle = (session.title || copy.untitledSession).trim()
+        const title = language === "zh" ? "任务已完成" : "Task complete"
+        const body = language === "zh" ? `${sessionTitle} 已完成` : `${sessionTitle} is complete`
+        const notificationID = [session.id, run.id || previousState.runID, run.finished_at || run.updated_at || run.status].join(":")
+        void window.veloceDesktop.notifyTaskComplete({ id: notificationID, title, body })
+      }
+      nextStates.set(session.id, nextState)
+    }
+    observedTaskRunStatesRef.current = nextStates
+    hasObservedTaskRunStatesRef.current = true
+  }, [copy.untitledSession, isAdvanced, isDesktop, language, sessions])
 
   useEffect(() => {
     if (isAdvanced) {
@@ -2989,7 +3039,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       }}
     >
       <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
-        <div className={cn("truncate text-sm font-medium", session.id === activeSession?.id ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
+        <div className="flex min-w-0 items-center gap-2">
+          {isRunActive(session.latest_run) && <RefreshCw size={14} className="shrink-0 animate-spin text-primary" aria-label={language === "zh" ? "任务运行中" : "Task running"} />}
+          <div className={cn("truncate text-sm font-medium", session.id === activeSession?.id ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
+        </div>
       </button>
       <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
         <Trash2 size={15} />
@@ -6750,7 +6803,11 @@ function titleFromMessage(content: string, copy: ChatCopy) {
 }
 
 function isRunActive(run?: ChatRun) {
-  return run?.status === "queued" || run?.status === "running"
+  return isRunActiveStatus(run?.status)
+}
+
+function isRunActiveStatus(status?: string) {
+  return status === "queued" || status === "running"
 }
 
 function runStatusText(run: ChatRun, copy: ChatCopy) {

@@ -62,6 +62,8 @@ interface Window {
     chooseDesktopFolder: (initialPath?: string) => Promise<string>
     getDesktopSystemInfo: () => Promise<{ hostname: string; platform: string; instanceID: string }>
     openInVSCode: (workspacePath: string) => Promise<{ ok: boolean; message: string }>
+    notifyTaskComplete: (input: { id: string; title: string; body: string }) => Promise<{ ok: boolean; duplicate?: boolean }>
+    notifyConnectorApproval: (input: { id: string; taskID: string; title: string; body: string; approveLabel: string; rejectLabel: string }) => Promise<{ ok: boolean; duplicate?: boolean }>
     runDesktopMenuAction: (action: "new-window" | "quit" | "close-window" | "copy" | "paste" | "cut" | "delete" | "undo" | "redo") => Promise<{ ok: boolean }>
     openDesktopLink: (target: "official-site" | "github") => Promise<{ ok: boolean }>
     openExternalURL: (url: string) => Promise<{ ok: boolean }>
@@ -82,5 +84,6 @@ interface Window {
     onBuiltinServerStatus: (callback: (status: BuiltinServerStatus) => void) => () => void
     onDesktopProcessStatus: (callback: (status: DesktopProcessStatus) => void) => () => void
     onDesktopTabReceived: (callback: (tab: DesktopTabState) => void) => () => void
+    onConnectorApprovalDecision: (callback: (input: { taskID: string; approved: boolean }) => void) => () => void
   }
 }

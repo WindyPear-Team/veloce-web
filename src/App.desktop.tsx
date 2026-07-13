@@ -890,6 +890,14 @@ function DesktopConnectorBridge() {
   return null
 }
 
+function DesktopApprovalDecisionBridge() {
+  useEffect(() => window.veloceDesktop?.onConnectorApprovalDecision(({ taskID, approved }) => {
+    void api.post(`/user/advanced-chat/connector-tasks/${encodeURIComponent(taskID)}/decision`, { approved })
+  }), [])
+
+  return null
+}
+
 function DesktopNavigationBridge() {
   const navigate = useNavigate()
 
@@ -1146,6 +1154,7 @@ function DesktopPageRoutes({ className }: { className: string }) {
     <HashRouter>
       <TokenBridge />
       <DesktopConnectorBridge />
+      <DesktopApprovalDecisionBridge />
       <DesktopNavigationBridge />
       <DocumentTitle />
       <div className={className}>
