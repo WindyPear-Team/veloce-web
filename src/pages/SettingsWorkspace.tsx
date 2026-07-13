@@ -55,7 +55,7 @@ export default function SettingsWorkspace() {
   }
 
   return (
-    <div className={cn("flex flex-col overflow-hidden bg-background", isDesktop ? "h-full min-h-0" : "h-screen")}>
+    <div className={cn("flex flex-col overflow-hidden", isDesktop ? "desktop-acrylic-window h-full min-h-0" : "h-screen bg-background")}>
       {!isDesktop && <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background px-4 sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button

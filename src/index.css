@@ -73,9 +73,24 @@
   body {
     @apply bg-background text-foreground;
   }
+
+  html.desktop-acrylic-app,
+  html.desktop-acrylic-app body,
+  html.desktop-acrylic-app #root {
+    background: transparent;
+  }
 }
 
 @layer utilities {
+  .desktop-acrylic-window {
+    background-color: hsl(var(--background));
+  }
+
+  .desktop-acrylic-surface {
+    border-color: hsl(var(--foreground) / 0.1);
+    background-color: rgb(255 255 255 / 0.24);
+  }
+
   @keyframes page-in {
     from {
       opacity: 0;

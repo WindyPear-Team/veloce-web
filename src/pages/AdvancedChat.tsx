@@ -108,7 +108,7 @@ export default function AdvancedChat() {
       pageLayoutsRaw={publicSettings.page_layouts}
       onEditingChange={setIsLayoutEditing}
     >
-    <div className={cn("flex flex-col overflow-hidden bg-background", viewportHeightClass)}>
+    <div className={cn("flex flex-col overflow-hidden", isDesktop ? "desktop-acrylic-window" : "bg-background", viewportHeightClass)}>
       {!isDesktop && <header className="z-30 flex h-16 shrink-0 items-center justify-between bg-background/95 px-4 backdrop-blur sm:px-6">
         <div className="flex min-w-0 items-center gap-3">
           <Button

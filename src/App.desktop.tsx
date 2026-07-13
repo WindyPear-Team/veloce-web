@@ -506,7 +506,7 @@ function DesktopTitleBar({
 
   return (
     <>
-    <div className="fixed inset-x-0 top-0 z-50 h-9 select-none border-b bg-background/95 backdrop-blur [-webkit-app-region:drag]">
+    <div className="desktop-acrylic-surface fixed inset-x-0 top-0 z-50 h-9 select-none border-b [-webkit-app-region:drag]">
       <div className="flex h-full items-center justify-between pl-3 pr-[138px]">
         <div className="flex min-w-0 flex-1 items-center gap-2 text-xs font-semibold">
           <img src={logoURL} alt="" className="h-5 w-5 rounded object-cover" />
@@ -1416,12 +1416,21 @@ function App() {
       <ThemeProvider>
         <I18nProvider>
           <ToastProvider>
+            <DesktopTransparency />
             <DesktopRoutes />
           </ToastProvider>
         </I18nProvider>
       </ThemeProvider>
     </QueryClientProvider>
   )
+}
+
+function DesktopTransparency() {
+  useEffect(() => {
+    document.documentElement.classList.add("desktop-acrylic-app")
+    return () => document.documentElement.classList.remove("desktop-acrylic-app")
+  }, [])
+  return null
 }
 
 export default App
