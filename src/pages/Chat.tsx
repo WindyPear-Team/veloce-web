@@ -592,7 +592,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     enabled: isAdvanced,
     queryFn: async () => {
       const res = await api.get("/user/enterprise/shared-pools")
-      return Array.isArray(res.data) ? res.data.map(normalizeSharedPool).filter((pool): pool is EnterpriseSharedPool => Boolean(pool)) : []
+      const items = isRecord(res.data) && Array.isArray(res.data.pools) ? res.data.pools : []
+      return items.map(normalizeSharedPool).filter((pool): pool is EnterpriseSharedPool => Boolean(pool))
     },
   })
 
@@ -3283,6 +3284,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         )}
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+        {isAdvanced && sharedPools.length > 0 && (
+          <div className="pb-3">
+            <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{language === "zh" ? "任务与部门会话文件夹" : "Task and department session folders"}</div>
+            {sharedPools.map((pool) => (
+              <button key={pool.id} type="button" className={cn("flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-muted", String(pool.id) === selectedSharedPoolID && "bg-primary/10 text-primary")} onClick={() => setSelectedSharedPoolID(String(pool.id))}>
+                <Folder size={14} className={cn("shrink-0", pool.scope_type === "task" ? "text-teal-600" : "text-amber-600")} />
+                <span className="truncate text-sm font-medium">{sharedPoolLabel(pool, language)}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {selectedSharedPool && (
           <div className="pb-3">
             <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">

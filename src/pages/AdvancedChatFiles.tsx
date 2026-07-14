@@ -73,7 +73,8 @@ export default function AdvancedChatFiles() {
     queryKey: ["enterprise-shared-pools", "files"],
     queryFn: async () => {
       const res = await api.get("/user/enterprise/shared-pools")
-      return Array.isArray(res.data) ? res.data.map(normalizeSharedPool).filter((pool): pool is EnterpriseSharedPool => Boolean(pool)) : []
+      const items = isRecord(res.data) && Array.isArray(res.data.pools) ? res.data.pools : []
+      return items.map(normalizeSharedPool).filter((pool): pool is EnterpriseSharedPool => Boolean(pool))
     },
   })
   const { data: sharedFiles = [], isLoading: sharedFilesLoading, isFetching: sharedFilesFetching, refetch: refetchSharedFiles } = useQuery<StoredFile[]>({
@@ -230,6 +231,7 @@ export default function AdvancedChatFiles() {
               </CardTitle>
             </CardHeader>
             <CardContent>
+              {sharedPools.length > 0 && <div className="mb-4 space-y-1 border-b pb-4"><div className="px-1 pb-1 text-xs font-medium text-muted-foreground">{language === "zh" ? "任务与部门文件夹" : "Task and department folders"}</div>{sharedPools.map((pool) => <button key={pool.id} type="button" className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${String(pool.id) === selectedPoolID ? "bg-primary/10 text-primary" : ""}`} onClick={() => setSelectedPoolID(String(pool.id))}><Folder size={16} className={pool.scope_type === "task" ? "text-teal-600" : "text-amber-600"} /><span className="truncate">{sharedPoolLabel(pool, language)}</span></button>)}</div>}
               {visibleFiles.length === 0 ? (
                 <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center text-sm text-muted-foreground">
                   <FileText className="h-8 w-8" />
