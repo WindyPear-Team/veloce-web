@@ -48,7 +48,7 @@ export default function EnterpriseTaskDetail() {
   const revokeDevice = useMutation({ mutationFn: (assignmentID: number) => api.post(`/user/enterprise/device-assignments/${assignmentID}/revoke`), onSuccess: () => { void refresh(); success("任务池设备已撤销") }, onError: () => error("撤销设备失败") })
   const allocateQuota = useMutation({ mutationFn: () => api.post("/user/enterprise/quota-allocations", { parent_account_id: Number(parentQuotaID), child_account_id: detail.data?.quota_account?.id, amount }), onSuccess: () => { closeDialog(); void refresh(); void client.invalidateQueries({ queryKey: ["enterprise-quota-accounts"] }); success("额度已下拨到任务池") }, onError: () => error("下拨额度失败") })
   const task = detail.data?.task
-  const userName = (user?: User, fallback?: number) => user?.username || user?.email || (fallback ? `员工 #${fallback}` : "未指定")
+  const userName = (user?: User, fallback?: number) => user?.username || user?.email || (fallback ? "未知用户" : "未指定")
   const deviceName = (device: number) => devices.data?.devices.find((item) => item.id === device)?.name || `设备 #${device}`
   const availableMembers = useMemo(() => (members.data?.members || []).filter((member) => member.status === "active" && !detail.data?.assignments.some((item) => item.user_id === member.user_id)), [detail.data?.assignments, members.data?.members])
   const availableDepartments = useMemo(() => (departments.data?.departments || []).filter((item) => !detail.data?.departments.some((entry) => entry.department_id === item.id)), [departments.data?.departments, detail.data?.departments])
