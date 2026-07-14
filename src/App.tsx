@@ -100,6 +100,20 @@ const AdminRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>
 }
 
+const EnterpriseRoute = ({ children }: { children: React.ReactNode }) => {
+  const { data: settings, isLoading } = useQuery<PublicSettings>({
+    queryKey: ["public-settings"],
+    queryFn: async () => (await api.get("/public/settings")).data,
+  })
+  if (isLoading) {
+    return <div className="text-sm text-muted-foreground">加载中...</div>
+  }
+  if (String(withPublicSettingsDefaults(settings).system_mode).toLowerCase() !== "enterprise") {
+    return <Navigate to="/dashboard" replace />
+  }
+  return <>{children}</>
+}
+
 const SetupGate = ({ children }: { children: React.ReactNode }) => {
   const location = useLocation()
   const { t } = useI18n()
@@ -342,10 +356,10 @@ function App() {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="data-board" element={<DataBoard />} />
-                <Route path="tasks" element={<EnterpriseTasks />} />
-				<Route path="tasks/:id" element={<EnterpriseTaskDetail />} />
-				<Route path="enterprise/tasks/:id" element={<AdminRoute><EnterpriseTaskDetail /></AdminRoute>} />
-                <Route path="enterprise" element={<AdminRoute><EnterpriseManagement /></AdminRoute>} />
+                <Route path="tasks" element={<EnterpriseRoute><EnterpriseTasks /></EnterpriseRoute>} />
+				<Route path="tasks/:id" element={<EnterpriseRoute><EnterpriseTaskDetail /></EnterpriseRoute>} />
+				<Route path="enterprise/tasks/:id" element={<EnterpriseRoute><AdminRoute><EnterpriseTaskDetail /></AdminRoute></EnterpriseRoute>} />
+                <Route path="enterprise" element={<EnterpriseRoute><AdminRoute><EnterpriseManagement /></AdminRoute></EnterpriseRoute>} />
                 <Route
                   path="admin-overview"
                   element={
