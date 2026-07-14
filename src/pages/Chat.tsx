@@ -3286,7 +3286,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         {selectedSharedPool && (
           <div className="pb-3">
             <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">
-              {language === "zh" ? `${sharedPoolLabel(selectedSharedPool, language)}的共享会话（只读）` : `${sharedPoolLabel(selectedSharedPool, language)} shared sessions (read-only)`}
+              {language === "zh" ? `${sharedPoolLabel(selectedSharedPool, language)}的协作会话` : `${sharedPoolLabel(selectedSharedPool, language)} collaborative sessions`}
             </div>
             {sharedPoolSessions.length === 0 ? (
               <div className="px-2 py-3 text-xs text-muted-foreground">{language === "zh" ? "池内暂无会话" : "No shared sessions in this pool"}</div>
@@ -3301,7 +3301,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 disabled={loadingSharedSessionID === session.id}
                 onClick={() => void selectSharedPoolSession(session.id)}
               >
-                <FileText size={14} className="shrink-0" />
+                {selectedSharedPool.scope_type === "task" ? <Folder size={14} className="shrink-0 text-teal-600" /> : <FileText size={14} className="shrink-0" />}
                 <span className="truncate text-sm font-medium">{session.title || copy.untitledSession}</span>
               </button>
             ))}

@@ -25,6 +25,7 @@ import AdminOverview from "./pages/AdminOverview"
 import AdminAuditLogs from "./pages/AdminAuditLogs"
 import PublicContent from "./pages/PublicContent"
 import EnterpriseTasks from "./pages/EnterpriseTasks"
+import EnterpriseTaskDetail from "./pages/EnterpriseTaskDetail"
 import EnterpriseManagement from "./pages/EnterpriseManagement"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
@@ -342,6 +343,8 @@ function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="data-board" element={<DataBoard />} />
                 <Route path="tasks" element={<EnterpriseTasks />} />
+				<Route path="tasks/:id" element={<EnterpriseTaskDetail />} />
+				<Route path="enterprise/tasks/:id" element={<AdminRoute><EnterpriseTaskDetail /></AdminRoute>} />
                 <Route path="enterprise" element={<AdminRoute><EnterpriseManagement /></AdminRoute>} />
                 <Route
                   path="admin-overview"

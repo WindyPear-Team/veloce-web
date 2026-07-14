@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Download, FileText, HardDrive, RefreshCw, Trash2, Upload } from "lucide-react"
+import { Download, FileText, Folder, HardDrive, RefreshCw, Trash2, Upload } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -220,7 +220,7 @@ export default function AdvancedChatFiles() {
           <Card>
             <CardHeader>
               <CardTitle className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <span>{copy.files}</span>
+                <span className="flex items-center gap-2">{isSharedPoolView && sharedPools.find((pool) => String(pool.id) === selectedPoolID)?.scope_type === "task" && <Folder size={18} className="text-teal-600" />}{copy.files}</span>
                 {sharedPools.length > 0 && (
                   <select className="h-9 rounded-md border bg-background px-2 text-sm font-normal" value={selectedPoolID} onChange={(event) => setSelectedPoolID(event.target.value)}>
                     <option value="">{copy.personalFiles}</option>
@@ -325,7 +325,7 @@ function normalizeSharedPool(value: unknown): EnterpriseSharedPool | null {
 }
 
 function sharedPoolLabel(pool: EnterpriseSharedPool, language: string) {
-  const scope = pool.scope_type === "task" ? (language === "zh" ? "任务" : "Task") : (language === "zh" ? "部门" : "Department")
+  const scope = pool.scope_type === "task" ? (language === "zh" ? "任务文件夹" : "Task folder") : (language === "zh" ? "部门文件夹" : "Department folder")
   return `${scope}: ${pool.name}`
 }
 
