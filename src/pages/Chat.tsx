@@ -538,6 +538,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [loadingSharedSessionID, setLoadingSharedSessionID] = useState("")
   const [sharedSessionID, setSharedSessionID] = useState("")
   const [sharedSessionPoolID, setSharedSessionPoolID] = useState("")
+  const [loadedSharedSession, setLoadedSharedSession] = useState<ChatSession | null>(null)
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -655,8 +656,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     [selectableAPIKeys, selectedAPIKeyID]
   )
   const activeSession = useMemo(
-    () => sessions.find((session) => session.id === activeSessionID),
-    [sessions, activeSessionID]
+    () => sessions.find((session) => session.id === activeSessionID) || (loadedSharedSession?.id === activeSessionID ? loadedSharedSession : undefined),
+    [sessions, activeSessionID, loadedSharedSession]
   )
   const displaySessions = useMemo(() => sessions.map(normalizeRuntimeSession), [sessions])
   const resolvedSessionFolderAssignments = useMemo(() => {
@@ -1348,6 +1349,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setSessionMenu(null)
     setSharedSessionID("")
     setSharedSessionPoolID("")
+    setLoadedSharedSession(null)
     const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
     const session = createSession({
       agentID: defaultAgent?.id,
@@ -1598,6 +1600,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (sessionID !== sharedSessionID) {
       setSharedSessionID("")
       setSharedSessionPoolID("")
+      setLoadedSharedSession(null)
     }
     setActiveSessionID(sessionID)
     if (isAdvanced) {
@@ -2130,7 +2133,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         if (!sharedSession) {
           throw new Error("Shared session not found")
         }
-        setSessions((current) => upsertSession(current, sharedSession))
+        setLoadedSharedSession(sharedSession)
         setPrompt("")
         setAttachments([])
         closeAgentMention()
@@ -2671,7 +2674,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       if (!session) {
         throw new Error("Shared session not found")
       }
-      setSessions((current) => upsertSession(current, session))
+      setSessions((current) => current.filter((item) => item.id !== session.id && item.id !== sharedSessionID))
+      setLoadedSharedSession(session)
       setSharedSessionID(session.id)
       setSharedSessionPoolID(selectedSharedPoolID)
       setActiveSessionID(session.id)
