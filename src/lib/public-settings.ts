@@ -1,6 +1,6 @@
 export interface PublicSettings {
   edition: "community" | "premium" | string
-  system_mode: "operation" | "personal" | string
+  system_mode: "operation" | "personal" | "enterprise" | string
   chat_page_mode: "basic" | "advanced" | string
   site_name: string
   base_url: string

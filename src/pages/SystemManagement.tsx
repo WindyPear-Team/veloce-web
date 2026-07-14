@@ -826,6 +826,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.system_mode || "operation"} onChange={(event) => updateField("system_mode", event.target.value)}>
                 <option value="operation">{copy.systemModeOperation}</option>
                 <option value="personal">{copy.systemModePersonal}</option>
+				<option value="enterprise">{copy.systemModeEnterprise}</option>
               </select>
               <span className="text-xs text-muted-foreground">{copy.systemModeHint}</span>
             </label>
@@ -3395,7 +3396,8 @@ const zhCopy = {
   systemMode: "运行模式",
   systemModeOperation: "运营模式",
   systemModePersonal: "自用模式",
-  systemModeHint: "自用模式会在运行时关闭余额扣费、额度限制、用户渠道区分、支付、兑换码和订阅额度功能，底层字段与历史数据不变。",
+  systemModeEnterprise: "企业模式",
+  systemModeHint: "运营模式面向公开运营；自用模式关闭余额扣费和支付等运营能力；企业模式用于单企业私有部署，并启用企业成员、Workspace、RBAC 和治理能力。切换模式不会删除历史数据。",
   theme: "主题设置",
   themeSettings: "网站主题",
   themeSettingsDescription: "配置全站浅色和深色模式下的主题颜色、强调色、背景、文字和边框。",
@@ -3771,7 +3773,8 @@ const enCopy: SystemCopy = {
   systemMode: "Run mode",
   systemModeOperation: "Operation mode",
   systemModePersonal: "Personal mode",
-  systemModeHint: "Personal mode disables balance charging, quotas, user-channel separation, payment, redeem codes, and subscription quota features at runtime while keeping stored fields and history unchanged.",
+  systemModeEnterprise: "Enterprise mode",
+  systemModeHint: "Operation mode is for public services; personal mode disables charging and payment features; enterprise mode enables single-enterprise members, workspaces, RBAC, and governance. Switching modes preserves existing data.",
   theme: "Theme",
   themeSettings: "Site theme",
   themeSettingsDescription: "Configure site theme colors, accents, backgrounds, text, and borders for light and dark modes.",
