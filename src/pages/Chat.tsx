@@ -46,6 +46,7 @@ interface ChatContentPart {
 
 interface ChatMessage {
   id: string
+  user_id?: number
   role: "user" | "assistant"
   content: string
   content_parts?: ChatContentPart[]
@@ -535,7 +536,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [filePickerTarget, setFilePickerTarget] = useState<AttachmentTarget>("composer")
   const [selectedSharedPoolID, setSelectedSharedPoolID] = useState("")
   const [loadingSharedSessionID, setLoadingSharedSessionID] = useState("")
-  const [sharedReadOnlySessionID, setSharedReadOnlySessionID] = useState("")
+  const [sharedSessionID, setSharedSessionID] = useState("")
+  const [sharedSessionPoolID, setSharedSessionPoolID] = useState("")
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -679,7 +681,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   )
   const currentSessionRaw = activeSession || (isAdvanced && routeSessionID ? undefined : draftSession)
   const currentSession = currentSessionRaw ? normalizeRuntimeSession(currentSessionRaw) : undefined
-  const isSharedSessionReadOnly = Boolean(currentSession?.id && currentSession.id === sharedReadOnlySessionID)
+  const isSharedSession = Boolean(currentSession?.id && currentSession.id === sharedSessionID && sharedSessionPoolID)
   const currentMessages = currentSession?.messages || []
   const latestMessage = currentMessages[currentMessages.length - 1]
   const welcomeSuggestions = useMemo(
@@ -1343,7 +1345,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const createNewSession = () => {
     setSessionMenu(null)
-    setSharedReadOnlySessionID("")
+    setSharedSessionID("")
+    setSharedSessionPoolID("")
     const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
     const session = createSession({
       agentID: defaultAgent?.id,
@@ -1491,9 +1494,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const renameSessionTitle = (session: ChatSession) => {
     setSessionMenu(null)
-    if (session.id === sharedReadOnlySessionID) {
-      return
-    }
     const nextTitle = window.prompt(copy.customTitlePrompt, session.title || copy.untitledSession)
     if (nextTitle === null) {
       return
@@ -1507,7 +1507,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const regenerateSessionTitle = async (session: ChatSession) => {
     setSessionMenu(null)
-    if (!isAdvanced || session.id === sharedReadOnlySessionID) {
+    if (!isAdvanced || session.id === sharedSessionID) {
       return
     }
     setRegeneratingTitleSessionID(session.id)
@@ -1594,8 +1594,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const selectSession = (sessionID: string) => {
     setSessionMenu(null)
-    if (sessionID !== sharedReadOnlySessionID) {
-      setSharedReadOnlySessionID("")
+    if (sessionID !== sharedSessionID) {
+      setSharedSessionID("")
+      setSharedSessionPoolID("")
     }
     setActiveSessionID(sessionID)
     if (isAdvanced) {
@@ -2104,14 +2105,40 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const sendMessage = async () => {
-    if (isSharedSessionReadOnly) {
-      return
-    }
     const content = prompt.trim()
     const rawKey = selectedAPIKey?.api_key.trim() || ""
     const session = currentSession
     const resolvedModel = activeModelName.trim()
     if (!session) {
+      return
+    }
+    if (isSharedSession) {
+      if (!content && attachments.length === 0) {
+        return
+      }
+      const messageContent = messageContentWithAttachments(content, attachments)
+      const nextTitle = session.title || titleFromMessage(content || attachments[0]?.name || copy.attachmentMessageTitle, copy)
+      setIsSending(true)
+      try {
+        const res = await api.post(`/user/enterprise/shared-pools/${encodeURIComponent(sharedSessionPoolID)}/sessions/${encodeURIComponent(session.id)}/messages`, {
+          content: messageContent,
+          title: nextTitle,
+        })
+        const payload = isRecord(res.data) ? res.data : {}
+        const sharedSession = normalizeSession({ ...(isRecord(payload.session) ? payload.session : {}), messages: payload.messages })
+        if (!sharedSession) {
+          throw new Error("Shared session not found")
+        }
+        setSessions((current) => upsertSession(current, sharedSession))
+        setPrompt("")
+        setAttachments([])
+        closeAgentMention()
+        cancelEdit()
+      } catch (err) {
+        error(apiErrorMessage(err, language === "zh" ? "发送共享消息失败" : "Failed to send shared message"))
+      } finally {
+        setIsSending(false)
+      }
       return
     }
     if (!resolvedModel && activeRunMode !== "agent_group") {
@@ -2453,7 +2480,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const saveEditedMessage = () => {
     const content = messageContentWithAttachments(editingText.trim(), editingAttachments)
-    if (isSharedSessionReadOnly || !currentSession || !editingMessageID || !content.trim()) {
+    if (isSharedSession || !currentSession || !editingMessageID || !content.trim()) {
       return
     }
     updateSession(currentSession.id, (session) => ({
@@ -2466,7 +2493,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const deleteMessage = (messageID: string) => {
-    if (isSharedSessionReadOnly || !currentSession) {
+    if (isSharedSession || !currentSession) {
       return
     }
     updateSession(currentSession.id, (session) => ({
@@ -2644,7 +2671,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         throw new Error("Shared session not found")
       }
       setSessions((current) => upsertSession(current, session))
-      setSharedReadOnlySessionID(session.id)
+      setSharedSessionID(session.id)
+      setSharedSessionPoolID(selectedSharedPoolID)
       setActiveSessionID(session.id)
       navigate(`/chat/session/${encodeURIComponent(session.id)}`)
       setIsSessionsSidebarOpen(false)
@@ -2737,7 +2765,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         type="button"
         size="icon"
         className={className}
-        disabled={isSharedSessionReadOnly || (!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
+        disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
         onClick={sendMessage}
         title={title}
         aria-label={title}
@@ -3129,7 +3157,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         session.id === activeSession?.id ? "border-primary/40 bg-primary/15 shadow-sm before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-r before:bg-primary" : "hover:bg-muted"
       )}
       onContextMenu={(event) => {
-        if (session.id === sharedReadOnlySessionID) {
+        if (session.id === sharedSessionID) {
           return
         }
         event.preventDefault()
@@ -3143,7 +3171,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           <div className={cn("truncate text-sm font-medium", session.id === activeSession?.id ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
         </div>
       </button>
-      {session.id !== sharedReadOnlySessionID && <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
+      {session.id !== sharedSessionID && <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
         <Trash2 size={15} />
       </Button>}
     </div>
@@ -3158,7 +3186,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             className="h-8 max-h-40 min-h-8 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-1 text-sm leading-5 outline-none focus:ring-0"
             rows={1}
             value={prompt}
-            readOnly={isSharedSessionReadOnly}
             placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
             onChange={handleComposerPromptChange}
             onKeyDown={handleComposerPromptKeyDown}
@@ -3166,7 +3193,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           />
           {agentMentionPicker()}
         </div>
-        {isSharedSessionReadOnly && <div className="px-3 pb-2 text-xs text-muted-foreground">{language === "zh" ? "共享会话当前为只读；请新建个人会话后继续讨论。" : "This shared session is read-only. Start a personal session to continue."}</div>}
+        {isSharedSession && <div className="px-3 pb-2 text-xs text-muted-foreground">{language === "zh" ? "共享会话：参与者可追加任务消息；运行仅可使用本池分配的企业设备。" : "Shared session: participants can add task messages; runs may only use enterprise devices assigned to this pool."}</div>}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {attachmentMenuButton("composer")}
@@ -3269,7 +3296,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 type="button"
                 className={cn(
                   "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-muted",
-                  session.id === activeSession?.id && isSharedSessionReadOnly && "bg-primary/10 text-primary"
+                  session.id === activeSession?.id && isSharedSession && "bg-primary/10 text-primary"
                 )}
                 disabled={loadingSharedSessionID === session.id}
                 onClick={() => void selectSharedPoolSession(session.id)}
@@ -3844,7 +3871,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                       <textarea
                                         className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                                         value={editingText}
-                                        readOnly={isSharedSessionReadOnly}
+                                        readOnly={isSharedSession}
                                         onChange={(event) => setEditingText(event.target.value)}
                                       />
                                       {editingAttachments.length > 0 && (
@@ -3885,7 +3912,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                           >
                             {editingMessageID === message.id ? (
                               <>
-                                <Button variant="ghost" size="sm" disabled={isSharedSessionReadOnly} onClick={saveEditedMessage} title={copy.saveMessage}>
+                                <Button variant="ghost" size="sm" disabled={isSharedSession} onClick={saveEditedMessage} title={copy.saveMessage}>
                                   <Check size={15} />
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
@@ -3897,10 +3924,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyMessage(message)} title={copy.copyMessage}>
                                   <Copy size={14} />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isSharedSessionReadOnly} onClick={() => beginEditMessage(message)} title={copy.editMessage}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isSharedSession} onClick={() => beginEditMessage(message)} title={copy.editMessage}>
                                   <Pencil size={14} />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" disabled={isSharedSessionReadOnly} onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" disabled={isSharedSession} onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
                                   <Trash2 size={14} />
                                 </Button>
                               </>
@@ -3986,7 +4013,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <Button
                     type="button"
                     className="gap-2 self-end"
-                    disabled={isSharedSessionReadOnly || (!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
+                    disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
                     onClick={sendMessage}
                   >
                     <Send size={16} />
@@ -6725,6 +6752,7 @@ function normalizeMessage(value: unknown): ChatMessage | null {
   }
   return {
     id: typeof value.id === "string" && value.id ? value.id : createID(),
+    user_id: Number(value.user_id || 0) || undefined,
     role: value.role,
     content: value.content,
     content_parts: normalizeContentParts(value.content_parts, value.content),
