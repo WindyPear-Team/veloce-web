@@ -336,6 +336,14 @@ interface StoredFileContent {
   truncated: boolean
 }
 
+interface EnterpriseSharedPool {
+  id: number
+  scope_type: "task" | "department" | string
+  name: string
+  department_id?: number
+  task_id?: number
+}
+
 type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
 type ChatMode = "basic" | "advanced"
 type ChatRunMode = "chat" | "assistant" | "agent_group"
@@ -525,6 +533,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [editingText, setEditingText] = useState("")
   const [editingAttachments, setEditingAttachments] = useState<ChatAttachment[]>([])
   const [filePickerTarget, setFilePickerTarget] = useState<AttachmentTarget>("composer")
+  const [selectedSharedPoolID, setSelectedSharedPoolID] = useState("")
+  const [loadingSharedSessionID, setLoadingSharedSessionID] = useState("")
+  const [sharedReadOnlySessionID, setSharedReadOnlySessionID] = useState("")
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -571,6 +582,30 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     queryFn: async () => {
       const res = await api.get("/user/advanced-chat/settings")
       return normalizeAdvancedChatSettings(res.data)
+    },
+  })
+
+  const { data: sharedPools = [] } = useQuery<EnterpriseSharedPool[]>({
+    queryKey: ["enterprise-shared-pools", "chat"],
+    enabled: isAdvanced,
+    queryFn: async () => {
+      const res = await api.get("/user/enterprise/shared-pools")
+      return Array.isArray(res.data) ? res.data.map(normalizeSharedPool).filter((pool): pool is EnterpriseSharedPool => Boolean(pool)) : []
+    },
+  })
+
+  const selectedSharedPool = useMemo(
+    () => sharedPools.find((pool) => String(pool.id) === selectedSharedPoolID),
+    [selectedSharedPoolID, sharedPools]
+  )
+
+  const { data: sharedPoolSessions = [] } = useQuery<ChatSession[]>({
+    queryKey: ["enterprise-shared-pool-sessions", selectedSharedPoolID],
+    enabled: isAdvanced && Boolean(selectedSharedPoolID),
+    queryFn: async () => {
+      const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/sessions`)
+      const items = isRecord(res.data) && Array.isArray(res.data.sessions) ? res.data.sessions : []
+      return items.map(normalizeSession).filter((session): session is ChatSession => Boolean(session))
     },
   })
 
@@ -644,6 +679,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   )
   const currentSessionRaw = activeSession || (isAdvanced && routeSessionID ? undefined : draftSession)
   const currentSession = currentSessionRaw ? normalizeRuntimeSession(currentSessionRaw) : undefined
+  const isSharedSessionReadOnly = Boolean(currentSession?.id && currentSession.id === sharedReadOnlySessionID)
   const currentMessages = currentSession?.messages || []
   const latestMessage = currentMessages[currentMessages.length - 1]
   const welcomeSuggestions = useMemo(
@@ -682,6 +718,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     },
   })
   const storedFiles = Array.isArray(storedFilesResponse) ? storedFilesResponse : storedFilesResponse?.files || []
+  const { data: sharedPoolFiles = [] } = useQuery<StoredFile[]>({
+    queryKey: ["enterprise-shared-pool-files", selectedSharedPoolID],
+    enabled: isAdvanced && Boolean(selectedSharedPoolID),
+    queryFn: async () => {
+      const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/files`)
+      const items = isRecord(res.data) && Array.isArray(res.data.files) ? res.data.files : []
+      return items.map(normalizeStoredFile).filter((file): file is StoredFile => Boolean(file))
+    },
+  })
+  const selectableStoredFiles = selectedSharedPoolID ? sharedPoolFiles : storedFiles
   const assistantModeEnabled = !isAdvanced || currentAdvancedSettings.assistant_mode_enabled
   const assistantConnectorToolsEnabled =
     currentAdvancedSettings.assistant_connector_list_files_enabled ||
@@ -1297,6 +1343,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const createNewSession = () => {
     setSessionMenu(null)
+    setSharedReadOnlySessionID("")
     const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
     const session = createSession({
       agentID: defaultAgent?.id,
@@ -1444,6 +1491,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const renameSessionTitle = (session: ChatSession) => {
     setSessionMenu(null)
+    if (session.id === sharedReadOnlySessionID) {
+      return
+    }
     const nextTitle = window.prompt(copy.customTitlePrompt, session.title || copy.untitledSession)
     if (nextTitle === null) {
       return
@@ -1457,7 +1507,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const regenerateSessionTitle = async (session: ChatSession) => {
     setSessionMenu(null)
-    if (!isAdvanced) {
+    if (!isAdvanced || session.id === sharedReadOnlySessionID) {
       return
     }
     setRegeneratingTitleSessionID(session.id)
@@ -1485,6 +1535,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       .then((saved) => {
         if (saved) {
           setSessions((current) => upsertSession(current, saved))
+          if (selectedSharedPoolID) {
+            void api.post(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/sessions`, { id: saved.id })
+              .then(() => queryClient.invalidateQueries({ queryKey: ["enterprise-shared-pool-sessions", selectedSharedPoolID] }))
+              .catch(() => undefined)
+          }
         }
       })
       .catch((err) => error(apiErrorMessage(err, err instanceof Error ? err.message : copy.sendFailed)))
@@ -1539,6 +1594,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const selectSession = (sessionID: string) => {
     setSessionMenu(null)
+    if (sessionID !== sharedReadOnlySessionID) {
+      setSharedReadOnlySessionID("")
+    }
     setActiveSessionID(sessionID)
     if (isAdvanced) {
       navigate(`/chat/session/${encodeURIComponent(sessionID)}`)
@@ -2046,6 +2104,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const sendMessage = async () => {
+    if (isSharedSessionReadOnly) {
+      return
+    }
     const content = prompt.trim()
     const rawKey = selectedAPIKey?.api_key.trim() || ""
     const session = currentSession
@@ -2392,7 +2453,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const saveEditedMessage = () => {
     const content = messageContentWithAttachments(editingText.trim(), editingAttachments)
-    if (!currentSession || !editingMessageID || !content.trim()) {
+    if (isSharedSessionReadOnly || !currentSession || !editingMessageID || !content.trim()) {
       return
     }
     updateSession(currentSession.id, (session) => ({
@@ -2405,7 +2466,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const deleteMessage = (messageID: string) => {
-    if (!currentSession) {
+    if (isSharedSessionReadOnly || !currentSession) {
       return
     }
     updateSession(currentSession.id, (session) => ({
@@ -2514,11 +2575,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         if (!storedFile) {
           continue
         }
+        if (selectedSharedPoolID) {
+          await api.post(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/files`, { id: storedFile.id })
+        }
         next.push(attachmentFromStoredFile(storedFile, normalizeStoredFileContent(res.data?.content)))
       }
       if (next.length > 0) {
         appendAttachments(target, next)
         void queryClient.invalidateQueries({ queryKey: advancedFilesQueryKey })
+        if (selectedSharedPoolID) {
+          void queryClient.invalidateQueries({ queryKey: ["enterprise-shared-pool-files", selectedSharedPoolID] })
+        }
         void queryClient.invalidateQueries({ queryKey: ["advanced-chat-user-settings"] })
       }
     } catch (err) {
@@ -2536,7 +2603,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
     setSelectingFileID(file.id)
     try {
-      const res = await api.get(`/user/advanced-chat/files/${encodeURIComponent(file.id)}/content`)
+      const source = selectedSharedPoolID
+        ? `/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/files/${encodeURIComponent(file.id)}/content`
+        : `/user/advanced-chat/files/${encodeURIComponent(file.id)}/content`
+      const res = await api.get(source)
       const content = normalizeStoredFileContent(res.data)
       appendAttachments(filePickerTarget, [attachmentFromStoredFile(file, content)])
       setIsFilePickerOpen(false)
@@ -2559,6 +2629,31 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setAttachmentMenuTarget("")
     setFilePickerTarget(target)
     setIsFilePickerOpen(true)
+  }
+
+  const selectSharedPoolSession = async (sessionID: string) => {
+    if (!selectedSharedPoolID || loadingSharedSessionID) {
+      return
+    }
+    setLoadingSharedSessionID(sessionID)
+    try {
+      const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/sessions/${encodeURIComponent(sessionID)}`)
+      const payload = isRecord(res.data) ? res.data : {}
+      const session = normalizeSession({ ...(isRecord(payload.session) ? payload.session : {}), messages: payload.messages })
+      if (!session) {
+        throw new Error("Shared session not found")
+      }
+      setSessions((current) => upsertSession(current, session))
+      setSharedReadOnlySessionID(session.id)
+      setActiveSessionID(session.id)
+      navigate(`/chat/session/${encodeURIComponent(session.id)}`)
+      setIsSessionsSidebarOpen(false)
+      cancelEdit()
+    } catch (err) {
+      error(apiErrorMessage(err, language === "zh" ? "加载共享会话失败" : "Failed to load shared session"))
+    } finally {
+      setLoadingSharedSessionID("")
+    }
   }
 
   const removeAttachment = (id: string) => {
@@ -2642,7 +2737,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         type="button"
         size="icon"
         className={className}
-        disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
+        disabled={isSharedSessionReadOnly || (!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
         onClick={sendMessage}
         title={title}
         aria-label={title}
@@ -3034,6 +3129,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         session.id === activeSession?.id ? "border-primary/40 bg-primary/15 shadow-sm before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-r before:bg-primary" : "hover:bg-muted"
       )}
       onContextMenu={(event) => {
+        if (session.id === sharedReadOnlySessionID) {
+          return
+        }
         event.preventDefault()
         setSessionFolderContextMenu(null)
         setSessionMenu({ sessionID: session.id, x: event.clientX, y: event.clientY })
@@ -3045,9 +3143,9 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           <div className={cn("truncate text-sm font-medium", session.id === activeSession?.id ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
         </div>
       </button>
-      <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
+      {session.id !== sharedReadOnlySessionID && <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
         <Trash2 size={15} />
-      </Button>
+      </Button>}
     </div>
   )
 
@@ -3060,6 +3158,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             className="h-8 max-h-40 min-h-8 w-full resize-none overflow-y-auto rounded-md border-0 bg-transparent px-3 py-1 text-sm leading-5 outline-none focus:ring-0"
             rows={1}
             value={prompt}
+            readOnly={isSharedSessionReadOnly}
             placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
             onChange={handleComposerPromptChange}
             onKeyDown={handleComposerPromptKeyDown}
@@ -3067,6 +3166,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           />
           {agentMentionPicker()}
         </div>
+        {isSharedSessionReadOnly && <div className="px-3 pb-2 text-xs text-muted-foreground">{language === "zh" ? "共享会话当前为只读；请新建个人会话后继续讨论。" : "This shared session is read-only. Start a personal session to continue."}</div>}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
             {attachmentMenuButton("composer")}
@@ -3139,8 +3239,47 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             aria-label={sessionSidebarCopy.search}
           />
         </label>
+        {isAdvanced && sharedPools.length > 0 && (
+          <label className="mt-3 block">
+            <span className="mb-1 block text-xs font-medium text-slate-500">{language === "zh" ? "共享资源池" : "Shared resource pool"}</span>
+            <select
+              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
+              value={selectedSharedPoolID}
+              onChange={(event) => setSelectedSharedPoolID(event.target.value)}
+            >
+              <option value="">{language === "zh" ? "个人会话与文件" : "Personal sessions and files"}</option>
+              {sharedPools.map((pool) => (
+                <option key={pool.id} value={pool.id}>{sharedPoolLabel(pool, language)}</option>
+              ))}
+            </select>
+          </label>
+        )}
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
+        {selectedSharedPool && (
+          <div className="pb-3">
+            <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">
+              {language === "zh" ? `${sharedPoolLabel(selectedSharedPool, language)}的共享会话（只读）` : `${sharedPoolLabel(selectedSharedPool, language)} shared sessions (read-only)`}
+            </div>
+            {sharedPoolSessions.length === 0 ? (
+              <div className="px-2 py-3 text-xs text-muted-foreground">{language === "zh" ? "池内暂无会话" : "No shared sessions in this pool"}</div>
+            ) : sharedPoolSessions.map((session) => (
+              <button
+                key={session.id}
+                type="button"
+                className={cn(
+                  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-muted",
+                  session.id === activeSession?.id && isSharedSessionReadOnly && "bg-primary/10 text-primary"
+                )}
+                disabled={loadingSharedSessionID === session.id}
+                onClick={() => void selectSharedPoolSession(session.id)}
+              >
+                <FileText size={14} className="shrink-0" />
+                <span className="truncate text-sm font-medium">{session.title || copy.untitledSession}</span>
+              </button>
+            ))}
+          </div>
+        )}
         {folderSessionGroups.map(({ folder, sessions: groupedSessions }) => (
           <div key={folder.id} className="pb-2">
             <button
@@ -3705,6 +3844,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                       <textarea
                                         className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
                                         value={editingText}
+                                        readOnly={isSharedSessionReadOnly}
                                         onChange={(event) => setEditingText(event.target.value)}
                                       />
                                       {editingAttachments.length > 0 && (
@@ -3745,7 +3885,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                           >
                             {editingMessageID === message.id ? (
                               <>
-                                <Button variant="ghost" size="sm" onClick={saveEditedMessage} title={copy.saveMessage}>
+                                <Button variant="ghost" size="sm" disabled={isSharedSessionReadOnly} onClick={saveEditedMessage} title={copy.saveMessage}>
                                   <Check size={15} />
                                 </Button>
                                 <Button variant="ghost" size="sm" onClick={cancelEdit} title={copy.cancelEdit}>
@@ -3757,10 +3897,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                 <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => copyMessage(message)} title={copy.copyMessage}>
                                   <Copy size={14} />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => beginEditMessage(message)} title={copy.editMessage}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isSharedSessionReadOnly} onClick={() => beginEditMessage(message)} title={copy.editMessage}>
                                   <Pencil size={14} />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" disabled={isSharedSessionReadOnly} onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
                                   <Trash2 size={14} />
                                 </Button>
                               </>
@@ -3846,7 +3986,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <Button
                     type="button"
                     className="gap-2 self-end"
-                    disabled={(!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
+                    disabled={isSharedSessionReadOnly || (!prompt.trim() && attachments.length === 0) || isSending || isUploadingAttachments || isActiveRunRunning}
                     onClick={sendMessage}
                   >
                     <Send size={16} />
@@ -3980,12 +4120,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <DialogTitle>{fileCopy.selectFile}</DialogTitle>
             </DialogHeader>
             <div className="space-y-3">
-              {storedFiles.length === 0 ? (
+              {selectedSharedPool && <div className="rounded-md bg-muted px-3 py-2 text-xs text-muted-foreground">{language === "zh" ? `正在选择 ${sharedPoolLabel(selectedSharedPool, language)} 中的共享文件` : `Selecting shared files from ${sharedPoolLabel(selectedSharedPool, language)}`}</div>}
+              {selectableStoredFiles.length === 0 ? (
                 <div className="rounded-md border border-dashed px-3 py-10 text-center text-sm text-muted-foreground">
                   {fileCopy.noFiles}
                 </div>
               ) : (
-                storedFiles.map((file) => {
+                selectableStoredFiles.map((file) => {
                   const targetAttachments = filePickerTarget === "editor" ? editingAttachments : attachments
                   const selected = targetAttachments.some((attachment) => attachment.storage_id === file.id)
                   return (
@@ -6337,6 +6478,26 @@ function normalizeStoredFileContent(value: unknown): StoredFileContent {
     binary: item.binary === true,
     truncated: item.truncated === true,
   }
+}
+
+function normalizeSharedPool(value: unknown): EnterpriseSharedPool | null {
+  const item = isRecord(value) ? value : {}
+  const id = Number(item.id || 0)
+  if (!Number.isFinite(id) || id <= 0) {
+    return null
+  }
+  return {
+    id,
+    scope_type: stringFromUnknown(item.scope_type) || "",
+    name: stringFromUnknown(item.name) || `Pool ${id}`,
+    department_id: Number(item.department_id || 0) || undefined,
+    task_id: Number(item.task_id || 0) || undefined,
+  }
+}
+
+function sharedPoolLabel(pool: EnterpriseSharedPool, language: string) {
+  const scope = pool.scope_type === "task" ? (language === "zh" ? "任务" : "Task") : (language === "zh" ? "部门" : "Department")
+  return `${scope}: ${pool.name}`
 }
 
 function messageContentWithAttachments(content: string, attachments: ChatAttachment[]) {

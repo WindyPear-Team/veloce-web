@@ -33,6 +33,12 @@ interface FileListResponse {
   remaining_bytes: number
 }
 
+interface EnterpriseSharedPool {
+  id: number
+  scope_type: "task" | "department" | string
+  name: string
+}
+
 const filesQueryKey = ["advanced-chat-files"] as const
 
 export default function AdvancedChatFiles() {
@@ -43,6 +49,7 @@ export default function AdvancedChatFiles() {
   const [isUploading, setIsUploading] = useState(false)
   const [deletingID, setDeletingID] = useState("")
   const [downloadingID, setDownloadingID] = useState("")
+  const [selectedPoolID, setSelectedPoolID] = useState("")
 
   const { data: settings } = useQuery<AdvancedChatSettings>({
     queryKey: ["advanced-chat-file-settings"],
@@ -62,6 +69,25 @@ export default function AdvancedChatFiles() {
     },
   })
 
+  const { data: sharedPools = [] } = useQuery<EnterpriseSharedPool[]>({
+    queryKey: ["enterprise-shared-pools", "files"],
+    queryFn: async () => {
+      const res = await api.get("/user/enterprise/shared-pools")
+      return Array.isArray(res.data) ? res.data.map(normalizeSharedPool).filter((pool): pool is EnterpriseSharedPool => Boolean(pool)) : []
+    },
+  })
+  const { data: sharedFiles = [], isLoading: sharedFilesLoading, isFetching: sharedFilesFetching, refetch: refetchSharedFiles } = useQuery<StoredFile[]>({
+    queryKey: ["enterprise-shared-pool-files", selectedPoolID],
+    enabled: Boolean(selectedPoolID),
+    queryFn: async () => {
+      const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedPoolID)}/files`)
+      const items = isRecord(res.data) && Array.isArray(res.data.files) ? res.data.files : []
+      return items.map(normalizeFile).filter((file): file is StoredFile => Boolean(file))
+    },
+  })
+  const isSharedPoolView = Boolean(selectedPoolID)
+  const visibleFiles = isSharedPoolView ? sharedFiles : filesQuery.data?.files || []
+
   const usage = useMemo(() => {
     const used = filesQuery.data?.used_bytes ?? settings?.file_storage_used_bytes ?? 0
     const total = filesQuery.data?.total_bytes ?? Math.max(0, Number(settings?.file_storage_total_mb || 0)) * 1024 * 1024
@@ -78,11 +104,18 @@ export default function AdvancedChatFiles() {
       for (const file of Array.from(files)) {
         const formData = new FormData()
         formData.append("file", file)
-        await api.post("/user/advanced-chat/files", formData)
+        const res = await api.post("/user/advanced-chat/files", formData)
+        const uploadedFile = normalizeFile(res.data?.file)
+        if (selectedPoolID && uploadedFile) {
+          await api.post(`/user/enterprise/shared-pools/${encodeURIComponent(selectedPoolID)}/files`, { id: uploadedFile.id })
+        }
         uploaded += 1
       }
       success(copy.uploaded.replace("{count}", String(uploaded)))
       await queryClient.invalidateQueries({ queryKey: filesQueryKey })
+      if (selectedPoolID) {
+        await queryClient.invalidateQueries({ queryKey: ["enterprise-shared-pool-files", selectedPoolID] })
+      }
       await queryClient.invalidateQueries({ queryKey: ["advanced-chat-file-settings"] })
     } catch (err) {
       error(apiErrorMessage(err, copy.uploadFailed))
@@ -114,7 +147,10 @@ export default function AdvancedChatFiles() {
     }
     setDownloadingID(file.id)
     try {
-      const res = await api.get(`/user/advanced-chat/files/${encodeURIComponent(file.id)}/download`, { responseType: "blob" })
+      const source = selectedPoolID
+        ? `/user/enterprise/shared-pools/${encodeURIComponent(selectedPoolID)}/files/${encodeURIComponent(file.id)}/download`
+        : `/user/advanced-chat/files/${encodeURIComponent(file.id)}/download`
+      const res = await api.get(source, { responseType: "blob" })
       const url = URL.createObjectURL(res.data)
       const link = document.createElement("a")
       link.href = url
@@ -139,7 +175,7 @@ export default function AdvancedChatFiles() {
         </div>
         {storageEnabled && (
           <div className="flex flex-wrap gap-2">
-            <Button variant="outline" className="gap-2" disabled={filesQuery.isFetching} onClick={() => filesQuery.refetch()}>
+            <Button variant="outline" className="gap-2" disabled={isSharedPoolView ? sharedFilesFetching : filesQuery.isFetching} onClick={() => isSharedPoolView ? refetchSharedFiles() : filesQuery.refetch()}>
               <RefreshCw size={16} />
               {copy.refresh}
             </Button>
@@ -183,17 +219,25 @@ export default function AdvancedChatFiles() {
 
           <Card>
             <CardHeader>
-              <CardTitle>{copy.files}</CardTitle>
+              <CardTitle className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <span>{copy.files}</span>
+                {sharedPools.length > 0 && (
+                  <select className="h-9 rounded-md border bg-background px-2 text-sm font-normal" value={selectedPoolID} onChange={(event) => setSelectedPoolID(event.target.value)}>
+                    <option value="">{copy.personalFiles}</option>
+                    {sharedPools.map((pool) => <option key={pool.id} value={pool.id}>{sharedPoolLabel(pool, language)}</option>)}
+                  </select>
+                )}
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              {(filesQuery.data?.files || []).length === 0 ? (
+              {visibleFiles.length === 0 ? (
                 <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center text-sm text-muted-foreground">
                   <FileText className="h-8 w-8" />
-                  <div>{filesQuery.isLoading ? copy.loading : copy.empty}</div>
+                  <div>{isSharedPoolView ? (sharedFilesLoading ? copy.loading : copy.empty) : (filesQuery.isLoading ? copy.loading : copy.empty)}</div>
                 </div>
               ) : (
                 <div className="grid gap-3">
-                  {(filesQuery.data?.files || []).map((file) => (
+                  {visibleFiles.map((file) => (
                     <div key={file.id} className="flex flex-col gap-3 rounded-md border p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="min-w-0">
                         <div className="flex min-w-0 items-center gap-2">
@@ -211,9 +255,9 @@ export default function AdvancedChatFiles() {
                         <Button variant="outline" size="icon" disabled={downloadingID === file.id} onClick={() => downloadFile(file)} title={copy.download} aria-label={copy.download}>
                           <Download size={16} />
                         </Button>
-                        <Button variant="outline" size="icon" disabled={deletingID === file.id} onClick={() => deleteFile(file)} title={copy.delete} aria-label={copy.delete}>
+                        {!isSharedPoolView && <Button variant="outline" size="icon" disabled={deletingID === file.id} onClick={() => deleteFile(file)} title={copy.delete} aria-label={copy.delete}>
                           <Trash2 size={16} />
-                        </Button>
+                        </Button>}
                       </div>
                     </div>
                   ))}
@@ -267,6 +311,24 @@ function normalizeFile(value: unknown): StoredFile | null {
   }
 }
 
+function normalizeSharedPool(value: unknown): EnterpriseSharedPool | null {
+  const item = isRecord(value) ? value : {}
+  const id = Number(item.id || 0)
+  if (!Number.isFinite(id) || id <= 0) {
+    return null
+  }
+  return {
+    id,
+    scope_type: typeof item.scope_type === "string" ? item.scope_type : "",
+    name: typeof item.name === "string" && item.name ? item.name : `Pool ${id}`,
+  }
+}
+
+function sharedPoolLabel(pool: EnterpriseSharedPool, language: string) {
+  const scope = pool.scope_type === "task" ? (language === "zh" ? "任务" : "Task") : (language === "zh" ? "部门" : "Department")
+  return `${scope}: ${pool.name}`
+}
+
 function formatBytes(bytes: number) {
   if (!Number.isFinite(bytes) || bytes <= 0) {
     return "0 B"
@@ -313,6 +375,7 @@ const zhCopy = {
   subtitle: "管理助理聊天可复用的附件和自动保存的生成结果。",
   storage: "存储空间",
   files: "文件",
+  personalFiles: "个人文件",
   upload: "上传文件",
   uploading: "上传中",
   uploaded: "已上传 {count} 个文件",
@@ -334,6 +397,7 @@ const enCopy: typeof zhCopy = {
   subtitle: "Manage reusable attachments and auto-saved generation results for agent chat.",
   storage: "Storage",
   files: "Files",
+  personalFiles: "Personal files",
   upload: "Upload files",
   uploading: "Uploading",
   uploaded: "Uploaded {count} files",
