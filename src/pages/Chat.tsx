@@ -3150,12 +3150,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     </Card>
   )
 
-  const sessionSidebarItem = (session: ChatSession) => (
-    <div
+  const sessionSidebarItem = (session: ChatSession) => {
+    const activePersonalSession = session.id === activeSession?.id && !isSharedSession
+    return <div
       key={session.id}
       className={cn(
         "group relative grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 rounded-md border border-transparent px-3 py-2 transition-colors",
-        session.id === activeSession?.id ? "border-primary/40 bg-primary/15 shadow-sm before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-r before:bg-primary" : "hover:bg-muted"
+        activePersonalSession ? "border-primary/40 bg-primary/15 shadow-sm before:absolute before:bottom-2 before:left-0 before:top-2 before:w-0.5 before:rounded-r before:bg-primary" : "hover:bg-muted"
       )}
       onContextMenu={(event) => {
         if (session.id === sharedSessionID) {
@@ -3169,14 +3170,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <button type="button" className="min-w-0 text-left" onClick={() => selectSession(session.id)}>
         <div className="flex min-w-0 items-center gap-2">
           {isRunActive(session.latest_run) && <RefreshCw size={14} className="shrink-0 animate-spin text-primary" aria-label={language === "zh" ? "任务运行中" : "Task running"} />}
-          <div className={cn("truncate text-sm font-medium", session.id === activeSession?.id ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
+          <div className={cn("truncate text-sm font-medium", activePersonalSession ? "text-primary" : "text-foreground")}>{session.title || copy.untitledSession}</div>
         </div>
       </button>
       {session.id !== sharedSessionID && <Button variant="ghost" size="icon" className="h-7 w-7 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100" onClick={() => deleteSession(session.id)} title={copy.deleteSession}>
         <Trash2 size={15} />
       </Button>}
     </div>
-  )
+  }
 
   const advancedComposer = () => (
     <>
