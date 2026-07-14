@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, ChevronDown, ClipboardList, Database, History, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Settings, Shield, Users } from "lucide-react"
+import { BarChart3, Boxes, Building2, ChevronDown, ClipboardList, Database, History, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Settings, Shield, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -52,6 +52,7 @@ const adminMenuItems: MenuItem[] = [
   { icon: BarChart3, labelKey: "nav.adminOverview", path: "/dashboard/admin-overview", settingKey: "sidebar_admin_overview_enabled" },
   { icon: ScrollText, labelKey: "nav.auditLogs", path: "/dashboard/admin-logs", settingKey: "sidebar_admin_overview_enabled" },
   { icon: Shield, labelKey: "nav.system", path: "/dashboard/admin/general", settingKey: "sidebar_system_enabled", children: systemSubItems },
+  { icon: Building2, label: "企业管理", path: "/dashboard/enterprise", enterpriseOnly: true },
   { icon: Database, labelKey: "nav.channels", path: "/dashboard/channels", settingKey: "sidebar_channels_enabled" },
   { icon: Boxes, labelKey: "nav.models", path: "/dashboard/models", settingKey: "sidebar_models_enabled" },
   { icon: Users, labelKey: "nav.users", path: "/dashboard/users", settingKey: "sidebar_users_enabled" },

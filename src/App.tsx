@@ -25,6 +25,7 @@ import AdminOverview from "./pages/AdminOverview"
 import AdminAuditLogs from "./pages/AdminAuditLogs"
 import PublicContent from "./pages/PublicContent"
 import EnterpriseTasks from "./pages/EnterpriseTasks"
+import EnterpriseManagement from "./pages/EnterpriseManagement"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
@@ -225,6 +226,9 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/dashboard/tasks") {
     return language === "zh" ? "我的任务" : "My Tasks"
   }
+  if (normalizedPathname === "/dashboard/enterprise") {
+    return language === "zh" ? "企业管理" : "Enterprise Management"
+  }
   if (normalizedPathname === "/dashboard/wallet") {
     return language === "zh" ? "钱包" : language === "ja" ? "ウォレット" : "Wallet"
   }
@@ -338,6 +342,7 @@ function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="data-board" element={<DataBoard />} />
                 <Route path="tasks" element={<EnterpriseTasks />} />
+                <Route path="enterprise" element={<AdminRoute><EnterpriseManagement /></AdminRoute>} />
                 <Route
                   path="admin-overview"
                   element={
