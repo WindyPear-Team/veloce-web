@@ -3267,56 +3267,22 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             aria-label={sessionSidebarCopy.search}
           />
         </label>
-        {isAdvanced && sharedPools.length > 0 && (
-          <label className="mt-3 block">
-            <span className="mb-1 block text-xs font-medium text-slate-500">{language === "zh" ? "共享资源池" : "Shared resource pool"}</span>
-            <select
-              className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm"
-              value={selectedSharedPoolID}
-              onChange={(event) => setSelectedSharedPoolID(event.target.value)}
-            >
-              <option value="">{language === "zh" ? "个人会话与文件" : "Personal sessions and files"}</option>
-              {sharedPools.map((pool) => (
-                <option key={pool.id} value={pool.id}>{sharedPoolLabel(pool, language)}</option>
-              ))}
-            </select>
-          </label>
-        )}
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {isAdvanced && sharedPools.length > 0 && (
           <div className="pb-3">
-            <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{language === "zh" ? "任务与部门会话文件夹" : "Task and department session folders"}</div>
-            {sharedPools.map((pool) => (
-              <button key={pool.id} type="button" className={cn("flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-muted", String(pool.id) === selectedSharedPoolID && "bg-primary/10 text-primary")} onClick={() => setSelectedSharedPoolID(String(pool.id))}>
-                <Folder size={14} className={cn("shrink-0", pool.scope_type === "task" ? "text-teal-600" : "text-amber-600")} />
-                <span className="truncate text-sm font-medium">{sharedPoolLabel(pool, language)}</span>
-              </button>
-            ))}
-          </div>
-        )}
-        {selectedSharedPool && (
-          <div className="pb-3">
-            <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">
-              {language === "zh" ? `${sharedPoolLabel(selectedSharedPool, language)}的协作会话` : `${sharedPoolLabel(selectedSharedPool, language)} collaborative sessions`}
-            </div>
-            {sharedPoolSessions.length === 0 ? (
-              <div className="px-2 py-3 text-xs text-muted-foreground">{language === "zh" ? "池内暂无会话" : "No shared sessions in this pool"}</div>
-            ) : sharedPoolSessions.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                className={cn(
-                  "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left hover:bg-muted",
-                  session.id === activeSession?.id && isSharedSession && "bg-primary/10 text-primary"
-                )}
-                disabled={loadingSharedSessionID === session.id}
-                onClick={() => void selectSharedPoolSession(session.id)}
-              >
-                {selectedSharedPool.scope_type === "task" ? <Folder size={14} className="shrink-0 text-teal-600" /> : <FileText size={14} className="shrink-0" />}
-                <span className="truncate text-sm font-medium">{session.title || copy.untitledSession}</span>
-              </button>
-            ))}
+            <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{language === "zh" ? "任务与部门会话" : "Task and department sessions"}</div>
+            {sharedPools.map((pool) => {
+              const expanded = String(pool.id) === selectedSharedPoolID
+              return <div key={pool.id} className="pb-1">
+                <button type="button" className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-slate-500 hover:bg-white/70" onClick={() => setSelectedSharedPoolID(expanded ? "" : String(pool.id))}>
+                  <ChevronRight size={14} className={cn("shrink-0 transition-transform", expanded && "rotate-90")} />
+                  <Folder size={14} className={cn("shrink-0", pool.scope_type === "task" ? "text-teal-600" : "text-amber-600")} />
+                  <span className="truncate">{sharedPoolLabel(pool, language)}</span>
+                </button>
+                {expanded && (sharedPoolSessions.length === 0 ? <div className="px-8 py-2 text-xs text-muted-foreground">{language === "zh" ? "池内暂无会话" : "No shared sessions in this pool"}</div> : sharedPoolSessions.map((session) => <button key={session.id} type="button" className={cn("flex w-full items-center gap-2 rounded-md py-2 pl-8 pr-3 text-left hover:bg-muted", session.id === activeSession?.id && isSharedSession && "bg-primary/10 text-primary")} disabled={loadingSharedSessionID === session.id} onClick={() => void selectSharedPoolSession(session.id)}><FileText size={14} className="shrink-0" /><span className="truncate text-sm font-medium">{session.title || copy.untitledSession}</span></button>))}
+              </div>
+            })}
           </div>
         )}
         {folderSessionGroups.map(({ folder, sessions: groupedSessions }) => (

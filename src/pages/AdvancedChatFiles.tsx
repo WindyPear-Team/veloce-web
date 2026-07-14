@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Download, FileText, Folder, HardDrive, RefreshCw, Trash2, Upload } from "lucide-react"
+import { ArrowLeft, Download, FileText, Folder, HardDrive, RefreshCw, Trash2, Upload } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -49,7 +50,10 @@ export default function AdvancedChatFiles() {
   const [isUploading, setIsUploading] = useState(false)
   const [deletingID, setDeletingID] = useState("")
   const [downloadingID, setDownloadingID] = useState("")
-  const [selectedPoolID, setSelectedPoolID] = useState("")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const selectedPoolID = searchParams.get("pool") || ""
+  const openPool = (poolID: number) => setSearchParams({ pool: String(poolID) })
+  const closePool = () => setSearchParams({})
 
   const { data: settings } = useQuery<AdvancedChatSettings>({
     queryKey: ["advanced-chat-file-settings"],
@@ -220,18 +224,10 @@ export default function AdvancedChatFiles() {
 
           <Card>
             <CardHeader>
-              <CardTitle className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                <span className="flex items-center gap-2">{isSharedPoolView && sharedPools.find((pool) => String(pool.id) === selectedPoolID)?.scope_type === "task" && <Folder size={18} className="text-teal-600" />}{copy.files}</span>
-                {sharedPools.length > 0 && (
-                  <select className="h-9 rounded-md border bg-background px-2 text-sm font-normal" value={selectedPoolID} onChange={(event) => setSelectedPoolID(event.target.value)}>
-                    <option value="">{copy.personalFiles}</option>
-                    {sharedPools.map((pool) => <option key={pool.id} value={pool.id}>{sharedPoolLabel(pool, language)}</option>)}
-                  </select>
-                )}
-              </CardTitle>
+              <CardTitle className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between"><span className="flex items-center gap-2">{isSharedPoolView && <Folder size={18} className={sharedPools.find((pool) => String(pool.id) === selectedPoolID)?.scope_type === "task" ? "text-teal-600" : "text-amber-600"} />}{isSharedPoolView ? sharedPoolLabel(sharedPools.find((pool) => String(pool.id) === selectedPoolID) || { id: 0, scope_type: "", name: copy.files }, language) : copy.files}</span>{isSharedPoolView && <Button size="sm" variant="outline" onClick={closePool}><ArrowLeft className="mr-1 h-4 w-4" />{language === "zh" ? "返回文件根目录" : "Back to file root"}</Button>}</CardTitle>
             </CardHeader>
             <CardContent>
-              {sharedPools.length > 0 && <div className="mb-4 space-y-1 border-b pb-4"><div className="px-1 pb-1 text-xs font-medium text-muted-foreground">{language === "zh" ? "任务与部门文件夹" : "Task and department folders"}</div>{sharedPools.map((pool) => <button key={pool.id} type="button" className={`flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm hover:bg-muted ${String(pool.id) === selectedPoolID ? "bg-primary/10 text-primary" : ""}`} onClick={() => setSelectedPoolID(String(pool.id))}><Folder size={16} className={pool.scope_type === "task" ? "text-teal-600" : "text-amber-600"} /><span className="truncate">{sharedPoolLabel(pool, language)}</span></button>)}</div>}
+              {!isSharedPoolView && sharedPools.length > 0 && <div className="mb-4 grid gap-2 border-b pb-4 sm:grid-cols-2"><div className="col-span-full px-1 pb-1 text-xs font-medium text-muted-foreground">{language === "zh" ? "任务与部门文件夹" : "Task and department folders"}</div>{sharedPools.map((pool) => <button key={pool.id} type="button" className="flex min-h-16 items-center gap-3 rounded-md border px-4 text-left text-sm hover:bg-muted" onClick={() => openPool(pool.id)}><Folder size={22} className={pool.scope_type === "task" ? "shrink-0 text-teal-600" : "shrink-0 text-amber-600"} /><span className="min-w-0"><span className="block truncate font-medium">{pool.name}</span><span className="mt-1 block text-xs text-muted-foreground">{pool.scope_type === "task" ? (language === "zh" ? "任务文件夹" : "Task folder") : (language === "zh" ? "部门文件夹" : "Department folder")}</span></span></button>)}</div>}
               {visibleFiles.length === 0 ? (
                 <div className="flex min-h-72 flex-col items-center justify-center gap-3 rounded-md border border-dashed text-center text-sm text-muted-foreground">
                   <FileText className="h-8 w-8" />
