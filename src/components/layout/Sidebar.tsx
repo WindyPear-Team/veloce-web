@@ -93,7 +93,9 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
       return item
     })
     .filter((item) => (!item.settingKey || publicSettings[item.settingKey] !== false) && (!item.enterpriseOnly || publicSettings.system_mode === "enterprise"))
-  const visibleAdminItems = adminMenuItems.filter((item) => !item.settingKey || publicSettings[item.settingKey] !== false)
+  const visibleAdminItems = adminMenuItems
+    .filter((item) => !item.settingKey || publicSettings[item.settingKey] !== false)
+    .map((item) => item.path === "/dashboard/users" && publicSettings.system_mode === "enterprise" ? { ...item, label: "员工管理", labelKey: undefined } : item)
   const pluginItems = pluginSidebarItems(pluginExtensions)
 
   return (
