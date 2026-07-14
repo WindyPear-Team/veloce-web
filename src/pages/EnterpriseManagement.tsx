@@ -1,6 +1,6 @@
 import { useState } from "react"
 import type { ReactNode } from "react"
-import { useQuery } from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Building2, Coins, Cpu, ShieldCheck, UsersRound, Workflow } from "lucide-react"
 import api from "@/lib/api"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,7 +13,8 @@ interface Device { id: number; name: string; external_device_id: string; status:
 interface QuotaAccount { id: number; scope_type: string; scope_key: string; limit_amount: string; reserved_amount: string; consumed_amount: string }
 
 export default function EnterpriseManagement() {
-	const [activeTab, setActiveTab] = useState<EnterpriseTab>("organization")
+  const [activeTab, setActiveTab] = useState<EnterpriseTab>("organization")
+	const queryClient = useQueryClient()
   const organization = useQuery<{ organization: Organization }>({ queryKey: ["enterprise-organization"], queryFn: async () => (await api.get("/user/enterprise/organization")).data })
   const members = useQuery<{ members: Member[] }>({ queryKey: ["enterprise-members"], queryFn: async () => (await api.get("/user/enterprise/members")).data })
   const roles = useQuery<{ roles: Role[] }>({ queryKey: ["enterprise-roles"], queryFn: async () => (await api.get("/user/enterprise/roles")).data })
@@ -21,6 +22,7 @@ export default function EnterpriseManagement() {
   const devices = useQuery<{ devices: Device[] }>({ queryKey: ["enterprise-devices"], queryFn: async () => (await api.get("/user/enterprise/devices")).data, retry: false })
   const quotas = useQuery<{ accounts: QuotaAccount[] }>({ queryKey: ["enterprise-quota-accounts"], queryFn: async () => (await api.get("/user/enterprise/quota-accounts")).data, retry: false })
   const memberList = members.data?.members || []
+	const updateMember = useMutation({ mutationFn: async ({ userID, status }: { userID: number; status: string }) => api.patch(`/user/enterprise/members/${userID}`, { status }), onSuccess: () => void queryClient.invalidateQueries({ queryKey: ["enterprise-members"] }) })
   const taskList = tasks.data?.tasks || []
   const org = organization.data?.organization
   const cards = [
@@ -35,7 +37,7 @@ export default function EnterpriseManagement() {
     <div><div className="flex items-center gap-2"><Building2 className="h-5 w-5 text-primary" /><h1 className="text-2xl font-semibold">企业管理</h1></div><p className="mt-1 text-sm text-muted-foreground">{org ? `${org.name} · ${org.status === "active" ? "运行中" : org.status}` : "加载企业配置…"}</p></div>
     <div className="flex gap-1 overflow-x-auto rounded-lg border bg-muted/40 p-1">{tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setActiveTab(tab.id)} className={`whitespace-nowrap rounded-md px-3 py-2 text-sm transition-colors ${activeTab === tab.id ? "bg-background font-medium shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{tab.label}</button>)}</div>
     {activeTab === "organization" && <Section title="组织配置" description="管理企业基本信息、运行状态、Workspace 与数据分类边界。"><div className="grid gap-4 sm:grid-cols-3"><Metric label="企业名称" value={org?.name || "-"} /><Metric label="企业标识" value={org?.slug || "-"} /><Metric label="状态" value={org?.status || "-"} /></div></Section>}
-    {activeTab === "members" && <Section title="成员与部门" description="成员、部门树、负责人、岗位与汇报关系。"><div className="space-y-2">{memberList.length ? memberList.map((member) => <Row key={member.id} title={member.user?.username || member.user?.email || `员工 #${member.user_id}`} detail={`${member.role} · ${member.status}`} />) : <Empty text="尚无可查看的成员数据。" />}</div></Section>}
+    {activeTab === "members" && <Section title="员工与部门" description="企业模式下，成员替代平台用户作为分派、授权与额度的主体。"><div className="space-y-2">{memberList.length ? memberList.map((member) => <div key={member.id} className="flex items-center justify-between gap-3 rounded-md border p-3"><div><div className="font-medium">{member.user?.username || member.user?.email || `员工 #${member.user_id}`}</div><div className="text-xs text-muted-foreground">{member.role}</div></div><select className="h-9 rounded-md border bg-background px-2 text-sm" value={member.status} disabled={updateMember.isPending} onChange={(event) => updateMember.mutate({ userID: member.user_id, status: event.target.value })}><option value="active">在职</option><option value="suspended">已停用</option><option value="invited">待激活</option></select></div>) : <Empty text="尚无可查看的成员数据。" />}</div></Section>}
     {activeTab === "tasks" && <Section title="任务与审批" description="任务模板、分派、负责人、参与人、SLA 和交付物。"><div className="grid gap-4 sm:grid-cols-3"><Metric label="当前可见任务" value={String(taskList.length)} /><Metric label="执行中" value={String(taskList.filter((task) => task.status === "running").length)} /><Metric label="预置流程" value="待配置" /></div></Section>}
     {activeTab === "devices" && <Section title="设备与连接器" description="企业设备池、员工自有连接器、任务级授权、工具白名单与自动回收。"><div className="space-y-2">{devices.data?.devices?.length ? devices.data.devices.map((device) => <Row key={device.id} title={device.name} detail={`${device.kind} · ${device.status} · ${device.external_device_id}`} />) : <Empty text={devices.isError ? "没有查看设备池的权限。" : "设备池为空，可通过企业设备 API 登记设备。"} />}</div></Section>}
     {activeTab === "quota" && <Section title="额度与成本" description="组织→部门→员工→任务的额度分配、预留、消耗和释放。"><div className="space-y-2">{quotas.data?.accounts?.length ? quotas.data.accounts.map((account) => <Row key={account.id} title={`${account.scope_type} · ${account.scope_key}`} detail={`额度 ${account.limit_amount} / 预留 ${account.reserved_amount} / 消耗 ${account.consumed_amount}`} />) : <Empty text={quotas.isError ? "没有查看额度中心的权限。" : "尚未创建额度账户。"} />}</div></Section>}
