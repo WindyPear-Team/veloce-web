@@ -20,6 +20,8 @@ interface CurrentUser {
   avatar_url?: string
   is_admin?: boolean
 }
+interface EnterprisePortalResponse { portal: { page_layouts?: string } }
+interface EnterpriseOrganizationResponse { role?: string }
 
 export function Layout() {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false)
@@ -40,17 +42,22 @@ export function Layout() {
       return res.data
     },
   })
+  const { data: enterprisePortal } = useQuery<EnterprisePortalResponse>({ queryKey: ["enterprise-portal"], queryFn: async () => (await api.get("/user/enterprise/portal")).data, retry: false })
+  const { data: enterpriseOrganization } = useQuery<EnterpriseOrganizationResponse>({ queryKey: ["enterprise-organization"], queryFn: async () => (await api.get("/user/enterprise/organization")).data, retry: false })
   const publicSettings = withPublicSettingsDefaults(settings)
   const topNavItems = parseTopNavItems(publicSettings.top_nav_items)
   const currentPageKey = pageKeyFromPathname(location.pathname)
   const layoutEditorLabel = language === "zh" ? (isLayoutEditing ? "退出编辑" : "可视化编辑") : isLayoutEditing ? "Exit editing" : "Visual editing"
+  const enterpriseDashboard = Boolean(enterprisePortal?.portal)
+  const canEditLayout = Boolean(user?.is_admin || (enterpriseDashboard && ["owner", "admin"].includes(enterpriseOrganization?.role || "")))
 
   return (
     <PageLayoutEditorProvider
       currentPageKey={currentPageKey}
       isEditing={isLayoutEditing}
-      pageLayoutsRaw={publicSettings.page_layouts}
+      pageLayoutsRaw={enterpriseDashboard ? enterprisePortal?.portal.page_layouts || "{}" : publicSettings.page_layouts}
       onEditingChange={setIsLayoutEditing}
+      saveEndpoint={enterpriseDashboard ? "/user/enterprise/portal/layout" : "/settings"}
     >
     <div className="flex h-screen flex-col overflow-hidden bg-background">
       <header className="z-30 flex h-16 shrink-0 items-center justify-between border-b bg-background/95 px-4 backdrop-blur sm:px-6">
@@ -75,7 +82,7 @@ export function Layout() {
               ))}
             </div>
           )}
-          {user?.is_admin && (
+          {canEditLayout && currentPageKey === "/dashboard" && (
             <Button
               variant={isLayoutEditing ? "default" : "outline"}
               size="icon"
@@ -91,7 +98,7 @@ export function Layout() {
           <UserAvatar user={user} />
         </div>
       </header>
-      {user?.is_admin && <PageLayoutEditBar />}
+      {canEditLayout && currentPageKey === "/dashboard" && <PageLayoutEditBar />}
 
       <div className="flex min-h-0 flex-1">
         <div className="hidden lg:block lg:h-full lg:shrink-0">

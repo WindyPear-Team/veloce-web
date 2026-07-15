@@ -36,6 +36,7 @@ interface PageLayoutEditorProviderProps {
   isEditing: boolean
   pageLayoutsRaw: string
   onEditingChange: (editing: boolean) => void
+  saveEndpoint?: string
 }
 
 interface PageLayoutEditorContextValue {
@@ -65,6 +66,7 @@ export function PageLayoutEditorProvider({
   isEditing,
   pageLayoutsRaw,
   onEditingChange,
+  saveEndpoint = "/settings",
 }: PageLayoutEditorProviderProps) {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
@@ -82,7 +84,7 @@ export function PageLayoutEditorProvider({
 
   const saveMutation = useMutation({
     mutationFn: async () => {
-      const res = await api.put("/settings", {
+      const res = await api.put(saveEndpoint, {
         page_layouts: serializePageLayouts(draftLayouts),
       })
       return res.data
@@ -91,6 +93,7 @@ export function PageLayoutEditorProvider({
       success(copy.saved)
       queryClient.invalidateQueries({ queryKey: ["public-settings"] })
       queryClient.invalidateQueries({ queryKey: ["settings"] })
+      queryClient.invalidateQueries({ queryKey: ["enterprise-portal"] })
       onEditingChange(false)
     },
     onError: () => error(copy.saveFailed),
