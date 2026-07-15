@@ -36,6 +36,7 @@ interface AuditLog {
   ip_address: string
   user_agent: string
   message: string
+  metadata?: string
   duration_ms: number
   created_at: string
 }
@@ -163,7 +164,7 @@ export default function AdminAuditLogs() {
                     <TableRow key={log.id}>
                       <TableCell className="whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</TableCell>
                       <TableCell><span className={typeBadgeClass(log.log_type)}>{typeLabel(log.log_type, copy)}</span></TableCell>
-                      <TableCell className="whitespace-nowrap font-mono text-xs">{log.action}</TableCell>
+                      <TableCell className="min-w-48 text-xs"><div className="font-medium text-foreground">{log.message || humanAuditAction(log.action)}</div><div className="mt-1 font-mono text-muted-foreground">{log.action}</div></TableCell>
                       <TableCell className="min-w-32 text-xs">{log.user ? `${log.user.username || log.user.email} #${log.user.id}` : log.user_id ? `#${log.user_id}` : "-"}</TableCell>
                       <TableCell className="min-w-72 text-xs">
                         <div className="font-mono">{log.method} {log.path}</div>
@@ -172,7 +173,7 @@ export default function AdminAuditLogs() {
                       <TableCell><span className={statusBadgeClass(log.status_code)}>{log.status_code || "-"}</span></TableCell>
                       <TableCell className="whitespace-nowrap text-xs">{log.ip_address || "-"}</TableCell>
                       <TableCell className="whitespace-nowrap text-xs">{log.duration_ms} ms</TableCell>
-                      <TableCell className="max-w-80 truncate text-xs text-muted-foreground" title={log.message}>{log.message || log.user_agent || "-"}</TableCell>
+                      <TableCell className="max-w-80 truncate text-xs text-muted-foreground" title={log.metadata || log.user_agent}>{log.metadata || log.user_agent || "-"}</TableCell>
                     </TableRow>
                   ))
                 )}
@@ -191,6 +192,20 @@ export default function AdminAuditLogs() {
       </Card>
     </div>
   )
+}
+
+function humanAuditAction(action: string) {
+  const labels: Record<string, string> = {
+    organization_updated: "更新企业资料", portal_updated: "更新企业门户配置", portal_layout_updated: "更新门户布局",
+    task_created: "创建任务", task_status_changed: "更新任务状态", task_participant_added: "添加任务参与人", task_participant_removed: "移除任务参与人", task_department_added: "添加任务部门", task_department_removed: "移除任务部门",
+    budget_allocated: "分配组织预算", budget_reclaimed: "回收组织预算", budget_granted: "发放员工预算", personal_balance_allocated: "分配个人余额", quota_account_created: "登记预算账户",
+    role_created: "创建权限组", role_updated: "更新权限组", role_granted: "授予权限组", role_revoked: "撤销权限组",
+    member_created: "创建员工", member_updated: "更新员工", member_deleted: "移除员工", member_departments_updated: "更新员工部门",
+    department_created: "创建部门", department_updated: "更新部门", department_deleted: "删除部门",
+    device_created: "登记企业设备", device_updated: "更新企业设备", device_assigned: "分配设备", device_assignment_revoked: "撤销设备分配", connector_command_created: "生成连接命令", connector_command_rotated: "更新连接命令",
+    shared_pool_created: "创建共享资源池", pool_session_shared: "共享会话到资源池", pool_file_shared: "共享文件到资源池",
+  }
+  return labels[action] || action
 }
 
 function FilterInput({ label, value, placeholder, type = "text", onChange }: { label: string; value: string; placeholder?: string; type?: string; onChange: (value: string) => void }) {
