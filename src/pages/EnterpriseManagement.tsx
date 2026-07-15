@@ -21,7 +21,6 @@ interface Permission { code: string; resource: string; action: string; descripti
 interface RoleBinding { id: number; user_id: number; role_id: number; scope_type: string; scope_id: number; role?: Role; user?: User }
 interface Device { id: number; name: string; external_device_id: string; status: string; kind: string; online?: boolean; hostname?: string; os?: string; last_seen_at?: string }
 interface ConnectorCommand { token: string; device: Device; mode: "platform" | "web_server"; listen_port?: number }
-interface Assignment { id: number; device_id: number; scope_type: string; user_id?: number; task_id?: number; status: string }
 interface QuotaAccount { id: number; scope_type: string; scope_key: string; pool_id?: number; limit_amount: string; reserved_amount: string; consumed_amount: string }
 interface SharedPool { id: number; scope_type: "task" | "department"; scope_key: string; name: string; task_id?: number; department_id?: number }
 interface PersonalResource { id: string; title?: string; name?: string; updated_at?: string }
