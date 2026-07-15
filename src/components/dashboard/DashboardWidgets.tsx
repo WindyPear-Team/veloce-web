@@ -3,6 +3,8 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
+  Building2,
+  ClipboardList,
   CalendarDays,
   CheckCircle2,
   Clock,
@@ -22,6 +24,7 @@ import {
   MessageSquare,
   MousePointerClick,
   Music2,
+  Monitor,
   Server,
   Sparkles,
   UserCircle,
@@ -97,6 +100,9 @@ interface PageComponentPreset {
 }
 
 export const pageComponentPresets: PageComponentPreset[] = [
+  { type: "enterprise_tasks", label: { zh: "企业任务概览", en: "Enterprise tasks" }, description: { zh: "进行中与待处理任务数量。", en: "Running and assigned task counts." }, defaultWidth: "third", icon: ClipboardList },
+  { type: "enterprise_organization", label: { zh: "企业组织概览", en: "Enterprise organization" }, description: { zh: "员工与部门数量。", en: "Employee and department counts." }, defaultWidth: "third", icon: Building2 },
+  { type: "enterprise_devices", label: { zh: "企业设备概览", en: "Enterprise devices" }, description: { zh: "企业可用设备数量。", en: "Active enterprise device count." }, defaultWidth: "third", icon: Monitor },
   {
     type: "dashboard_stats",
     label: { zh: "用户统计", en: "User stats" },
@@ -210,6 +216,12 @@ export function PageComponent({ config, item, type }: { config?: PageComponentCo
   switch (componentType) {
     case "dashboard_stats":
       return <DashboardStatsWidget />
+    case "enterprise_tasks":
+      return <EnterpriseSummaryWidget kind="tasks" />
+    case "enterprise_organization":
+      return <EnterpriseSummaryWidget kind="organization" />
+    case "enterprise_devices":
+      return <EnterpriseSummaryWidget kind="devices" />
     case "announcements":
       return <AnnouncementsWidget />
     case "node_status":
@@ -752,6 +764,13 @@ function formatDatePart(date: Date, locale: string, timeZone: string, options: I
   } catch {
     return new Intl.DateTimeFormat(locale, options).format(date)
   }
+}
+
+function EnterpriseSummaryWidget({ kind }: { kind: "tasks" | "organization" | "devices" }) {
+  const { data } = useQuery<{ summary: { running_tasks: number; assigned_tasks: number; employees: number; departments: number; devices: number } }>({ queryKey: ["enterprise-portal"], queryFn: async () => (await api.get("/user/enterprise/portal")).data, retry: false })
+  const summary = data?.summary
+  const content = kind === "tasks" ? { title: "企业任务", value: summary?.running_tasks ?? 0, detail: `待处理 ${summary?.assigned_tasks ?? 0}` } : kind === "organization" ? { title: "员工与部门", value: summary?.employees ?? 0, detail: `${summary?.departments ?? 0} 个部门` } : { title: "企业设备", value: summary?.devices ?? 0, detail: "可用设备" }
+  return <Card><CardHeader><CardTitle className="text-base">{content.title}</CardTitle></CardHeader><CardContent><div className="text-3xl font-semibold">{content.value}</div><p className="mt-1 text-sm text-muted-foreground">{content.detail}</p></CardContent></Card>
 }
 
 function DashboardStatsWidget() {
