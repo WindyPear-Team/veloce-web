@@ -6,6 +6,8 @@ import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, Quote, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
+import type { PublicSettings } from "@/lib/public-settings"
+import { withPublicSettingsDefaults } from "@/lib/public-settings"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -447,6 +449,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const routeSessionID = isAdvanced ? sessionIDFromAdvancedChatPath(location.pathname) : ""
   const requestedAgentID = isAdvanced ? new URLSearchParams(location.search).get("agent_id") || "" : ""
   const { language, t } = useI18n()
+  const { data: publicSettingsData } = useQuery<PublicSettings>({ queryKey: ["public-settings"], queryFn: async () => (await api.get("/public/settings")).data })
+  const enterpriseMode = String(withPublicSettingsDefaults(publicSettingsData).system_mode).toLowerCase() === "enterprise"
   const copy = useMemo(() => buildChatCopy(t), [t])
   const fileCopy = useMemo(() => (language === "zh" ? zhFileAttachmentCopy : enFileAttachmentCopy), [language])
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
@@ -594,7 +598,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const { data: sharedPools = [] } = useQuery<EnterpriseSharedPool[]>({
     queryKey: ["enterprise-shared-pools", "chat"],
-    enabled: isAdvanced,
+    enabled: isAdvanced && enterpriseMode,
     queryFn: async () => {
       const res = await api.get("/user/enterprise/shared-pools")
       const items = isRecord(res.data) && Array.isArray(res.data.pools) ? res.data.pools : []
@@ -609,7 +613,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const { data: sharedPoolSessions = [] } = useQuery<ChatSession[]>({
     queryKey: ["enterprise-shared-pool-sessions", selectedSharedPoolID],
-    enabled: isAdvanced && Boolean(selectedSharedPoolID),
+    enabled: isAdvanced && enterpriseMode && Boolean(selectedSharedPoolID),
     queryFn: async () => {
       const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/sessions`)
       const items = isRecord(res.data) && Array.isArray(res.data.sessions) ? res.data.sessions : []
@@ -728,7 +732,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const storedFiles = Array.isArray(storedFilesResponse) ? storedFilesResponse : storedFilesResponse?.files || []
   const { data: sharedPoolFiles = [] } = useQuery<StoredFile[]>({
     queryKey: ["enterprise-shared-pool-files", selectedSharedPoolID],
-    enabled: isAdvanced && Boolean(selectedSharedPoolID),
+    enabled: isAdvanced && enterpriseMode && Boolean(selectedSharedPoolID),
     queryFn: async () => {
       const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedSharedPoolID)}/files`)
       const items = isRecord(res.data) && Array.isArray(res.data.files) ? res.data.files : []
@@ -737,7 +741,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   })
   const { data: sharedPoolDevices = [], isFetched: sharedPoolDevicesFetched } = useQuery<EnterprisePoolDevice[]>({
     queryKey: ["enterprise-shared-pool-devices", sharedSessionPoolID],
-    enabled: isAdvanced && Boolean(sharedSessionPoolID),
+    enabled: isAdvanced && enterpriseMode && Boolean(sharedSessionPoolID),
     queryFn: async () => {
       const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(sharedSessionPoolID)}/devices`)
       if (!isRecord(res.data) || !Array.isArray(res.data.devices)) {
@@ -1366,13 +1370,44 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }, [selectableConnectorDevices, connectorDevices, pendingConnectorDeviceID])
 
-  const createNewSession = (context: { folderID?: string; poolID?: string } = {}) => {
+  const createNewSession = async (context: { folderID?: string; poolID?: string } = {}) => {
     setSessionMenu(null)
     setSharedSessionID("")
     setSharedSessionPoolID(context.poolID || "")
     setSelectedSharedPoolID(context.poolID || "")
     setLoadedSharedSession(null)
     const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
+    if (isAdvanced && context.poolID) {
+      try {
+        const res = await api.post(`/user/enterprise/shared-pools/${encodeURIComponent(context.poolID)}/sessions/new`, {
+          agent_id: defaultAgent?.id || "",
+          model_name: modelName || defaultAgent?.default_model || modelOptions[0] || "",
+          user_channel_id: selectedUserChannelID ? Number(selectedUserChannelID) : 0,
+        })
+        const payload = isRecord(res.data) ? res.data : {}
+        const sharedSession = normalizeSession(payload.session)
+        if (!sharedSession) {
+          throw new Error(language === "zh" ? "共享会话创建失败" : "Failed to create shared session")
+        }
+        setLoadedSharedSession(sharedSession)
+        setSharedSessionID(sharedSession.id)
+        setSharedSessionPoolID(context.poolID)
+        setActiveSessionID(sharedSession.id)
+        setPrompt("")
+        setAttachments([])
+        setIsSessionsSidebarOpen(false)
+        cancelEdit()
+        await queryClient.invalidateQueries({ queryKey: ["enterprise-shared-pool-sessions", context.poolID] })
+        if (location.pathname !== "/chat") {
+          navigate("/chat")
+        }
+      } catch (err) {
+        setSharedSessionPoolID("")
+        setSelectedSharedPoolID("")
+        error(apiErrorMessage(err, language === "zh" ? "无法在该文件夹中新建会话" : "Unable to create a session in this folder"))
+      }
+      return
+    }
     const session = { ...createSession({
       agentID: defaultAgent?.id,
       modelName: isAdvanced ? modelName || defaultAgent?.default_model || modelOptions[0] || "" : undefined,
@@ -3313,7 +3348,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         </label>
       </div>
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
-        {isAdvanced && sharedPools.length > 0 && (
+        {isAdvanced && enterpriseMode && sharedPools.length > 0 && (
           <div className="pb-3">
             <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{language === "zh" ? "任务与部门会话" : "Task and department sessions"}</div>
             {sharedPools.map((pool) => {

@@ -9,6 +9,8 @@ import { Input } from "@/components/ui/input"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
 import { useI18n } from "@/lib/i18n"
+import type { PublicSettings } from "@/lib/public-settings"
+import { withPublicSettingsDefaults } from "@/lib/public-settings"
 
 interface AdvancedChatSettings {
   file_storage_enabled: boolean
@@ -47,6 +49,8 @@ export default function AdvancedChatFiles() {
   const copy = language === "zh" ? zhCopy : enCopy
   const queryClient = useQueryClient()
   const { success, error } = useToast()
+  const { data: publicSettings } = useQuery<PublicSettings>({ queryKey: ["public-settings"], queryFn: async () => (await api.get("/public/settings")).data })
+  const enterpriseMode = String(withPublicSettingsDefaults(publicSettings).system_mode).toLowerCase() === "enterprise"
   const [isUploading, setIsUploading] = useState(false)
   const [deletingID, setDeletingID] = useState("")
   const [downloadingID, setDownloadingID] = useState("")
@@ -75,6 +79,7 @@ export default function AdvancedChatFiles() {
 
   const { data: sharedPools = [] } = useQuery<EnterpriseSharedPool[]>({
     queryKey: ["enterprise-shared-pools", "files"],
+    enabled: enterpriseMode,
     queryFn: async () => {
       const res = await api.get("/user/enterprise/shared-pools")
       const items = isRecord(res.data) && Array.isArray(res.data.pools) ? res.data.pools : []
@@ -83,14 +88,14 @@ export default function AdvancedChatFiles() {
   })
   const { data: sharedFiles = [], isLoading: sharedFilesLoading, isFetching: sharedFilesFetching, refetch: refetchSharedFiles } = useQuery<StoredFile[]>({
     queryKey: ["enterprise-shared-pool-files", selectedPoolID],
-    enabled: Boolean(selectedPoolID),
+    enabled: enterpriseMode && Boolean(selectedPoolID),
     queryFn: async () => {
       const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(selectedPoolID)}/files`)
       const items = isRecord(res.data) && Array.isArray(res.data.files) ? res.data.files : []
       return items.map(normalizeFile).filter((file): file is StoredFile => Boolean(file))
     },
   })
-  const isSharedPoolView = Boolean(selectedPoolID)
+  const isSharedPoolView = enterpriseMode && Boolean(selectedPoolID)
   const visibleFiles = isSharedPoolView ? sharedFiles : filesQuery.data?.files || []
 
   const usage = useMemo(() => {

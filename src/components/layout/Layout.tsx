@@ -42,13 +42,14 @@ export function Layout() {
       return res.data
     },
   })
-  const { data: enterprisePortal } = useQuery<EnterprisePortalResponse>({ queryKey: ["enterprise-portal"], queryFn: async () => (await api.get("/user/enterprise/portal")).data, retry: false })
-  const { data: enterpriseOrganization } = useQuery<EnterpriseOrganizationResponse>({ queryKey: ["enterprise-organization"], queryFn: async () => (await api.get("/user/enterprise/organization")).data, retry: false })
   const publicSettings = withPublicSettingsDefaults(settings)
+  const enterpriseMode = String(publicSettings.system_mode).toLowerCase() === "enterprise"
+  const { data: enterprisePortal } = useQuery<EnterprisePortalResponse>({ queryKey: ["enterprise-portal"], queryFn: async () => (await api.get("/user/enterprise/portal")).data, retry: false, enabled: enterpriseMode })
+  const { data: enterpriseOrganization } = useQuery<EnterpriseOrganizationResponse>({ queryKey: ["enterprise-organization"], queryFn: async () => (await api.get("/user/enterprise/organization")).data, retry: false, enabled: enterpriseMode })
   const topNavItems = parseTopNavItems(publicSettings.top_nav_items)
   const currentPageKey = pageKeyFromPathname(location.pathname)
   const layoutEditorLabel = language === "zh" ? (isLayoutEditing ? "退出编辑" : "可视化编辑") : isLayoutEditing ? "Exit editing" : "Visual editing"
-  const enterpriseDashboard = Boolean(enterprisePortal?.portal)
+  const enterpriseDashboard = enterpriseMode && Boolean(enterprisePortal?.portal)
   const canEditLayout = Boolean(user?.is_admin || (enterpriseDashboard && ["owner", "admin"].includes(enterpriseOrganization?.role || "")))
 
   return (

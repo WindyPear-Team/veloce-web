@@ -164,7 +164,7 @@ export default function AdminAuditLogs() {
                     <TableRow key={log.id}>
                       <TableCell className="whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</TableCell>
                       <TableCell><span className={typeBadgeClass(log.log_type)}>{typeLabel(log.log_type, copy)}</span></TableCell>
-                      <TableCell className="min-w-48 text-xs"><div className="font-medium text-foreground">{log.message || humanAuditAction(log.action)}</div><div className="mt-1 font-mono text-muted-foreground">{log.action}</div></TableCell>
+                      <TableCell className="min-w-48 text-xs"><div className="font-medium text-foreground">{humanAuditAction(log.action) || log.message || log.action}</div><div className="mt-1 font-mono text-muted-foreground">{log.action}</div></TableCell>
                       <TableCell className="min-w-32 text-xs">{log.user ? `${log.user.username || log.user.email} #${log.user.id}` : log.user_id ? `#${log.user_id}` : "-"}</TableCell>
                       <TableCell className="min-w-72 text-xs">
                         <div className="font-mono">{log.method} {log.path}</div>
@@ -201,9 +201,9 @@ function humanAuditAction(action: string) {
     budget_allocated: "分配组织预算", budget_reclaimed: "回收组织预算", budget_granted: "发放员工预算", personal_balance_allocated: "分配个人余额", quota_account_created: "登记预算账户",
     role_created: "创建权限组", role_updated: "更新权限组", role_granted: "授予权限组", role_revoked: "撤销权限组",
     member_created: "创建员工", member_updated: "更新员工", member_deleted: "移除员工", member_departments_updated: "更新员工部门",
-    department_created: "创建部门", department_updated: "更新部门", department_deleted: "删除部门",
-    device_created: "登记企业设备", device_updated: "更新企业设备", device_assigned: "分配设备", device_assignment_revoked: "撤销设备分配", connector_command_created: "生成连接命令", connector_command_rotated: "更新连接命令",
-    shared_pool_created: "创建共享资源池", pool_session_shared: "共享会话到资源池", pool_file_shared: "共享文件到资源池",
+    department_created: "创建部门", department_updated: "更新部门", department_deleted: "删除部门", department_roles_updated: "更新部门权限组",
+    device_created: "登记企业设备", device_updated: "更新企业设备", device_deleted: "删除企业设备", device_assigned: "分配设备", device_assignment_revoked: "撤销设备分配", connector_command_created: "生成连接命令", connector_command_rotated: "更新连接命令",
+    shared_pool_created: "创建共享资源池", pool_session_created: "在资源池中新建会话", pool_session_shared: "共享会话到资源池", pool_file_shared: "共享文件到资源池",
   }
   return labels[action] || action
 }
