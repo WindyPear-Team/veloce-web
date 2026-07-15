@@ -107,6 +107,9 @@ export const pageComponentPresets: PageComponentPreset[] = [
   { type: "enterprise_budget", label: { zh: "组织预算概览", en: "Organization budget" }, description: { zh: "查看组织预算、预留与消耗。", en: "Organization budget, reserved, and consumed." }, defaultWidth: "half", icon: DollarSign },
   { type: "enterprise_people", label: { zh: "企业成员概览", en: "Enterprise people" }, description: { zh: "显示企业员工与部门数量。", en: "Employee and department counts." }, defaultWidth: "third", icon: UserCircle },
   { type: "enterprise_shortcuts", label: { zh: "企业快捷入口", en: "Enterprise shortcuts" }, description: { zh: "任务、员工与企业管理入口。", en: "Task, people, and enterprise-management links." }, defaultWidth: "half", icon: ArrowRight },
+  { type: "enterprise_my_tasks", label: { zh: "我的任务", en: "My enterprise tasks" }, description: { zh: "显示当前员工参与的任务。", en: "Tasks assigned to the current employee." }, defaultWidth: "half", icon: ClipboardList },
+  { type: "enterprise_my_balance", label: { zh: "我的工作额度", en: "My work balance" }, description: { zh: "显示当前员工个人可用额度。", en: "Current employee balance." }, defaultWidth: "third", icon: WalletCards },
+  { type: "enterprise_workspace_links", label: { zh: "员工工作台入口", en: "Employee workspace links" }, description: { zh: "任务、会话、文件与个人设置入口。", en: "Task, session, file, and profile shortcuts." }, defaultWidth: "half", icon: ArrowRight },
   {
     type: "dashboard_stats",
     label: { zh: "用户统计", en: "User stats" },
@@ -234,6 +237,12 @@ export function PageComponent({ config, item, type }: { config?: PageComponentCo
       return <EnterpriseSummaryWidget kind="organization" />
     case "enterprise_shortcuts":
       return <EnterpriseShortcutsWidget />
+    case "enterprise_my_tasks":
+      return <EnterpriseTaskListWidget />
+    case "enterprise_my_balance":
+      return <EnterpriseMyBalanceWidget />
+    case "enterprise_workspace_links":
+      return <EnterpriseWorkspaceLinksWidget />
     case "announcements":
       return <AnnouncementsWidget />
     case "node_status":
@@ -798,6 +807,10 @@ function EnterpriseBudgetWidget() {
 }
 
 function EnterpriseShortcutsWidget() { return <Card><CardHeader><CardTitle className="text-base">企业快捷入口</CardTitle></CardHeader><CardContent className="grid gap-2 sm:grid-cols-3"><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/tasks">我的任务</Link><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/users">员工管理</Link><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/enterprise">企业管理</Link></CardContent></Card> }
+
+function EnterpriseMyBalanceWidget() { const { data } = useQuery<{ balance?: string | number }>({ queryKey: ["me"], queryFn: async () => (await api.get("/user/me")).data }); return <Card><CardHeader><CardTitle className="text-base">我的工作额度</CardTitle></CardHeader><CardContent><div className="text-3xl font-semibold">{data?.balance ?? 0}</div><p className="mt-1 text-sm text-muted-foreground">仅个人工作区执行会使用个人额度。</p></CardContent></Card> }
+
+function EnterpriseWorkspaceLinksWidget() { return <Card><CardHeader><CardTitle className="text-base">员工工作台</CardTitle></CardHeader><CardContent className="grid gap-2 sm:grid-cols-2"><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/tasks">我的任务</Link><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/chat">会话与协作</Link><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/files">文件与共享池</Link><Link className="rounded-md border p-3 text-sm hover:bg-muted" to="/dashboard/settings">个人设置</Link></CardContent></Card> }
 
 function DashboardStatsWidget() {
   const { t } = useI18n()
