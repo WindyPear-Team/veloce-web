@@ -1022,7 +1022,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <ToggleField label={copy.passwordHCaptchaEnabled} checked={form.password_hcaptcha_enabled} onChange={(checked) => updateField("password_hcaptcha_enabled", checked)} />
 
             <TextareaField label="允许注册的邮箱后缀" value={form.registration_email_suffixes} placeholder="example.com, company.cn（留空表示不限制）" onChange={(value) => updateField("registration_email_suffixes", value)} />
-            <TextareaField label="邮箱后缀自动分组规则" value={form.registration_email_routing} placeholder={'[{"suffix":"company.cn","group_id":2}]'} onChange={(value) => updateField("registration_email_routing", value)} />
+            <EmailSuffixRoutingEditor value={form.registration_email_routing} groups={groups} onChange={(value) => updateField("registration_email_routing", value)} />
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.authAgreementMode}</span>
               <select
@@ -2946,6 +2946,12 @@ function serializeTopNavRows(rows: NavRow[]) {
 
 function navRowID(index: number) {
   return `${Date.now().toString(36)}-${index}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function EmailSuffixRoutingEditor({ value, groups, onChange }: { value: string; groups: Group[]; onChange: (value: string) => void }) {
+  const rules = (() => { try { const parsed = JSON.parse(value); return Array.isArray(parsed) ? parsed.filter((item): item is { suffix: string; group_id: number } => Boolean(item && typeof item.suffix === "string" && Number(item.group_id) > 0)) : [] } catch { return [] } })()
+  const setRules = (next: Array<{ suffix: string; group_id: number }>) => onChange(JSON.stringify(next.filter((item) => item.suffix.trim() && item.group_id > 0)))
+  return <div className="space-y-2 rounded-md border p-3 lg:col-span-2"><div><div className="font-medium text-sm">邮箱后缀自动分组</div><p className="mt-1 text-xs text-muted-foreground">用户注册时，匹配的邮箱后缀会自动加入对应用户分组。</p></div>{rules.map((rule, index) => <div key={`${rule.suffix}-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><Input value={rule.suffix} placeholder="company.cn" onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, suffix: event.target.value.replace(/^@/, "") } : item))} /><select className="h-10 rounded-md border bg-background px-3 text-sm" value={rule.group_id} onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, group_id: Number(event.target.value) } : item))}><option value="0">选择分组</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><Button type="button" variant="outline" onClick={() => setRules(rules.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}<Button type="button" size="sm" variant="outline" disabled={!groups.length} onClick={() => setRules([...rules, { suffix: "", group_id: groups[0]?.id || 0 }])}>添加映射</Button>{!groups.length && <p className="text-xs text-muted-foreground">请先在“用户分组”中创建分组。</p>}</div>
 }
 
 function groupPayload(draft: GroupDraft) {
