@@ -345,6 +345,10 @@ interface EnterpriseSharedPool {
   task_id?: number
 }
 
+interface EnterprisePoolDevice {
+  external_device_id: string
+}
+
 type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
 type ChatMode = "basic" | "advanced"
 type ChatRunMode = "chat" | "assistant" | "agent_group"
@@ -731,6 +735,20 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       return items.map(normalizeStoredFile).filter((file): file is StoredFile => Boolean(file))
     },
   })
+  const { data: sharedPoolDevices = [], isFetched: sharedPoolDevicesFetched } = useQuery<EnterprisePoolDevice[]>({
+    queryKey: ["enterprise-shared-pool-devices", sharedSessionPoolID],
+    enabled: isAdvanced && Boolean(sharedSessionPoolID),
+    queryFn: async () => {
+      const res = await api.get(`/user/enterprise/shared-pools/${encodeURIComponent(sharedSessionPoolID)}/devices`)
+      if (!isRecord(res.data) || !Array.isArray(res.data.devices)) {
+        return []
+      }
+      return res.data.devices.filter(isRecord).flatMap((device): EnterprisePoolDevice[] => {
+        const externalDeviceID = stringFromUnknown(device.external_device_id)
+        return externalDeviceID ? [{ external_device_id: externalDeviceID }] : []
+      })
+    },
+  })
   const selectableStoredFiles = selectedSharedPoolID ? sharedPoolFiles : storedFiles
   const assistantModeEnabled = !isAdvanced || currentAdvancedSettings.assistant_mode_enabled
   const assistantConnectorToolsEnabled =
@@ -868,7 +886,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => connectorDevices.find((device) => device.id === currentSession?.connector_device_id),
     [currentSession?.connector_device_id, connectorDevices]
   )
-  const selectableConnectorDevices = assistantConnectorToolsEnabled ? connectorDevices : []
+  const sharedPoolDeviceIDs = useMemo(() => new Set(sharedPoolDevices.map((device) => device.external_device_id)), [sharedPoolDevices])
+  const selectableConnectorDevices = assistantConnectorToolsEnabled
+    ? (isSharedSession ? connectorDevices.filter((device) => sharedPoolDeviceIDs.has(device.id)) : connectorDevices)
+    : []
   const currentConnectorDeviceID = currentSession?.connector_device_id || ""
   const currentConnectorDevice = connectorDevices.find((device) => device.id === currentConnectorDeviceID)
   const localDesktopConnectorDevice = useMemo(
@@ -1340,7 +1361,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       setPendingConnectorDeviceID(selectableConnectorDevices[0].id)
       return
     }
-    if (pendingConnectorDeviceID && !connectorDevices.some((device) => device.id === pendingConnectorDeviceID)) {
+    if (pendingConnectorDeviceID && !selectableConnectorDevices.some((device) => device.id === pendingConnectorDeviceID)) {
       setPendingConnectorDeviceID(selectableConnectorDevices[0]?.id || "")
     }
   }, [selectableConnectorDevices, connectorDevices, pendingConnectorDeviceID])
@@ -1746,6 +1767,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       error(copy.assistantWorkspaceToolsDisabled)
       return
     }
+    if (isSharedSession && deviceID && !sharedPoolDeviceIDs.has(deviceID)) {
+      error(language === "zh" ? "共享会话只能使用此池分配的设备" : "Shared sessions can only use devices assigned to this pool")
+      return
+    }
     updateSession(currentSession.id, (session) => ({
       ...session,
       connector_device_id: deviceID || undefined,
@@ -1764,6 +1789,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       error(copy.assistantWorkspaceToolsDisabled)
       return
     }
+    if (isSharedSession && deviceID && !sharedPoolDeviceIDs.has(deviceID)) {
+      error(language === "zh" ? "共享会话只能使用此池分配的设备" : "Shared sessions can only use devices assigned to this pool")
+      return
+    }
     const keepWorkspace = currentSession.connector_device_id === deviceID ? currentSession.connector_workspace_path : ""
     updateSession(currentSession.id, (session) => ({
       ...session,
@@ -1774,6 +1803,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setPendingConnectorWorkspace(keepWorkspace || "")
     setComposerControlMenu("")
   }
+
+  useEffect(() => {
+    if (!isSharedSession || !sharedPoolDevicesFetched || !currentSession?.connector_device_id || sharedPoolDeviceIDs.has(currentSession.connector_device_id)) {
+      return
+    }
+    updateSession(currentSession.id, (session) => ({ ...session, connector_device_id: undefined, connector_workspace_path: undefined }), { persist: true })
+    setPendingConnectorDeviceID("")
+    setPendingConnectorWorkspace("")
+  }, [currentSession?.connector_device_id, currentSession?.id, isSharedSession, sharedPoolDeviceIDs, sharedPoolDevicesFetched, updateSession])
 
   const setSessionAgentGroup = (groupID: string) => {
     if (!currentSession) {
