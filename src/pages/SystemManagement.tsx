@@ -222,6 +222,8 @@ interface AnnouncementDraft {
 
 interface SystemSettings extends PublicSettings {
 
+  token_api_enabled: boolean
+
   registration_email_suffixes: string
   registration_email_routing: string
   hcaptcha_secret: string
@@ -313,6 +315,7 @@ interface ThemeColorField {
 
 const defaultSystemSettings: SystemSettings = {
   ...defaultPublicSettings,
+  token_api_enabled: true,
   registration_email_suffixes: "",
   registration_email_routing: "[]",
   hcaptcha_secret: "",
@@ -1018,6 +1021,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <ToggleField label={copy.passkeyEnabled} checked={form.passkey_enabled} onChange={(checked) => updateField("passkey_enabled", checked)} />
             <ToggleField label={copy.passwordLoginEnabled} checked={form.password_login_enabled} onChange={(checked) => updateField("password_login_enabled", checked)} />
             <ToggleField label={copy.passwordRegistrationEnabled} checked={form.password_registration_enabled} onChange={(checked) => updateField("password_registration_enabled", checked)} />
+            <div className="space-y-1"><ToggleField label="启用令牌 API 调用" checked={form.token_api_enabled} onChange={(checked) => updateField("token_api_enabled", checked)} /><p className="text-xs text-muted-foreground">关闭后，所有 /v1 与兼容 AI 调用接口将拒绝请求；网页在线使用不受影响。</p></div>
             <ToggleField label={copy.emailVerificationRequired} checked={form.email_verification_required} onChange={(checked) => updateField("email_verification_required", checked)} />
             <ToggleField label={copy.passwordHCaptchaEnabled} checked={form.password_hcaptcha_enabled} onChange={(checked) => updateField("password_hcaptcha_enabled", checked)} />
 
