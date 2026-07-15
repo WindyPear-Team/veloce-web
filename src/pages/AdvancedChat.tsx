@@ -18,6 +18,7 @@ import AdvancedChatDeliveries from "./AdvancedChatDeliveries"
 import AdvancedChatScheduledTasks from "./AdvancedChatScheduledTasks"
 import AgentGroupsPage from "./AgentGroupsPage"
 import AgentTasks from "./AgentTasks"
+import EnterpriseTasks from "./EnterpriseTasks"
 import SystemManagement from "./SystemManagement"
 import AdminOverview from "./AdminOverview"
 import AdminAuditLogs from "./AdminAuditLogs"
@@ -193,6 +194,7 @@ export default function AdvancedChat() {
                     <Route path="sites" element={<AdvancedChatSites />} />
                     <Route path="agent-groups/*" element={<AgentGroupsPage />} />
                     <Route path="agent-tasks" element={<AgentTasks />} />
+                    <Route path="tasks" element={<EnterpriseTasks />} />
                     {publicSettings.message_channel_enabled && <Route path="channels/*" element={<MessageChannels />} />}
                     <Route path="deliveries" element={<AdvancedChatDeliveries />} />
                     <Route path="scheduled-tasks" element={<AdvancedChatScheduledTasks />} />
@@ -310,7 +312,6 @@ function AdvancedChatSidebar({
       items: [
         { href: "/chat/images", label: t("nav.images"), icon: Palette, active: location.pathname === "/chat/images" },
         { href: "/chat/videos", label: t("nav.videos"), icon: Video, active: location.pathname === "/chat/videos" },
-        { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
       ],
     },
     {
@@ -320,6 +321,8 @@ function AdvancedChatSidebar({
         ...(publicSettings.message_channel_enabled ? [{ href: "/chat/channels", label: messageChannelsLabel, icon: MessageSquare, active: location.pathname.startsWith("/chat/channels") }] : []),
         { href: "/chat/deliveries", label: deliveriesLabel, icon: Send, active: location.pathname === "/chat/deliveries" },
         { href: "/chat/scheduled-tasks", label: scheduledTasksLabel, icon: CalendarClock, active: location.pathname === "/chat/scheduled-tasks" },
+        { href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" },
+        { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
       ],
     },
     {

@@ -44,7 +44,7 @@ const userMenuItems: MenuItem[] = [
   { icon: History, labelKey: "nav.details", path: "/dashboard/logs", settingKey: "sidebar_usage_enabled" },
   { icon: KeyRound, labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
   { icon: MessageSquare, labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
-  { icon: ClipboardList, label: "我的任务", path: "/dashboard/tasks", enterpriseOnly: true },
+  { icon: ClipboardList, label: "任务", path: "/dashboard/tasks", enterpriseOnly: true },
   { icon: Settings, labelKey: "nav.settings", path: "/settings/profile", settingKey: "sidebar_settings_enabled" },
 ]
 

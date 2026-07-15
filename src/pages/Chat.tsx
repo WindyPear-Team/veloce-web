@@ -1366,16 +1366,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }, [selectableConnectorDevices, connectorDevices, pendingConnectorDeviceID])
 
-  const createNewSession = () => {
+  const createNewSession = (context: { folderID?: string; poolID?: string } = {}) => {
     setSessionMenu(null)
     setSharedSessionID("")
-    setSharedSessionPoolID("")
+    setSharedSessionPoolID(context.poolID || "")
+    setSelectedSharedPoolID(context.poolID || "")
     setLoadedSharedSession(null)
     const defaultAgent = isAdvanced ? agents.find((agent) => agent.id === defaultAgentID) || agents[0] : undefined
-    const session = createSession({
+    const session = { ...createSession({
       agentID: defaultAgent?.id,
       modelName: isAdvanced ? modelName || defaultAgent?.default_model || modelOptions[0] || "" : undefined,
-    })
+    }), folder_id: context.folderID }
     setDraftSession(session)
     setActiveSessionID("")
     setIsSessionsSidebarOpen(false)
@@ -3296,7 +3297,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         </div>
       </div>
       <div className="border-b border-slate-200/80 p-3">
-        <Button className="h-10 w-full justify-start gap-2 rounded-md bg-white text-slate-900 shadow-sm hover:bg-slate-50" variant="outline" onClick={createNewSession}>
+        <Button className="h-10 w-full justify-start gap-2 rounded-md bg-white text-slate-900 shadow-sm hover:bg-slate-50" variant="outline" onClick={() => createNewSession()}>
           <MessageSquarePlus size={16} />
           {copy.newSession}
         </Button>
@@ -3323,6 +3324,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <Folder size={14} className={cn("shrink-0", pool.scope_type === "task" ? "text-teal-600" : "text-amber-600")} />
                   <span className="truncate">{sharedPoolLabel(pool, language)}</span>
                 </button>
+                {expanded && <Button size="sm" variant="ghost" className="ml-7 h-7 text-xs" onClick={() => createNewSession({ poolID: String(pool.id) })}><MessageSquarePlus className="mr-1 h-3.5 w-3.5" />{language === "zh" ? "在此新建会话" : "New session here"}</Button>}
                 {expanded && (sharedPoolSessions.length === 0 ? <div className="px-8 py-2 text-xs text-muted-foreground">{language === "zh" ? "池内暂无会话" : "No shared sessions in this pool"}</div> : sharedPoolSessions.map((session) => <button key={session.id} type="button" className={cn("flex w-full items-center gap-2 rounded-md py-2 pl-8 pr-3 text-left hover:bg-muted", session.id === activeSession?.id && isSharedSession && "bg-primary/10 text-primary")} disabled={loadingSharedSessionID === session.id} onClick={() => void selectSharedPoolSession(session.id)}><FileText size={14} className="shrink-0" /><span className="truncate text-sm font-medium">{session.title || copy.untitledSession}</span></button>))}
               </div>
             })}
@@ -3347,6 +3349,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <Folder size={14} className="shrink-0 text-amber-600" />
               <span className="truncate">{folder.name}</span>
             </button>
+            <Button size="sm" variant="ghost" className="ml-7 h-7 text-xs" onClick={() => createNewSession({ folderID: folder.id })}><MessageSquarePlus className="mr-1 h-3.5 w-3.5" />{language === "zh" ? "在此新建会话" : "New session here"}</Button>
             {(normalizedSessionSearch || !collapsedSessionFolderIDs.has(folder.id)) && groupedSessions.map(sessionSidebarItem)}
           </div>
         ))}

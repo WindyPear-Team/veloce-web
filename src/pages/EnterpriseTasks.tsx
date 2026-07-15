@@ -36,7 +36,7 @@ export default function EnterpriseTasks() {
 
   return <div className="space-y-5">
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-      <div><div className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><h1 className="text-2xl font-semibold">我的任务</h1></div><p className="mt-1 text-sm text-muted-foreground">查看、创建并跟进分配给你的企业任务。</p></div>
+      <div><div className="flex items-center gap-2"><ClipboardList className="h-5 w-5 text-primary" /><h1 className="text-2xl font-semibold">任务</h1></div><p className="mt-1 text-sm text-muted-foreground">查看、创建并跟进分配给你的企业任务。</p></div>
       <Button variant="outline" onClick={() => void refetch()} disabled={isFetching}>{isFetching ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}刷新</Button>
     </div>
     <div className="grid gap-3 sm:grid-cols-3"><Metric label="全部任务" value={tasks.length} /><Metric label="进行中" value={active} /><Metric label="已完成" value={tasks.filter((task) => task.status === "completed").length} /></div>
