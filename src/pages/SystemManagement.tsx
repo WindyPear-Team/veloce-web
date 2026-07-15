@@ -221,6 +221,9 @@ interface AnnouncementDraft {
 }
 
 interface SystemSettings extends PublicSettings {
+
+  registration_email_suffixes: string
+  registration_email_routing: string
   hcaptcha_secret: string
   smtp_host: string
   smtp_port: string
@@ -310,6 +313,8 @@ interface ThemeColorField {
 
 const defaultSystemSettings: SystemSettings = {
   ...defaultPublicSettings,
+  registration_email_suffixes: "",
+  registration_email_routing: "[]",
   hcaptcha_secret: "",
   smtp_host: "",
   smtp_port: "587",
@@ -1015,6 +1020,9 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <ToggleField label={copy.passwordRegistrationEnabled} checked={form.password_registration_enabled} onChange={(checked) => updateField("password_registration_enabled", checked)} />
             <ToggleField label={copy.emailVerificationRequired} checked={form.email_verification_required} onChange={(checked) => updateField("email_verification_required", checked)} />
             <ToggleField label={copy.passwordHCaptchaEnabled} checked={form.password_hcaptcha_enabled} onChange={(checked) => updateField("password_hcaptcha_enabled", checked)} />
+
+            <TextareaField label="允许注册的邮箱后缀" value={form.registration_email_suffixes} placeholder="example.com, company.cn（留空表示不限制）" onChange={(value) => updateField("registration_email_suffixes", value)} />
+            <TextareaField label="邮箱后缀自动分组规则" value={form.registration_email_routing} placeholder={'[{"suffix":"company.cn","group_id":2}]'} onChange={(value) => updateField("registration_email_routing", value)} />
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.authAgreementMode}</span>
               <select
