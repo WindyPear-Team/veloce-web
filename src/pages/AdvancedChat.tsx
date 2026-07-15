@@ -305,6 +305,10 @@ function AdvancedChatSidebar({
     icon: MessageSquare,
     active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/"),
   }
+  const directItems: AdvancedChatSidebarItem[] = [
+    { href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" },
+    { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
+  ]
   const groups: AdvancedChatSidebarGroup[] = [
     {
       id: "creation",
@@ -321,8 +325,6 @@ function AdvancedChatSidebar({
         ...(publicSettings.message_channel_enabled ? [{ href: "/chat/channels", label: messageChannelsLabel, icon: MessageSquare, active: location.pathname.startsWith("/chat/channels") }] : []),
         { href: "/chat/deliveries", label: deliveriesLabel, icon: Send, active: location.pathname === "/chat/deliveries" },
         { href: "/chat/scheduled-tasks", label: scheduledTasksLabel, icon: CalendarClock, active: location.pathname === "/chat/scheduled-tasks" },
-        { href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" },
-        { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
       ],
     },
     {
@@ -393,6 +395,7 @@ function AdvancedChatSidebar({
         <div className={cn("h-full overflow-y-auto transition-transform duration-200 ease-out", showingGroup && "-translate-x-full")}>
           <div className="flex flex-col gap-1">
             {renderSidebarLink(homeItem)}
+            {directItems.map((item) => renderSidebarLink(item))}
             <div className="my-2" />
             {groups.map((group) => {
               const firstItem = group.items[0]
