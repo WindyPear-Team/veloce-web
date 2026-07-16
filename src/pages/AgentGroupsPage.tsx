@@ -1,5 +1,5 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react"
-import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom"
+import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, BriefcaseBusiness, Pencil, Plus, Save, Trash2, Users } from "lucide-react"
 import api from "@/lib/api"
@@ -65,7 +65,7 @@ export default function AgentGroupsPage() {
     <Routes>
       <Route index element={<AgentGroupList data={data} />} />
       <Route path="new" element={<AgentGroupEditor data={data} mode="new" />} />
-      <Route path=":groupID" element={<AgentGroupEditor data={data} mode="edit" />} />
+      <Route path=":groupID" element={<Navigate to="operations" replace />} />
     </Routes>
   )
 }
@@ -165,7 +165,7 @@ function AgentGroupList({ data }: { data: AgentGroupsData }) {
                 <button
                   type="button"
                   className="min-w-0 text-left"
-                  onClick={() => navigate(`/chat/agent-groups/${encodeURIComponent(group.id)}`)}
+                  onClick={() => navigate(`/chat/agent-groups/${encodeURIComponent(group.id)}/operations`)}
                 >
                   <div className="flex min-w-0 items-center gap-2">
                     <Users className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -185,11 +185,6 @@ function AgentGroupList({ data }: { data: AgentGroupsData }) {
                   <Button asChild variant="ghost" size="icon" title={copy.operations}>
                     <Link to={`/chat/agent-groups/${encodeURIComponent(group.id)}/operations`}>
                       <BriefcaseBusiness size={15} />
-                    </Link>
-                  </Button>
-                  <Button asChild variant="ghost" size="icon" title={copy.editGroup}>
-                    <Link to={`/chat/agent-groups/${encodeURIComponent(group.id)}`}>
-                      <Pencil size={15} />
                     </Link>
                   </Button>
                   <Button variant="ghost" size="icon" disabled={deletingID === group.id} onClick={() => deleteGroup(group)} title={copy.deleteGroup}>

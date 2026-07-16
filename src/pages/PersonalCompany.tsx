@@ -1,11 +1,12 @@
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from "react"
 import { useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { AlertTriangle, BriefcaseBusiness, CheckCircle2, CirclePause, ClipboardCheck, Loader2, Plus, Play, RefreshCw, ShieldCheck, Target, UsersRound, XCircle } from "lucide-react"
+import { AlertTriangle, BriefcaseBusiness, CheckCircle2, CirclePause, ClipboardCheck, Loader2, Pencil, Plus, Play, RefreshCw, Save, ShieldCheck, Target, Trash2, UsersRound, XCircle } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { useToast } from "@/components/ui/toast"
 
 type CompanyState = "draft" | "bootstrap" | "operating" | "attention_required" | "safe_mode" | "paused" | "archived"
@@ -15,8 +16,9 @@ interface Company { id: number; name: string; state: CompanyState; timezone: str
 interface Objective { id: number; title: string; description: string; status: string; priority: number; target_date?: string }
 interface WorkItem { id: number; objective_id?: number; title: string; description: string; definition_of_done: string; status: WorkStatus; priority: number; risk_level: string; estimated_cost: string | number; due_at?: string }
 interface Approval { id: number; work_item_id: number; risk_level: string; status: string; requested_action: string; expires_at?: string }
-interface StudioMember { id: string; name: string; type: "chief" | "worker" | "critic" | "reviewer" | "checker"; chat_agent_id?: string; default_model?: string }
+interface StudioMember { id: string; name: string; type: "chief" | "worker" | "critic" | "reviewer" | "checker"; prompt?: string; chat_agent_id?: string; default_model?: string; user_channel_id?: number; skill_ids?: string[]; mcp_server_ids?: string[] }
 interface StudioDetail { id: string; name: string; description?: string; agents: StudioMember[] }
+interface ChatAgent { id: string; name: string }
 interface ConnectorDevice { id: string; name: string; online: boolean; status: string }
 interface CompanyData {
   company: Company | null
@@ -142,11 +144,43 @@ function Approvals({ approvals, pending, onDecide }: { approvals: Approval[]; pe
 
 function StudioTeam() {
   const studioID = useContext(PersonalCompanyStudioContext)
+  const client = useQueryClient()
+  const { success, error } = useToast()
+  const [editingIndex, setEditingIndex] = useState<number | null>(null)
+  const [memberDraft, setMemberDraft] = useState<StudioMember>(() => emptyStudioMember())
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [saving, setSaving] = useState(false)
   const query = useQuery<StudioDetail>({ queryKey: ["advanced-chat-studio", studioID], queryFn: async () => (await api.get(`/user/advanced-chat/agent-groups/${encodeURIComponent(studioID)}`)).data })
+  const agentsQuery = useQuery<ChatAgent[]>({ queryKey: ["advanced-chat-agents"], queryFn: async () => { const response = await api.get("/user/advanced-chat/agents"); return Array.isArray(response.data) ? response.data.filter(isChatAgent) : [] } })
   if (query.isLoading) return <div className="py-12 text-center text-sm text-muted-foreground">正在加载组织...</div>
   if (query.isError) return <LoadError onRetry={() => void query.refetch()} />
-  const members = query.data?.agents || []
-  return <div className="space-y-5"><Card><CardHeader><CardTitle className="text-base">工作室团队</CardTitle><CardDescription>团队就是当前工作室成员。模型、技能、MCP 和协作角色都由工作室配置管理。</CardDescription></CardHeader><CardContent>{members.length === 0 ? <Empty text="当前工作室没有成员。" /> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{members.map((member) => <div key={member.id} className="border p-4"><UsersRound className="h-5 w-5 text-primary" /><div className="mt-3 text-sm font-medium">{member.name || member.id}</div><div className="mt-1 text-xs text-muted-foreground">{member.type} · {member.default_model || "使用绑定 Agent 模型"}</div><div className="mt-3 text-xs text-muted-foreground">{member.chat_agent_id ? "已绑定 Agent" : "未绑定 Agent"}</div></div>)}</div>}</CardContent></Card><Card><CardHeader><CardTitle className="text-base">AI 成员生成</CardTitle><CardDescription>即将推出：根据目标和当前团队缺口生成候选 Agent 成员，并在工作室编辑器中确认后加入团队。</CardDescription></CardHeader><CardContent><Button variant="outline" disabled>即将推出</Button></CardContent></Card></div>
+  const studio = query.data
+  const members = studio?.agents || []
+  const saveMembers = async (nextMembers: StudioMember[]) => {
+    if (!studio) return
+    const validation = studioMembersValidation(nextMembers)
+    if (validation) { error(validation); return }
+    setSaving(true)
+    try {
+      await api.put(`/user/advanced-chat/agent-groups/${encodeURIComponent(studioID)}`, { id: studio.id, name: studio.name, description: studio.description || "", agents: nextMembers })
+      await Promise.all([query.refetch(), client.invalidateQueries({ queryKey: ["advanced-chat-agent-groups"] })])
+      success("工作室成员已保存")
+      setDialogOpen(false)
+    } catch (value) { error(message(value, "保存工作室成员失败")) } finally { setSaving(false) }
+  }
+  const openAdd = () => { setEditingIndex(null); setMemberDraft(emptyStudioMember()); setDialogOpen(true) }
+  const openEdit = (member: StudioMember, index: number) => { setEditingIndex(index); setMemberDraft({ ...member }); setDialogOpen(true) }
+  const saveMember = () => {
+    const normalized = { ...memberDraft, id: memberDraft.id.trim() || newStudioMemberID(), name: memberDraft.name.trim(), chat_agent_id: (memberDraft.chat_agent_id || "").trim() }
+    if (!normalized.chat_agent_id) { error("请选择一个现有 Agent"); return }
+    const nextMembers = editingIndex === null ? [...members, normalized] : members.map((member, index) => index === editingIndex ? normalized : member)
+    void saveMembers(nextMembers)
+  }
+  return <div className="space-y-5"><Card><CardHeader><CardTitle className="flex items-center justify-between gap-3 text-base"><span>工作室团队</span><Button variant="outline" size="sm" onClick={openAdd}><Plus className="mr-2 h-4 w-4" />添加成员</Button></CardTitle><CardDescription>团队就是当前工作室成员。在此维护成员及其协作角色；每个成员继续使用所绑定 Agent 的模型、技能和 MCP。</CardDescription></CardHeader><CardContent>{members.length === 0 ? <Empty text="当前工作室没有成员。" /> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{members.map((member, index) => <div key={member.id} className="border p-4"><div className="flex items-start justify-between gap-2"><UsersRound className="h-5 w-5 text-primary" /><div className="flex gap-1"><button title="编辑成员" onClick={() => openEdit(member, index)} className="text-muted-foreground hover:text-primary"><Pencil className="h-4 w-4" /></button><button title="移除成员" disabled={saving} onClick={() => void saveMembers(members.filter((_, itemIndex) => itemIndex !== index))} className="text-muted-foreground hover:text-destructive disabled:opacity-50"><Trash2 className="h-4 w-4" /></button></div></div><div className="mt-3 text-sm font-medium">{member.name || member.id}</div><div className="mt-1 text-xs text-muted-foreground">{member.type} · {member.default_model || "使用绑定 Agent 模型"}</div><div className="mt-3 text-xs text-muted-foreground">{member.chat_agent_id ? "已绑定 Agent" : "未绑定 Agent"}</div></div>)}</div>}</CardContent></Card><Card><CardHeader><CardTitle className="text-base">AI 成员生成</CardTitle><CardDescription>即将推出：根据目标和当前团队缺口生成候选 Agent 成员，并在工作室编辑器中确认后加入团队。</CardDescription></CardHeader><CardContent><Button variant="outline" disabled>即将推出</Button></CardContent></Card><StudioMemberDialog open={dialogOpen} member={memberDraft} agents={agentsQuery.data || []} saving={saving} onOpenChange={setDialogOpen} onChange={setMemberDraft} onSave={saveMember} /></div>
+}
+
+function StudioMemberDialog({ open, member, agents, saving, onOpenChange, onChange, onSave }: { open: boolean; member: StudioMember; agents: ChatAgent[]; saving: boolean; onOpenChange: (open: boolean) => void; onChange: (member: StudioMember) => void; onSave: () => void }) {
+  return <Dialog open={open} onOpenChange={onOpenChange}><DialogContent><DialogHeader><DialogTitle>编辑工作室成员</DialogTitle></DialogHeader><div className="grid gap-4"><label className="grid gap-2 text-sm font-medium">绑定 Agent<select value={member.chat_agent_id || ""} onChange={(event) => { const agent = agents.find((item) => item.id === event.target.value); onChange({ ...member, chat_agent_id: event.target.value, name: agent?.name || member.name }) }} className="h-10 rounded-md border bg-background px-3 text-sm"><option value="">选择 Agent</option>{agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}</select></label><label className="grid gap-2 text-sm font-medium">成员名称<Input value={member.name} onChange={(event) => onChange({ ...member, name: event.target.value })} /></label><label className="grid gap-2 text-sm font-medium">协作角色<select value={member.type} onChange={(event) => onChange({ ...member, type: event.target.value as StudioMember["type"] })} className="h-10 rounded-md border bg-background px-3 text-sm"><option value="chief">chief</option><option value="worker">worker</option><option value="critic">critic</option><option value="reviewer">reviewer</option><option value="checker">checker</option></select></label></div><DialogFooter><Button variant="ghost" onClick={() => onOpenChange(false)}>取消</Button><Button disabled={saving} onClick={onSave}>{saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}保存成员</Button></DialogFooter></DialogContent></Dialog>
 }
 
 function StudioRuntime({ company, pending, onSave }: { company: Company; pending: boolean; onSave: (input: { connector_device_id: string; connector_workspace_path: string; connector_command_prefixes: string[] }) => void }) {
@@ -172,4 +206,8 @@ function mayQueue(status: WorkStatus) { return status === "planned" || status ==
 function formatBudget(value: string | number) { const numberValue = typeof value === "string" ? Number(value) : value; return Number.isFinite(numberValue) ? numberValue.toLocaleString("zh-CN", { maximumFractionDigits: 4 }) : String(value) }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : new Intl.DateTimeFormat("zh-CN", { dateStyle: "medium", timeStyle: "short" }).format(date) }
 function decodePrefixes(value?: string) { try { const parsed: unknown = JSON.parse(value || "[]"); return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === "string").join("\n") : "" } catch { return "" } }
+function emptyStudioMember(): StudioMember { return { id: "", name: "", type: "worker", chat_agent_id: "" } }
+function newStudioMemberID() { return `member-${Date.now().toString(36)}` }
+function studioMembersValidation(members: StudioMember[]) { if (members.some((member) => !member.chat_agent_id)) return "每个工作室成员都必须绑定 Agent"; if (new Set(members.map((member) => member.id)).size !== members.length) return "成员标识不能重复"; if (members.filter((member) => member.type === "chief").length !== 1) return "工作室必须且只能有一个 Chief"; if (members.filter((member) => member.type === "checker").length !== 1) return "工作室必须且只能有一个 Checker"; return "" }
+function isChatAgent(value: unknown): value is ChatAgent { const item = value as { id?: unknown; name?: unknown }; return typeof item?.id === "string" && typeof item?.name === "string" }
 function message(value: unknown, fallback: string) { const candidate = value as { response?: { data?: { error?: string } } }; return candidate.response?.data?.error || fallback }
