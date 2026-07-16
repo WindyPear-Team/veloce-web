@@ -86,6 +86,8 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
     enabled: Boolean(user),
   })
   const publicSettings = withPublicSettingsDefaults(settings)
+	const enterpriseMode = String(publicSettings.system_mode).toLowerCase() === "enterprise"
+	const personalMode = String(publicSettings.system_mode).toLowerCase() === "personal"
   const chatPath = chatPathForSettings()
   const visibleUserItems = userMenuItems
     .map((item) => {
@@ -94,10 +96,10 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
       }
       return item
     })
-    .filter((item) => (!item.settingKey || publicSettings[item.settingKey] !== false) && (!item.enterpriseOnly || publicSettings.system_mode === "enterprise") && (!item.personalOnly || publicSettings.system_mode === "personal"))
+		.filter((item) => (!item.settingKey || publicSettings[item.settingKey] !== false) && (!item.enterpriseOnly || enterpriseMode) && (!item.personalOnly || personalMode))
   const visibleAdminItems = adminMenuItems
-    .filter((item) => (!item.settingKey || publicSettings[item.settingKey] !== false) && (!item.enterpriseOnly || publicSettings.system_mode === "enterprise") && (!item.personalOnly || publicSettings.system_mode === "personal"))
-    .map((item) => item.path === "/dashboard/users" && publicSettings.system_mode === "enterprise" ? { ...item, label: "员工管理", labelKey: undefined } : item)
+		.filter((item) => (!item.settingKey || publicSettings[item.settingKey] !== false) && (!item.enterpriseOnly || enterpriseMode) && (!item.personalOnly || personalMode))
+		.map((item) => item.path === "/dashboard/users" && enterpriseMode ? { ...item, label: "员工管理", labelKey: undefined } : item)
   const pluginItems = pluginSidebarItems(pluginExtensions)
 
   return (
