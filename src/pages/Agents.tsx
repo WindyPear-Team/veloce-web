@@ -5,7 +5,7 @@ import { Link } from "react-router-dom"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
 import { useI18n } from "@/lib/i18n"
@@ -78,6 +78,10 @@ export default function Agents() {
   const [createSkillIDs, setCreateSkillIDs] = useState<string[]>([])
   const [createMCPServerIDs, setCreateMCPServerIDs] = useState<string[]>([])
   const [isCreating, setIsCreating] = useState(false)
+  const [isGenerateOpen, setIsGenerateOpen] = useState(false)
+  const [generationSourceAgentID, setGenerationSourceAgentID] = useState("")
+  const [generationRequirements, setGenerationRequirements] = useState("")
+  const [isGenerating, setIsGenerating] = useState(false)
   const [deletingAgentID, setDeletingAgentID] = useState("")
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
@@ -143,6 +147,12 @@ export default function Agents() {
     setIsCreateOpen(true)
   }
 
+  const openGenerateDialog = () => {
+    setGenerationSourceAgentID(agents.find((agent) => agent.default_model)?.id || agents[0]?.id || "")
+    setGenerationRequirements("")
+    setIsGenerateOpen(true)
+  }
+
   const setEditForm = (agent: ChatAgent) => {
     setActiveAgentID(agent.id)
     setName(agent.name)
@@ -202,6 +212,38 @@ export default function Agents() {
       error(apiErrorMessage(err, t("chat.agentCreateFailed")))
     } finally {
       setIsCreating(false)
+    }
+  }
+
+  const generateAgent = async () => {
+    if (!generationSourceAgentID) {
+      error(copy.generationSourceRequired)
+      return
+    }
+    if (!generationRequirements.trim()) {
+      error(copy.generationRequirementsRequired)
+      return
+    }
+
+    setIsGenerating(true)
+    try {
+      const res = await api.post("/user/advanced-chat/agents/generate", {
+        source_agent_id: generationSourceAgentID,
+        requirements: generationRequirements.trim(),
+      })
+      const savedAgent = normalizeAgent(res.data)
+      await queryClient.invalidateQueries({ queryKey: agentsQueryKey })
+      await queryClient.invalidateQueries({ queryKey: sharedAgentsQueryKey })
+      setIsGenerateOpen(false)
+      if (savedAgent) {
+        setEditForm(savedAgent)
+        setIsEditOpen(true)
+      }
+      success(copy.agentGenerated)
+    } catch (err) {
+      error(apiErrorMessage(err, copy.agentGenerateFailed))
+    } finally {
+      setIsGenerating(false)
     }
   }
 
@@ -271,10 +313,16 @@ export default function Agents() {
           <h1 className="text-3xl font-bold">{t("nav.agents")}</h1>
           <p className="mt-1 text-sm text-muted-foreground">{t("advancedChat.agents.subtitle")}</p>
         </div>
-        <Button className="gap-2" onClick={openCreateDialog}>
-          <Plus size={16} />
-          {t("chat.newAgent")}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" className="gap-2" onClick={openGenerateDialog}>
+            <Sparkles size={16} />
+            {copy.generateAgent}
+          </Button>
+          <Button className="gap-2" onClick={openCreateDialog}>
+            <Plus size={16} />
+            {t("chat.newAgent")}
+          </Button>
+        </div>
       </div>
 
       <PageTitleSlot />
@@ -540,6 +588,51 @@ export default function Agents() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <Dialog open={isGenerateOpen} onOpenChange={setIsGenerateOpen}>
+        <DialogContent className="max-h-[90vh] max-w-xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{copy.generateAgent}</DialogTitle>
+            <DialogDescription>{copy.generationDescription}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.generationSource}</span>
+              <select
+                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
+                value={generationSourceAgentID}
+                onChange={(event) => setGenerationSourceAgentID(event.target.value)}
+              >
+                <option value="">{copy.generationSourcePlaceholder}</option>
+                {agents.map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.name}{agent.default_model ? ` · ${agent.default_model}` : ` · ${t("chat.noDefaultModel")}`}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1 text-sm">
+              <span className="font-medium">{copy.generationRequirements}</span>
+              <textarea
+                className="min-h-56 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring"
+                value={generationRequirements}
+                placeholder={copy.generationRequirementsPlaceholder}
+                maxLength={4000}
+                onChange={(event) => setGenerationRequirements(event.target.value)}
+              />
+            </label>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" disabled={isGenerating} onClick={() => setIsGenerateOpen(false)}>
+              {t("common.cancel")}
+            </Button>
+            <Button className="gap-2" disabled={isGenerating || !generationSourceAgentID || !generationRequirements.trim()} onClick={generateAgent}>
+              <Sparkles size={16} />
+              {isGenerating ? copy.generatingAgent : copy.generateAgent}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -645,6 +738,17 @@ const zhAgentsCopy = {
   noChannel: "未指定渠道",
   streamAgent: "流式输出",
   streaming: "流式",
+  generateAgent: "生成代理",
+  generatingAgent: "正在生成...",
+  generationDescription: "选择一个代理，描述新代理的功能、目标和工作方式。生成时会使用所选代理的模型、渠道和已配置能力，并自动创建新代理。",
+  generationSource: "选择代理",
+  generationSourcePlaceholder: "选择一个已有代理",
+  generationRequirements: "新代理需求",
+  generationRequirementsPlaceholder: "例如：创建一个面向产品团队的竞品研究代理。它需要整理市场动态、比较竞品功能与定价，并输出带优先级的可执行建议。",
+  generationSourceRequired: "请选择代理",
+  generationRequirementsRequired: "请描述新代理的功能和目标",
+  agentGenerated: "代理已生成",
+  agentGenerateFailed: "生成代理失败",
 }
 
 const enAgentsCopy: typeof zhAgentsCopy = {
@@ -652,6 +756,17 @@ const enAgentsCopy: typeof zhAgentsCopy = {
   noChannel: "No channel",
   streamAgent: "Stream responses",
   streaming: "Streaming",
+  generateAgent: "Generate agent",
+  generatingAgent: "Generating...",
+  generationDescription: "Choose an agent, then describe the new agent's responsibilities, goals, and working style. Generation uses the selected agent's model, channel, and configured capabilities, then creates the new agent.",
+  generationSource: "Choose agent",
+  generationSourcePlaceholder: "Choose an existing agent",
+  generationRequirements: "New agent requirements",
+  generationRequirementsPlaceholder: "For example: Create a competitive research agent for a product team. It should track market developments, compare features and pricing, and produce prioritized recommendations.",
+  generationSourceRequired: "Choose an agent",
+  generationRequirementsRequired: "Describe the new agent's responsibilities and goals",
+  agentGenerated: "Agent generated",
+  agentGenerateFailed: "Failed to generate agent",
 }
 
 function normalizeSkill(value: unknown): ChatSkill | null {
