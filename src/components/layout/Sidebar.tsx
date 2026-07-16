@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, BriefcaseBusiness, Building2, ChevronDown, ClipboardList, Database, History, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Settings, Shield, Users } from "lucide-react"
+import { BarChart3, Boxes, Building2, ChevronDown, ClipboardList, Database, History, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Settings, Shield, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -46,7 +46,6 @@ const userMenuItems: MenuItem[] = [
   { icon: KeyRound, labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
   { icon: MessageSquare, labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
   { icon: ClipboardList, label: "任务", path: "/dashboard/tasks", enterpriseOnly: true },
-  { icon: BriefcaseBusiness, label: "我的公司", path: "/dashboard/personal-company", personalOnly: true },
   { icon: Settings, labelKey: "nav.settings", path: "/settings/profile", settingKey: "sidebar_settings_enabled" },
 ]
 
