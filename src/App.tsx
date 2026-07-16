@@ -27,6 +27,7 @@ import PublicContent from "./pages/PublicContent"
 import EnterpriseTasks from "./pages/EnterpriseTasks"
 import EnterpriseTaskDetail from "./pages/EnterpriseTaskDetail"
 import EnterpriseManagement from "./pages/EnterpriseManagement"
+import PersonalCompany from "./pages/PersonalCompany"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
@@ -111,6 +112,16 @@ const EnterpriseRoute = ({ children }: { children: React.ReactNode }) => {
   if (String(withPublicSettingsDefaults(settings).system_mode).toLowerCase() !== "enterprise") {
     return <Navigate to="/dashboard" replace />
   }
+  return <>{children}</>
+}
+
+const PersonalCompanyRoute = ({ children }: { children: React.ReactNode }) => {
+  const { data: settings, isLoading } = useQuery<PublicSettings>({
+    queryKey: ["public-settings"],
+    queryFn: async () => (await api.get("/public/settings")).data,
+  })
+  if (isLoading) return <div className="text-sm text-muted-foreground">加载中...</div>
+  if (String(withPublicSettingsDefaults(settings).system_mode).toLowerCase() !== "personal") return <Navigate to="/dashboard" replace />
   return <>{children}</>
 }
 
@@ -241,6 +252,9 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/dashboard/tasks") {
     return language === "zh" ? "我的任务" : "My Tasks"
   }
+  if (normalizedPathname === "/dashboard/personal-company") {
+    return language === "zh" ? "我的公司" : "My Company"
+  }
   if (normalizedPathname === "/dashboard/enterprise") {
     return language === "zh" ? "企业管理" : "Enterprise Management"
   }
@@ -356,6 +370,7 @@ function App() {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="data-board" element={<DataBoard />} />
+                <Route path="personal-company" element={<PersonalCompanyRoute><PersonalCompany /></PersonalCompanyRoute>} />
                 <Route path="tasks" element={<EnterpriseRoute><EnterpriseTasks /></EnterpriseRoute>} />
 				<Route path="tasks/:id" element={<EnterpriseRoute><EnterpriseTaskDetail /></EnterpriseRoute>} />
 				<Route path="enterprise/tasks/:id" element={<EnterpriseRoute><AdminRoute><EnterpriseTaskDetail /></AdminRoute></EnterpriseRoute>} />
