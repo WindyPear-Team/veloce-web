@@ -3,7 +3,7 @@ import type { ChangeEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNo
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
-import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, Quote, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
+import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderOpen, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, Quote, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
@@ -69,6 +69,7 @@ interface ChatSession {
   agent_group_id?: string
   skill_ids: string[]
   mcp_server_ids: string[]
+	knowledge_base_ids: string[]
   connector_device_id?: string
   connector_workspace_path?: string
   connector_auto_approve: boolean
@@ -153,6 +154,7 @@ interface ChatAgent {
   default_model: string
   user_channel_id?: number
   stream: boolean
+	knowledge_base_ids: string[]
   created_at: string
   updated_at: string
 }
@@ -332,6 +334,8 @@ interface StoredFileContent {
   truncated: boolean
 }
 
+interface ChatKnowledgeBase { id: string; name: string; description: string; vectorized: boolean }
+
 interface EnterpriseSharedPool {
   id: number
   scope_type: "task" | "department" | string
@@ -348,7 +352,7 @@ type ChatEndpoint = "chat" | "responses" | "claude" | "gemini"
 type ChatMode = "basic" | "advanced"
 type ChatRunMode = "chat" | "assistant" | "agent_group"
 type ConnectorApprovalMode = "manual" | "full_access" | "assistant"
-type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "mcp" | "device"
+type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "knowledge" | "mcp" | "device"
 type AttachmentTarget = "composer" | "editor"
 type ComposerControlMenu = "" | "mode" | "model" | "device" | "workspace" | "agent" | "agent_group" | "approval"
 type WorkspacePickerTarget = "session" | "pending"
@@ -445,6 +449,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const { data: publicSettingsData } = useQuery<PublicSettings>({ queryKey: ["public-settings"], queryFn: async () => (await api.get("/public/settings")).data })
   const enterpriseMode = String(withPublicSettingsDefaults(publicSettingsData).system_mode).toLowerCase() === "enterprise"
   const copy = useMemo(() => buildChatCopy(t), [t])
+	const knowledgeCopy = language === "zh" ? { label: "知识库", manage: "管理知识库", empty: "未添加知识库", select: "选择已向量化的知识库", add: "添加" } : { label: "Knowledge bases", manage: "Manage knowledge bases", empty: "No knowledge bases added", select: "Select a vectorized knowledge base", add: "Add" }
   const fileCopy = useMemo(() => (language === "zh" ? zhFileAttachmentCopy : enFileAttachmentCopy), [language])
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
   const approvalModeCopy = useMemo(() => (language === "zh" ? zhConnectorApprovalModeCopy : enConnectorApprovalModeCopy), [language])
@@ -483,6 +488,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [configTab, setConfigTab] = useState<SessionConfigTab>("basic")
   const [pendingAgentID, setPendingAgentID] = useState("")
   const [pendingSkillID, setPendingSkillID] = useState("")
+	const [pendingKnowledgeBaseID, setPendingKnowledgeBaseID] = useState("")
   const [pendingMCPServerID, setPendingMCPServerID] = useState("")
   const [pendingConnectorDeviceID, setPendingConnectorDeviceID] = useState("")
   const [pendingConnectorWorkspace, setPendingConnectorWorkspace] = useState("")
@@ -586,6 +592,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       const res = await api.get("/user/advanced-chat/settings")
       return normalizeAdvancedChatSettings(res.data)
     },
+  })
+
+  const { data: knowledgeBases = [] } = useQuery<ChatKnowledgeBase[]>({
+    queryKey: ["knowledge-bases"],
+    enabled: isAdvanced,
+    queryFn: async () => normalizeKnowledgeBases((await api.get("/user/advanced-chat/knowledge-bases")).data).filter((base) => base.vectorized),
   })
 
   const { data: sharedPools = [] } = useQuery<EnterpriseSharedPool[]>({
@@ -870,6 +882,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     const selectedIDs = new Set(currentSession?.skill_ids || [])
     return skills.filter((skill) => !selectedIDs.has(skill.id))
   }, [currentSession?.skill_ids, skills])
+	const sessionKnowledgeBases = useMemo(() => {
+		const selectedIDs = new Set(currentSession?.knowledge_base_ids || [])
+		return knowledgeBases.filter((base) => selectedIDs.has(base.id))
+	}, [currentSession?.knowledge_base_ids, knowledgeBases])
+	const availableKnowledgeBasesToAdd = useMemo(() => {
+		const selectedIDs = new Set(currentSession?.knowledge_base_ids || [])
+		return knowledgeBases.filter((base) => !selectedIDs.has(base.id))
+	}, [currentSession?.knowledge_base_ids, knowledgeBases])
   const sessionMCPServers = useMemo(() => {
     const selectedIDs = new Set(currentSession?.mcp_server_ids || [])
     return enabledMCPServers.filter((server) => selectedIDs.has(server.id))
@@ -1318,6 +1338,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       setPendingSkillID(availableSkillsToAdd[0]?.id || "")
     }
   }, [availableSkillsToAdd, pendingSkillID])
+
+	useEffect(() => {
+		if (!pendingKnowledgeBaseID && availableKnowledgeBasesToAdd[0]) {
+			setPendingKnowledgeBaseID(availableKnowledgeBasesToAdd[0].id)
+			return
+		}
+		if (pendingKnowledgeBaseID && !availableKnowledgeBasesToAdd.some((base) => base.id === pendingKnowledgeBaseID)) {
+			setPendingKnowledgeBaseID(availableKnowledgeBasesToAdd[0]?.id || "")
+		}
+	}, [availableKnowledgeBasesToAdd, pendingKnowledgeBaseID])
 
   useEffect(() => {
     if (!pendingMCPServerID && availableMCPServersToAdd[0]) {
@@ -1809,6 +1839,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setComposerControlMenu("")
   }
 
+	const addSessionKnowledgeBase = (knowledgeBaseID: string) => {
+		if (!currentSession || (currentSession.knowledge_base_ids || []).includes(knowledgeBaseID)) return
+		updateSession(currentSession.id, (session) => ({ ...session, knowledge_base_ids: [...(session.knowledge_base_ids || []), knowledgeBaseID] }), { persist: true })
+	}
+
+	const removeSessionKnowledgeBase = (knowledgeBaseID: string) => {
+		if (!currentSession) return
+		updateSession(currentSession.id, (session) => ({ ...session, knowledge_base_ids: (session.knowledge_base_ids || []).filter((id) => id !== knowledgeBaseID) }), { persist: true })
+	}
+
   useEffect(() => {
     if (!isSharedSession || !sharedPoolDevicesFetched || !currentSession?.connector_device_id || sharedPoolDeviceIDs.has(currentSession.connector_device_id)) {
       return
@@ -2190,6 +2230,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               agent_group_id: session.agent_group_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
+				knowledge_base_ids: session.knowledge_base_ids,
               connector_device_id: session.connector_device_id || "",
               connector_workspace_path: session.connector_workspace_path || "",
               connector_auto_approve: session.connector_auto_approve,
@@ -2231,6 +2272,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               agent_group_id: session.agent_group_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
+				knowledge_base_ids: session.knowledge_base_ids,
               connector_device_id: "",
               connector_workspace_path: "",
               connector_auto_approve: false,
@@ -2293,6 +2335,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               agent_group_id: session.agent_group_id || "",
               skill_ids: session.skill_ids,
               mcp_server_ids: session.mcp_server_ids,
+				knowledge_base_ids: session.knowledge_base_ids,
               connector_device_id: "",
               connector_workspace_path: "",
               connector_auto_approve: false,
@@ -4149,6 +4192,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   ...(activeRunMode !== "agent_group" ? ([["agent", copy.agent]] as const) : []),
                   ["agent_group", agentGroupCopy.agentGroups],
                   ["skills", copy.skills],
+					["knowledge", knowledgeCopy.label],
                   ...(currentAdvancedSettings.assistant_mcp_tools_enabled ? ([["mcp", copy.mcpServers]] as const) : []),
                   ...(assistantConnectorToolsEnabled && activeRunMode !== "chat" ? ([["device", copy.devices]] as const) : []),
                 ] as const).map(([tab, label]) => (
@@ -4366,6 +4410,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   </div>
                 </div>
               )}
+
+				{configTab === "knowledge" && (
+				  <div className="space-y-4 rounded-md border p-3">
+					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-sm font-medium"><FolderOpen size={15} />{knowledgeCopy.label}</div><Button asChild variant="outline" size="sm"><Link to="/chat/knowledge">{knowledgeCopy.manage}</Link></Button></div>
+					{sessionKnowledgeBases.length === 0 ? <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{knowledgeCopy.empty}</div> : <div className="space-y-2">{sessionKnowledgeBases.map((base) => <div key={base.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-md border p-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{base.name}</div>{base.description && <div className="mt-1 truncate text-xs text-muted-foreground">{base.description}</div>}</div><Button variant="ghost" size="sm" onClick={() => removeSessionKnowledgeBase(base.id)} title={copy.remove}><X size={15} /></Button></div>)}</div>}
+					<div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select className="h-10 rounded-md border bg-background px-3 text-sm" value={pendingKnowledgeBaseID} onChange={(event) => setPendingKnowledgeBaseID(event.target.value)}><option value="">{availableKnowledgeBasesToAdd.length ? knowledgeCopy.select : knowledgeCopy.empty}</option>{availableKnowledgeBasesToAdd.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}</select><Button className="gap-2" disabled={!pendingKnowledgeBaseID} onClick={() => addSessionKnowledgeBase(pendingKnowledgeBaseID)}><Plus size={16} />{knowledgeCopy.add}</Button></div>
+				  </div>
+				)}
 
               {configTab === "mcp" && (
                 <div className="space-y-4 rounded-md border p-3">
@@ -5762,6 +5814,7 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
       run_mode: "chat",
       skill_ids: [],
       mcp_server_ids: [],
+		knowledge_base_ids: [],
       connector_auto_approve: false,
       connector_approval_mode: "manual",
       connector_command_prefixes: [],
@@ -5917,6 +5970,7 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
     agent_group_id: isStudio ? safeSession.agent_group_id || "" : "",
     skill_ids: safeSession.skill_ids,
     mcp_server_ids: safeSession.mcp_server_ids,
+		knowledge_base_ids: safeSession.knowledge_base_ids,
     connector_device_id: isChat ? "" : safeSession.connector_device_id || "",
     connector_workspace_path: isChat ? "" : safeSession.connector_workspace_path || "",
     connector_auto_approve: isChat ? false : safeSession.connector_auto_approve,
@@ -6511,6 +6565,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     agent_group_id: stringFromUnknown(value.agent_group_id),
     skill_ids: stringArrayFromUnknown(value.skill_ids),
     mcp_server_ids: stringArrayFromUnknown(value.mcp_server_ids),
+		knowledge_base_ids: stringArrayFromUnknown(value.knowledge_base_ids),
     connector_device_id: stringFromUnknown(value.connector_device_id) || undefined,
     connector_workspace_path: stringFromUnknown(value.connector_workspace_path) || undefined,
     connector_auto_approve: value.connector_auto_approve === true,
@@ -6544,6 +6599,7 @@ function normalizeRuntimeSession(session: ChatSession): ChatSession {
     messages: Array.isArray(session.messages) ? session.messages : [],
     skill_ids: Array.isArray(session.skill_ids) ? session.skill_ids.filter((id): id is string => typeof id === "string") : [],
     mcp_server_ids: Array.isArray(session.mcp_server_ids) ? session.mcp_server_ids.filter((id): id is string => typeof id === "string") : [],
+		knowledge_base_ids: Array.isArray(session.knowledge_base_ids) ? session.knowledge_base_ids.filter((id): id is string => typeof id === "string") : [],
     connector_command_prefixes: Array.isArray(session.connector_command_prefixes)
       ? session.connector_command_prefixes.filter((prefix): prefix is string => typeof prefix === "string")
       : [],
@@ -6795,9 +6851,18 @@ function normalizeAgent(value: unknown): ChatAgent | null {
     default_model: typeof value.default_model === "string" ? value.default_model : "",
     user_channel_id: Number(value.user_channel_id || 0) || undefined,
     stream: value.stream === true,
+		knowledge_base_ids: stringArrayFromUnknown(value.knowledge_base_ids),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
+}
+
+function normalizeKnowledgeBases(value: unknown): ChatKnowledgeBase[] {
+	const source = isRecord(value) && Array.isArray(value.knowledge_bases) ? value.knowledge_bases : []
+	return source.flatMap((item): ChatKnowledgeBase[] => {
+		if (!isRecord(item) || typeof item.id !== "string" || !item.id) return []
+		return [{ id: item.id, name: typeof item.name === "string" ? item.name : item.id, description: typeof item.description === "string" ? item.description : "", vectorized: item.vectorized === true }]
+	})
 }
 
 function normalizeSkill(value: unknown): ChatSkill | null {
@@ -6884,6 +6949,7 @@ function createSession(input: { agentID?: string; modelName?: string } = {}): Ch
     agent_group_id: undefined,
     skill_ids: [],
     mcp_server_ids: [],
+		knowledge_base_ids: [],
     connector_device_id: undefined,
     connector_workspace_path: undefined,
     connector_auto_approve: false,

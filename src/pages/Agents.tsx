@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, MessageSquare, Plus, Save, Server, Sparkles, Trash2 } from "lucide-react"
+import { Bot, FolderOpen, MessageSquare, Plus, Save, Server, Sparkles, Trash2 } from "lucide-react"
 import { Link } from "react-router-dom"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -26,6 +26,7 @@ interface ChatAgent {
   stream: boolean
   skill_ids: string[]
   mcp_server_ids: string[]
+	knowledge_base_ids: string[]
   created_at: string
   updated_at: string
 }
@@ -48,6 +49,8 @@ interface MCPServer {
   enabled: boolean
 }
 
+interface KnowledgeBase { id: string; name: string; description: string; vectorized: boolean }
+
 const agentsQueryKey = ["advanced-chat-agents", "full"] as const
 const sharedAgentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
@@ -67,6 +70,7 @@ export default function Agents() {
   const [stream, setStream] = useState(false)
   const [skillIDs, setSkillIDs] = useState<string[]>([])
   const [mcpServerIDs, setMCPServerIDs] = useState<string[]>([])
+	const [knowledgeBaseIDs, setKnowledgeBaseIDs] = useState<string[]>([])
   const [isSaving, setIsSaving] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
@@ -77,6 +81,7 @@ export default function Agents() {
   const [createStream, setCreateStream] = useState(false)
   const [createSkillIDs, setCreateSkillIDs] = useState<string[]>([])
   const [createMCPServerIDs, setCreateMCPServerIDs] = useState<string[]>([])
+	const [createKnowledgeBaseIDs, setCreateKnowledgeBaseIDs] = useState<string[]>([])
   const [isCreating, setIsCreating] = useState(false)
   const [isGenerateOpen, setIsGenerateOpen] = useState(false)
   const [generationSourceAgentID, setGenerationSourceAgentID] = useState("")
@@ -120,6 +125,11 @@ export default function Agents() {
     },
   })
 
+  const { data: knowledgeBases = [] } = useQuery<KnowledgeBase[]>({
+    queryKey: ["knowledge-bases"],
+    queryFn: async () => normalizeKnowledgeBases((await api.get("/user/advanced-chat/knowledge-bases")).data).filter((base) => base.vectorized),
+  })
+
   const editModelOptions = useMemo(() => modelsForChannel(catalog, userChannelID), [catalog, userChannelID])
   const createModelOptions = useMemo(() => modelsForChannel(catalog, createUserChannelID), [catalog, createUserChannelID])
   const editModelSelectOptions = useMemo(
@@ -144,6 +154,7 @@ export default function Agents() {
     setCreateStream(false)
     setCreateSkillIDs([])
     setCreateMCPServerIDs([])
+		setCreateKnowledgeBaseIDs([])
     setIsCreateOpen(true)
   }
 
@@ -162,6 +173,7 @@ export default function Agents() {
     setStream(agent.stream === true)
     setSkillIDs(Array.isArray(agent.skill_ids) ? agent.skill_ids : [])
     setMCPServerIDs(Array.isArray(agent.mcp_server_ids) ? agent.mcp_server_ids : [])
+		setKnowledgeBaseIDs(Array.isArray(agent.knowledge_base_ids) ? agent.knowledge_base_ids : [])
   }
 
   const openEditDialog = (agent: ChatAgent) => {
@@ -178,6 +190,7 @@ export default function Agents() {
     setStream(false)
     setSkillIDs([])
     setMCPServerIDs([])
+		setKnowledgeBaseIDs([])
     setIsEditOpen(false)
   }
 
@@ -199,6 +212,7 @@ export default function Agents() {
         stream: createStream,
         skill_ids: uniqueStrings(createSkillIDs),
         mcp_server_ids: uniqueStrings(createMCPServerIDs),
+		knowledge_base_ids: uniqueStrings(createKnowledgeBaseIDs),
       })
       const savedAgent = normalizeAgent(res.data)
       await queryClient.invalidateQueries({ queryKey: agentsQueryKey })
@@ -269,6 +283,7 @@ export default function Agents() {
         stream,
         skill_ids: uniqueStrings(skillIDs),
         mcp_server_ids: uniqueStrings(mcpServerIDs),
+		knowledge_base_ids: uniqueStrings(knowledgeBaseIDs),
       })
       const savedAgent = normalizeAgent(res.data)
       await queryClient.invalidateQueries({ queryKey: agentsQueryKey })
@@ -351,7 +366,7 @@ export default function Agents() {
                     {[agent.default_model || t("chat.noDefaultModel"), agent.user_channel_id ? channelName.get(agent.user_channel_id) || `#${agent.user_channel_id}` : copy.noChannel].join(" · ")}
                   </div>
                   {agent.stream && <div className="mt-1 text-xs text-primary">{copy.streaming}</div>}
-                  {((Array.isArray(agent.skill_ids) && agent.skill_ids.length > 0) || (Array.isArray(agent.mcp_server_ids) && agent.mcp_server_ids.length > 0)) && (
+                  {((Array.isArray(agent.skill_ids) && agent.skill_ids.length > 0) || (Array.isArray(agent.mcp_server_ids) && agent.mcp_server_ids.length > 0) || (Array.isArray(agent.knowledge_base_ids) && agent.knowledge_base_ids.length > 0)) && (
                     <div className="mt-2 flex flex-wrap gap-1">
                       {(Array.isArray(agent.skill_ids) ? agent.skill_ids : []).map((id) => (
                         <span key={`skill-${id}`} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">
@@ -365,6 +380,9 @@ export default function Agents() {
                           {mcpServerName.get(id) || id}
                         </span>
                       ))}
+						{(Array.isArray(agent.knowledge_base_ids) ? agent.knowledge_base_ids : []).map((id) => (
+						  <span key={`knowledge-${id}`} className="inline-flex items-center gap-1 rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground"><FolderOpen size={11} />{knowledgeBases.find((base) => base.id === id)?.name || id}</span>
+						))}
                     </div>
                   )}
                 </button>
@@ -461,7 +479,7 @@ export default function Agents() {
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </label>
-            <div className="grid gap-4 md:grid-cols-2">
+			<div className="grid gap-4 md:grid-cols-3">
               <CapabilityPicker
                 label={t("chat.skills")}
                 icon={<Sparkles size={14} />}
@@ -470,6 +488,7 @@ export default function Agents() {
                 items={skills.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description }))}
                 onToggle={(id) => setSkillIDs((current) => toggleString(current, id))}
               />
+				<CapabilityPicker label={copy.knowledgeBases} icon={<FolderOpen size={14} />} empty={copy.noKnowledgeBases} selected={knowledgeBaseIDs} items={knowledgeBases.map((base) => ({ id: base.id, name: base.name, description: base.description }))} onToggle={(id) => setKnowledgeBaseIDs((current) => toggleString(current, id))} />
               <CapabilityPicker
                 label={t("chat.mcpServers")}
                 icon={<Server size={14} />}
@@ -558,7 +577,7 @@ export default function Agents() {
                 onChange={(event) => setCreatePrompt(event.target.value)}
               />
             </label>
-            <div className="grid gap-4 md:grid-cols-2">
+			<div className="grid gap-4 md:grid-cols-3">
               <CapabilityPicker
                 label={t("chat.skills")}
                 icon={<Sparkles size={14} />}
@@ -567,6 +586,7 @@ export default function Agents() {
                 items={skills.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description }))}
                 onToggle={(id) => setCreateSkillIDs((current) => toggleString(current, id))}
               />
+				<CapabilityPicker label={copy.knowledgeBases} icon={<FolderOpen size={14} />} empty={copy.noKnowledgeBases} selected={createKnowledgeBaseIDs} items={knowledgeBases.map((base) => ({ id: base.id, name: base.name, description: base.description }))} onToggle={(id) => setCreateKnowledgeBaseIDs((current) => toggleString(current, id))} />
               <CapabilityPicker
                 label={t("chat.mcpServers")}
                 icon={<Server size={14} />}
@@ -728,16 +748,21 @@ function normalizeAgent(value: unknown): ChatAgent | null {
     stream: value.stream === true,
     skill_ids: stringArray(value.skill_ids),
     mcp_server_ids: stringArray(value.mcp_server_ids),
+		knowledge_base_ids: stringArray(value.knowledge_base_ids),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
 }
 
+function normalizeKnowledgeBases(value: unknown): KnowledgeBase[] { const source = isRecord(value) && Array.isArray(value.knowledge_bases) ? value.knowledge_bases : []; return source.map((item) => { if (!isRecord(item) || typeof item.id !== "string") return null; return { id: item.id, name: typeof item.name === "string" ? item.name : item.id, description: typeof item.description === "string" ? item.description : "", vectorized: item.vectorized === true } }).filter((item): item is KnowledgeBase => Boolean(item)) }
+
 const zhAgentsCopy = {
   channel: "渠道",
   noChannel: "未指定渠道",
   streamAgent: "流式输出",
-  streaming: "流式",
+	streaming: "流式",
+	knowledgeBases: "知识库",
+	noKnowledgeBases: "没有已向量化的知识库",
   generateAgent: "生成代理",
   generatingAgent: "正在生成...",
   generationDescription: "选择一个代理，描述新代理的功能、目标和工作方式。生成时会使用所选代理的模型、渠道和已配置能力，并自动创建新代理。",
@@ -755,7 +780,9 @@ const enAgentsCopy: typeof zhAgentsCopy = {
   channel: "Channel",
   noChannel: "No channel",
   streamAgent: "Stream responses",
-  streaming: "Streaming",
+	streaming: "Streaming",
+	knowledgeBases: "Knowledge bases",
+	noKnowledgeBases: "No vectorized knowledge bases",
   generateAgent: "Generate agent",
   generatingAgent: "Generating...",
   generationDescription: "Choose an agent, then describe the new agent's responsibilities, goals, and working style. Generation uses the selected agent's model, channel, and configured capabilities, then creates the new agent.",
