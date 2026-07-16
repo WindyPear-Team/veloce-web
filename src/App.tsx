@@ -356,7 +356,7 @@ function App() {
               >
                 <Route index element={<Dashboard />} />
                 <Route path="data-board" element={<DataBoard />} />
-                <Route path="personal-company" element={<Navigate to="/chat/company" replace />} />
+                <Route path="personal-company" element={<Navigate to="/chat/agent-groups" replace />} />
                 <Route path="tasks" element={<EnterpriseRoute><EnterpriseTasks /></EnterpriseRoute>} />
 				<Route path="tasks/:id" element={<EnterpriseRoute><EnterpriseTaskDetail /></EnterpriseRoute>} />
 				<Route path="enterprise/tasks/:id" element={<EnterpriseRoute><AdminRoute><EnterpriseTaskDetail /></AdminRoute></EnterpriseRoute>} />

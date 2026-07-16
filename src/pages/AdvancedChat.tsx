@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Boxes, Brain, BriefcaseBusiness, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import { BarChart3, Bot, Boxes, Brain, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -193,8 +193,8 @@ export default function AdvancedChat() {
                     <Route path="devices" element={<AdvancedChatDevices />} />
                     <Route path="devices/:id" element={<AdvancedChatDeviceDetail />} />
                     <Route path="sites" element={<AdvancedChatSites />} />
+                    <Route path="agent-groups/:groupID/operations" element={<PersonalCompany />} />
                     <Route path="agent-groups/*" element={<AgentGroupsPage />} />
-                    <Route path="company" element={<PersonalCompany />} />
                     <Route path="agent-tasks" element={<AgentTasks />} />
                     <Route path="tasks" element={<EnterpriseTasks />} />
                     {publicSettings.message_channel_enabled && <Route path="channels/*" element={<MessageChannels />} />}
@@ -249,7 +249,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/devices" || pathname.startsWith("/chat/devices/")) return zh ? "设备" : "Devices"
   if (pathname === "/chat/sites") return zh ? "站点" : "Sites"
   if (pathname.startsWith("/chat/agent-groups")) return zh ? "工作室" : "Agent Studios"
-  if (pathname === "/chat/company") return zh ? "我的公司" : "My Company"
+  if (pathname.includes("/agent-groups/") && pathname.endsWith("/operations")) return zh ? "工作室运营" : "Studio Operations"
   if (pathname === "/chat/agent-tasks") return zh ? "代理任务" : "Agent Tasks"
   if (pathname === "/chat/mcp") return zh ? "MCP" : "MCP"
   if (pathname === "/chat/admin-overview") return zh ? "管理概览" : "Admin Overview"
@@ -340,7 +340,6 @@ function AdvancedChatSidebar({
         { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" || location.pathname.startsWith("/chat/devices/") },
         { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
         { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
-        { href: "/chat/company", label: language === "zh" ? "我的公司" : "My Company", icon: BriefcaseBusiness, active: location.pathname === "/chat/company" },
         { href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" },
         { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
       ],

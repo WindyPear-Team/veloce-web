@@ -1,4 +1,5 @@
-import { useMemo, useState } from "react"
+import { createContext, useContext, useMemo, useState } from "react"
+import { useParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { AlertTriangle, ArrowRightLeft, BriefcaseBusiness, CheckCircle2, CirclePause, ClipboardCheck, Loader2, Plus, Play, RefreshCw, ShieldCheck, Target, UserPlus, UsersRound, XCircle } from "lucide-react"
 import api from "@/lib/api"
@@ -18,7 +19,6 @@ interface Approval { id: number; work_item_id: number; risk_level: string; statu
 interface Employee { id: number; name: string; role: string; status: string; version: number; advanced_chat_agent_id?: string; max_risk_level: string }
 interface AdvancedChatAgent { id: string; name: string; default_model: string }
 interface ConnectorDevice { id: string; name: string; status: string }
-interface AgentStudio { id: string; name: string; description?: string }
 interface RoleTemplate { id: number; name: string; template_key: string; definition_of_done: string; max_risk_level: string }
 interface RecruitmentPlan { id: number; title: string; capability_gap: string; expected_benefit: string; max_risk_level: string; status: string; employee_id?: number }
 interface CompanyData {
@@ -31,11 +31,14 @@ interface CompanyData {
   health?: { active_objectives: number; active_work_items: number; blocked_work_items: number; pending_approvals: number }
 }
 
-const companyKey = ["personal-company"] as const
+const companyKey = (studioID: string) => ["personal-company", studioID] as const
+const personalCompanyURL = (path: string, studioID: string) => `${path}${path.includes("?") ? "&" : "?"}studio_id=${encodeURIComponent(studioID)}`
+const PersonalCompanyStudioContext = createContext("")
 const tabs = ["概览", "目标", "工作", "审批", "组织"] as const
 type Tab = typeof tabs[number]
 
 export default function PersonalCompany() {
+  const { groupID = "" } = useParams()
   const client = useQueryClient()
   const { success, error } = useToast()
   const [tab, setTab] = useState<Tab>("概览")
@@ -46,38 +49,38 @@ export default function PersonalCompany() {
   const [definitionOfDone, setDefinitionOfDone] = useState("")
   const [riskLevel, setRiskLevel] = useState("r0")
 
-  const companyQuery = useQuery<CompanyData>({ queryKey: companyKey, queryFn: async () => (await api.get("/user/personal-company")).data })
-  const refresh = () => void client.invalidateQueries({ queryKey: companyKey })
+  const companyQuery = useQuery<CompanyData>({ queryKey: companyKey(groupID), enabled: Boolean(groupID), queryFn: async () => (await api.get(personalCompanyURL("/user/personal-company", groupID))).data })
+  const refresh = () => void client.invalidateQueries({ queryKey: companyKey(groupID) })
   const bootstrap = useMutation({
-    mutationFn: async () => api.post("/user/personal-company/bootstrap", { name: companyName, mission, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", autonomy_level: "r0" }),
-    onSuccess: () => { success("个人公司已启用"); refresh() }, onError: (value: unknown) => error(message(value, "启用失败")),
+    mutationFn: async () => api.post(personalCompanyURL("/user/personal-company/bootstrap", groupID), { name: companyName, mission, timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC", autonomy_level: "r0" }),
+    onSuccess: () => { success("工作室运营已启用"); refresh() }, onError: (value: unknown) => error(message(value, "启用失败")),
   })
   const changeState = useMutation({
-    mutationFn: async (action: "pause" | "resume") => api.post(`/user/personal-company/${action}`),
+    mutationFn: async (action: "pause" | "resume") => api.post(personalCompanyURL(`/user/personal-company/${action}`, groupID)),
     onSuccess: () => refresh(), onError: (value: unknown) => error(message(value, "更新状态失败")),
   })
   const createObjective = useMutation({
-    mutationFn: async () => api.post("/user/personal-company/objectives", { title: objectiveTitle }),
+    mutationFn: async () => api.post(personalCompanyURL("/user/personal-company/objectives", groupID), { title: objectiveTitle }),
     onSuccess: () => { setObjectiveTitle(""); success("目标已创建"); refresh() }, onError: (value: unknown) => error(message(value, "创建目标失败")),
   })
   const createWork = useMutation({
-    mutationFn: async () => api.post("/user/personal-company/work-items", { title: workTitle, definition_of_done: definitionOfDone, risk_level: riskLevel }),
+    mutationFn: async () => api.post(personalCompanyURL("/user/personal-company/work-items", groupID), { title: workTitle, definition_of_done: definitionOfDone, risk_level: riskLevel }),
     onSuccess: () => { setWorkTitle(""); setDefinitionOfDone(""); success(riskLevel === "r3" ? "工作项已提交，正在等待审批" : "工作项已创建"); refresh() }, onError: (value: unknown) => error(message(value, "创建工作项失败")),
   })
   const decideApproval = useMutation({
-    mutationFn: async ({ id, decision }: { id: number; decision: "approved" | "rejected" }) => api.post(`/user/personal-company/approvals/${id}/decide`, { decision }),
+    mutationFn: async ({ id, decision }: { id: number; decision: "approved" | "rejected" }) => api.post(personalCompanyURL(`/user/personal-company/approvals/${id}/decide`, groupID), { decision }),
     onSuccess: () => { success("审批已记录"); refresh() }, onError: (value: unknown) => error(message(value, "审批失败")),
   })
   const cancelWork = useMutation({
-    mutationFn: async (id: number) => api.post(`/user/personal-company/work-items/${id}/cancel`),
+    mutationFn: async (id: number) => api.post(personalCompanyURL(`/user/personal-company/work-items/${id}/cancel`, groupID)),
     onSuccess: () => { success("工作项已取消"); refresh() }, onError: (value: unknown) => error(message(value, "取消失败")),
   })
   const queueWork = useMutation({
-    mutationFn: async (id: number) => api.post(`/user/personal-company/work-items/${id}/queue`),
+    mutationFn: async (id: number) => api.post(personalCompanyURL(`/user/personal-company/work-items/${id}/queue`, groupID)),
     onSuccess: () => { success("工作项已加入执行队列"); refresh() }, onError: (value: unknown) => error(message(value, "加入队列失败")),
   })
   const runWork = useMutation({
-    mutationFn: async (id: number) => api.post(`/user/personal-company/work-items/${id}/run`),
+    mutationFn: async (id: number) => api.post(personalCompanyURL(`/user/personal-company/work-items/${id}/run`, groupID)),
     onSuccess: () => { success("已创建真实 Agent 运行"); refresh() }, onError: (value: unknown) => error(message(value, "启动工作失败")),
   })
 
@@ -90,9 +93,9 @@ export default function PersonalCompany() {
   const objectives = data.objectives || []
   const workItems = data.work_items || []
   const approvals = data.approvals || []
-  return <div className="mx-auto max-w-7xl space-y-5">
+  return <PersonalCompanyStudioContext.Provider value={groupID}><div className="mx-auto max-w-7xl space-y-5">
     <header className="flex flex-col gap-3 border-b pb-4 lg:flex-row lg:items-start lg:justify-between">
-      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><BriefcaseBusiness className="h-6 w-6 text-primary" /><h1 className="text-2xl font-semibold">{company.name}</h1><StateBadge state={company.state} /></div><p className="mt-1 text-sm text-muted-foreground">目标、授权、交付和成本都在可审计的工作账本中推进。</p></div>
+      <div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><BriefcaseBusiness className="h-6 w-6 text-primary" /><h1 className="text-2xl font-semibold">工作室运营</h1><StateBadge state={company.state} /></div><p className="mt-1 text-sm text-muted-foreground">当前工作室：{groupID}。</p></div>
       <div className="flex shrink-0 gap-2"><Button variant="outline" size="icon" title="刷新" onClick={refresh} disabled={companyQuery.isFetching}><RefreshCw className={`h-4 w-4 ${companyQuery.isFetching ? "animate-spin" : ""}`} /></Button>{company.state === "operating" ? <Button variant="outline" onClick={() => changeState.mutate("pause")} disabled={changeState.isPending}><CirclePause className="mr-2 h-4 w-4" />暂停</Button> : <Button onClick={() => changeState.mutate("resume")} disabled={changeState.isPending}><Play className="mr-2 h-4 w-4" />恢复运行</Button>}</div>
     </header>
     <nav className="flex gap-1 overflow-x-auto border-b" aria-label="个人公司导航">{tabs.map((item) => <button key={item} onClick={() => setTab(item)} className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium ${tab === item ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`}>{item}{item === "审批" && approvals.length > 0 ? <span className="ml-1.5 rounded-full bg-destructive px-1.5 py-0.5 text-xs text-destructive-foreground">{approvals.length}</span> : null}</button>)}</nav>
@@ -101,11 +104,11 @@ export default function PersonalCompany() {
     {tab === "工作" && <WorkBoard workItems={workItems} title={workTitle} definitionOfDone={definitionOfDone} riskLevel={riskLevel} onTitle={setWorkTitle} onDefinition={setDefinitionOfDone} onRisk={setRiskLevel} onSubmit={() => createWork.mutate()} pending={createWork.isPending} onCancel={(id) => cancelWork.mutate(id)} onQueue={(id) => queueWork.mutate(id)} queuePending={queueWork.isPending} onRun={(id) => runWork.mutate(id)} runPending={runWork.isPending} />}
     {tab === "审批" && <Approvals approvals={approvals} pending={decideApproval.isPending} onDecide={(id, decision) => decideApproval.mutate({ id, decision })} />}
     {tab === "组织" && <Organization />}
-  </div>
+  </div></PersonalCompanyStudioContext.Provider>
 }
 
 function BootstrapForm({ companyName, mission, onCompanyName, onMission, onSubmit, pending }: { companyName: string; mission: string; onCompanyName: (value: string) => void; onMission: (value: string) => void; onSubmit: () => void; pending: boolean }) {
-  return <div className="mx-auto max-w-2xl py-8"><div className="border-b pb-5"><div className="flex items-center gap-2"><BriefcaseBusiness className="h-7 w-7 text-primary" /><h1 className="text-2xl font-semibold">启用我的公司</h1></div><p className="mt-2 text-sm text-muted-foreground">先定义目标边界。系统默认只允许 R0 工作，任何高影响行动都必须经过你的审批。</p></div><div className="mt-5 grid gap-4"><label className="grid gap-2 text-sm font-medium">公司名称<Input value={companyName} onChange={(event) => onCompanyName(event.target.value)} placeholder="例如：WindyPear 产品工作室" maxLength={160} /></label><label className="grid gap-2 text-sm font-medium">当前使命<textarea value={mission} onChange={(event) => onMission(event.target.value)} placeholder="例如：在可控成本下持续交付产品改进" className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" maxLength={4000} /></label><div className="flex justify-end"><Button disabled={!companyName.trim() || !mission.trim() || pending} onClick={onSubmit}>{pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}建立受控公司</Button></div></div></div>
+  return <div className="mx-auto max-w-2xl py-8"><div className="border-b pb-5"><div className="flex items-center gap-2"><BriefcaseBusiness className="h-7 w-7 text-primary" /><h1 className="text-2xl font-semibold">启用工作室运营</h1></div><p className="mt-2 text-sm text-muted-foreground">为这个工作室定义目标边界。系统默认只允许 R0 工作，任何高影响行动都必须经过你的审批。</p></div><div className="mt-5 grid gap-4"><label className="grid gap-2 text-sm font-medium">运营名称<Input value={companyName} onChange={(event) => onCompanyName(event.target.value)} placeholder="例如：WindyPear 产品工作室" maxLength={160} /></label><label className="grid gap-2 text-sm font-medium">当前使命<textarea value={mission} onChange={(event) => onMission(event.target.value)} placeholder="例如：在可控成本下持续交付产品改进" className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-ring" maxLength={4000} /></label><div className="flex justify-end"><Button disabled={!companyName.trim() || !mission.trim() || pending} onClick={onSubmit}>{pending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}启用运营</Button></div></div></div>
 }
 
 function Overview({ data, onShowApprovals }: { data: CompanyData; onShowApprovals: () => void }) {
@@ -117,6 +120,7 @@ function Overview({ data, onShowApprovals }: { data: CompanyData; onShowApproval
 function Objectives({ objectives, title, onTitle, onSubmit, pending }: { objectives: Objective[]; title: string; onTitle: (value: string) => void; onSubmit: () => void; pending: boolean }) { return <div className="space-y-5"><NewItem label="新目标" placeholder="描述一个可验证的目标" value={title} onChange={onTitle} onSubmit={onSubmit} pending={pending} /><Card><CardHeader><CardTitle className="text-base">目标与计划</CardTitle></CardHeader><CardContent>{objectives.length === 0 ? <Empty text="尚未创建目标。" /> : <div className="divide-y">{objectives.map((objective) => <div key={objective.id} className="flex items-center justify-between gap-3 py-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{objective.title}</div>{objective.description && <p className="mt-1 text-sm text-muted-foreground">{objective.description}</p>}</div><span className="shrink-0 text-xs text-muted-foreground">优先级 {objective.priority}</span></div>)}</div>}</CardContent></Card></div> }
 
 function WorkBoard({ workItems, title, definitionOfDone, riskLevel, onTitle, onDefinition, onRisk, onSubmit, pending, onCancel, onQueue, queuePending, onRun, runPending }: { workItems: WorkItem[]; title: string; definitionOfDone: string; riskLevel: string; onTitle: (value: string) => void; onDefinition: (value: string) => void; onRisk: (value: string) => void; onSubmit: () => void; pending: boolean; onCancel: (id: number) => void; onQueue: (id: number) => void; queuePending: boolean; onRun: (id: number) => void; runPending: boolean }) {
+  const studioID = useContext(PersonalCompanyStudioContext)
   const client = useQueryClient()
   const { success, error } = useToast()
   const [handoffWorkItem, setHandoffWorkItem] = useState<WorkItem | null>(null)
@@ -125,10 +129,10 @@ function WorkBoard({ workItems, title, definitionOfDone, riskLevel, onTitle, onD
   const [evidence, setEvidence] = useState("[]")
   const [risks, setRisks] = useState("[]")
   const [nextSteps, setNextSteps] = useState("")
-  const orgQuery = useQuery<{ employees: Employee[] }>({ queryKey: ["personal-company-org"], queryFn: async () => (await api.get("/user/personal-company/org-chart")).data })
+  const orgQuery = useQuery<{ employees: Employee[] }>({ queryKey: ["personal-company-org", studioID], queryFn: async () => (await api.get(personalCompanyURL("/user/personal-company/org-chart", studioID))).data })
   const handoff = useMutation({
-    mutationFn: async () => api.post(`/user/personal-company/work-items/${handoffWorkItem?.id}/handoffs`, { to_employee_id: Number(toEmployeeID), completion_summary: completionSummary, evidence, risks, next_steps: nextSteps }),
-    onSuccess: () => { success("交接包已创建，等待接收方明确决定"); setHandoffWorkItem(null); setToEmployeeID(""); setCompletionSummary(""); setEvidence("[]"); setRisks("[]"); setNextSteps(""); void client.invalidateQueries({ queryKey: companyKey }) },
+    mutationFn: async () => api.post(personalCompanyURL(`/user/personal-company/work-items/${handoffWorkItem?.id}/handoffs`, studioID), { to_employee_id: Number(toEmployeeID), completion_summary: completionSummary, evidence, risks, next_steps: nextSteps }),
+    onSuccess: () => { success("交接包已创建，等待接收方明确决定"); setHandoffWorkItem(null); setToEmployeeID(""); setCompletionSummary(""); setEvidence("[]"); setRisks("[]"); setNextSteps(""); void client.invalidateQueries({ queryKey: companyKey(studioID) }) },
     onError: (value: unknown) => error(message(value, "创建交接包失败")),
   })
   const eligibleEmployees = (orgQuery.data?.employees || []).filter((employee) => employee.status === "active" || employee.status === "probation")
@@ -139,6 +143,7 @@ function WorkBoard({ workItems, title, definitionOfDone, riskLevel, onTitle, onD
 function Approvals({ approvals, pending, onDecide }: { approvals: Approval[]; pending: boolean; onDecide: (id: number, decision: "approved" | "rejected") => void }) { return <Card><CardHeader><CardTitle className="text-base">审批与安全</CardTitle><CardDescription>批准只授权当前工作项的已绑定参数；它不扩大员工权限。</CardDescription></CardHeader><CardContent>{approvals.length === 0 ? <Empty text="没有等待处理的审批。" /> : <div className="divide-y">{approvals.map((approval) => <div key={approval.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center sm:justify-between"><div><div className="text-sm font-medium">{approval.requested_action}</div><div className="mt-1 text-xs text-muted-foreground">工作项 #{approval.work_item_id} · {riskLabel(approval.risk_level)}{approval.expires_at ? ` · ${formatDate(approval.expires_at)} 过期` : ""}</div></div><div className="flex gap-2"><Button size="sm" variant="outline" disabled={pending} onClick={() => onDecide(approval.id, "rejected")}>拒绝</Button><Button size="sm" disabled={pending} onClick={() => onDecide(approval.id, "approved")}>{pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><CheckCircle2 className="mr-2 h-4 w-4" />批准</>}</Button></div></div>)}</div>}</CardContent></Card> }
 
 function Organization() {
+  const studioID = useContext(PersonalCompanyStudioContext)
   const client = useQueryClient()
   const { success, error } = useToast()
   const [title, setTitle] = useState("")
@@ -148,24 +153,19 @@ function Organization() {
   const [agentID, setAgentID] = useState("")
   const [connectorID, setConnectorID] = useState("")
   const [workspacePath, setWorkspacePath] = useState("")
-  const [studioID, setStudioID] = useState("")
-  const query = useQuery<{ employees: Employee[]; role_templates: RoleTemplate[]; recruitment_plans: RecruitmentPlan[] }>({ queryKey: ["personal-company-org"], queryFn: async () => (await api.get("/user/personal-company/org-chart")).data })
+  const query = useQuery<{ employees: Employee[]; role_templates: RoleTemplate[]; recruitment_plans: RecruitmentPlan[] }>({ queryKey: ["personal-company-org", studioID], queryFn: async () => (await api.get(personalCompanyURL("/user/personal-company/org-chart", studioID))).data })
   const agentsQuery = useQuery<AdvancedChatAgent[]>({ queryKey: ["advanced-chat-agents"], queryFn: async () => (await api.get("/user/advanced-chat/agents")).data })
   const devicesQuery = useQuery<ConnectorDevice[]>({ queryKey: ["advanced-chat-devices"], queryFn: async () => (await api.get("/user/advanced-chat/devices")).data })
-  const studiosQuery = useQuery<{ groups?: AgentStudio[] }>({ queryKey: ["advanced-chat-studios"], queryFn: async () => (await api.get("/user/advanced-chat/agent-groups")).data })
-  const refresh = () => void client.invalidateQueries({ queryKey: ["personal-company-org"] })
-  const createPlan = useMutation({ mutationFn: async () => api.post("/user/personal-company/staffing/recruitment-plans", { title, capability_gap: capabilityGap, max_risk_level: riskLevel }), onSuccess: () => { setTitle(""); setCapabilityGap(""); success("招聘计划已创建，等待你的明确批准"); refresh() }, onError: (value: unknown) => error(message(value, "创建招聘计划失败")) })
-  const approvePlan = useMutation({ mutationFn: async (id: number) => api.post(`/user/personal-company/staffing/recruitment-plans/${id}/approve`), onSuccess: () => { success("已创建试岗员工"); refresh() }, onError: (value: unknown) => error(message(value, "批准招聘计划失败")) })
-  const bindRuntime = useMutation({ mutationFn: async () => api.post(`/user/personal-company/employees/${bindingEmployee?.id}/runtime-binding`, { advanced_chat_agent_id: agentID, connector_device_id: connectorID, connector_workspace_path: workspacePath }), onSuccess: () => { success("员工已绑定既有 Agent 与模型"); setBindingEmployee(null); setAgentID(""); setConnectorID(""); setWorkspacePath(""); refresh() }, onError: (value: unknown) => error(message(value, "绑定运行时失败")) })
-  const bindStudio = useMutation({ mutationFn: async () => api.post("/user/personal-company/studio-binding", { agent_group_id: studioID }), onSuccess: () => { success("公司已作为该工作室的受治理运行模式"); setStudioID(""); void client.invalidateQueries({ queryKey: companyKey }) }, onError: (value: unknown) => error(message(value, "绑定工作室失败")) })
+  const refresh = () => void client.invalidateQueries({ queryKey: ["personal-company-org", studioID] })
+  const createPlan = useMutation({ mutationFn: async () => api.post(personalCompanyURL("/user/personal-company/staffing/recruitment-plans", studioID), { title, capability_gap: capabilityGap, max_risk_level: riskLevel }), onSuccess: () => { setTitle(""); setCapabilityGap(""); success("招聘计划已创建，等待你的明确批准"); refresh() }, onError: (value: unknown) => error(message(value, "创建招聘计划失败")) })
+  const approvePlan = useMutation({ mutationFn: async (id: number) => api.post(personalCompanyURL(`/user/personal-company/staffing/recruitment-plans/${id}/approve`, studioID)), onSuccess: () => { success("已创建试岗员工"); refresh() }, onError: (value: unknown) => error(message(value, "批准招聘计划失败")) })
+  const bindRuntime = useMutation({ mutationFn: async () => api.post(personalCompanyURL(`/user/personal-company/employees/${bindingEmployee?.id}/runtime-binding`, studioID), { advanced_chat_agent_id: agentID, connector_device_id: connectorID, connector_workspace_path: workspacePath }), onSuccess: () => { success("员工已绑定既有 Agent 与模型"); setBindingEmployee(null); setAgentID(""); setConnectorID(""); setWorkspacePath(""); refresh() }, onError: (value: unknown) => error(message(value, "绑定运行时失败")) })
   if (query.isLoading) return <div className="py-12 text-center text-sm text-muted-foreground">正在加载组织...</div>
   if (query.isError) return <LoadError onRetry={() => void query.refetch()} />
   const employees = query.data?.employees || []
   const templates = query.data?.role_templates || []
   const plans = query.data?.recruitment_plans || []
-  const studios = studiosQuery.data?.groups || []
   return <div className="space-y-5">
-    <Card><CardHeader><CardTitle className="text-base">公司工作室</CardTitle><CardDescription>公司扩展现有 Agent Studio：成员、模型、技能和 MCP 都由工作室维护；公司只增加宪章、预算、审批与工作账本。</CardDescription></CardHeader><CardContent><div className="flex flex-col gap-3 sm:flex-row"><select value={studioID} onChange={(event) => setStudioID(event.target.value)} disabled={studiosQuery.isLoading || studiosQuery.isError} className="h-10 min-w-0 flex-1 rounded-md border bg-background px-3 text-sm"><option value="">{studiosQuery.isLoading ? "正在加载工作室..." : studiosQuery.isError ? "加载工作室失败" : "选择现有工作室"}</option>{studios.map((studio) => <option key={studio.id} value={studio.id}>{studio.name}</option>)}</select><Button disabled={!studioID || bindStudio.isPending} onClick={() => bindStudio.mutate()}>{bindStudio.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "绑定工作室"}</Button></div><p className="mt-3 text-xs text-muted-foreground">绑定后，新工作会由该工作室的 Chief 负责协调执行。</p></CardContent></Card>
     <Card><CardHeader><CardTitle className="text-base">最小执行团队</CardTitle><CardDescription>员工是受版本和权限约束的服务实体，不是用户账号。为员工绑定已有 Advanced Chat Agent 后，会直接使用该代理已配置的模型、技能与 MCP。</CardDescription></CardHeader><CardContent>{employees.length === 0 ? <Empty text="尚未建立岗位。" /> : <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">{employees.map((employee) => <div key={employee.id} className="border p-4"><UsersRound className="h-5 w-5 text-primary" /><div className="mt-3 text-sm font-medium">{employee.name}</div><div className="mt-1 text-xs text-muted-foreground">{employee.role} · v{employee.version}</div><div className="mt-2 text-xs text-muted-foreground">{employee.advanced_chat_agent_id ? `Agent 已绑定` : "尚未绑定 Agent"}</div><div className="mt-3 flex items-center justify-between gap-2 text-xs"><span className="rounded bg-muted px-1.5 py-0.5">{employee.status === "probation" ? "试岗" : employee.status}</span><Button size="sm" variant="outline" onClick={() => setBindingEmployee(employee)}>绑定运行时</Button></div></div>)}</div>}</CardContent></Card>
     <div className="grid gap-5 lg:grid-cols-2"><section className="border p-5"><div className="flex items-center gap-2"><UserPlus className="h-5 w-5 text-primary" /><h2 className="text-base font-semibold">能力缺口与招聘</h2></div><p className="mt-1 text-sm text-muted-foreground">计划不会自动招人。批准后只创建低风险试岗版本。</p><div className="mt-4 grid gap-3"><Input value={title} onChange={(event) => setTitle(event.target.value)} placeholder="候选岗位名称" maxLength={200} /><Input value={capabilityGap} onChange={(event) => setCapabilityGap(event.target.value)} placeholder="要补足的能力缺口" maxLength={1000} /><div className="flex flex-col gap-2 sm:flex-row"><select value={riskLevel} onChange={(event) => setRiskLevel(event.target.value)} className="h-10 min-w-32 rounded-md border bg-background px-3 text-sm"><option value="r0">R0 本地分析</option><option value="r1">R1 只读</option></select><Button className="sm:ml-auto" disabled={!title.trim() || !capabilityGap.trim() || createPlan.isPending} onClick={() => createPlan.mutate()}>{createPlan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <><Plus className="mr-2 h-4 w-4" />提出招聘计划</>}</Button></div></div></section><section className="border p-5"><h2 className="text-base font-semibold">岗位模板</h2><p className="mt-1 text-sm text-muted-foreground">模板定义职责、交付和风险上限，不等于工具授权。</p><div className="mt-4 space-y-2">{templates.length === 0 ? <div className="text-sm text-muted-foreground">尚无岗位模板。</div> : templates.map((template) => <div key={template.id} className="flex items-start justify-between gap-3 border-b py-2 last:border-0"><div className="min-w-0"><div className="text-sm font-medium">{template.name}</div><p className="mt-1 line-clamp-2 text-xs text-muted-foreground">{template.definition_of_done}</p></div><span className="shrink-0 text-xs text-muted-foreground">{template.max_risk_level.toUpperCase()}</span></div>)}</div></section></div>
     <section className="border p-5"><h2 className="text-base font-semibold">招聘计划</h2><div className="mt-3 divide-y">{plans.length === 0 ? <div className="py-6 text-sm text-muted-foreground">没有招聘计划。</div> : plans.map((plan) => <div key={plan.id} className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center sm:justify-between"><div className="min-w-0"><div className="text-sm font-medium">{plan.title}</div><p className="mt-1 break-words text-xs text-muted-foreground">{plan.capability_gap} · {plan.max_risk_level.toUpperCase()}</p></div><div className="flex shrink-0 items-center gap-2"><span className="rounded bg-muted px-1.5 py-0.5 text-xs">{recruitmentStatusLabel(plan.status)}</span>{plan.status === "proposed" && <Button size="sm" disabled={approvePlan.isPending} onClick={() => approvePlan.mutate(plan.id)}>{approvePlan.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "批准试岗"}</Button>}</div></div>)}</div></section>

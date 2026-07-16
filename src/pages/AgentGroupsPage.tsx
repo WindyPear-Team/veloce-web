@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { Link, Route, Routes, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Pencil, Plus, Save, Trash2, Users } from "lucide-react"
+import { ArrowLeft, BriefcaseBusiness, Pencil, Plus, Save, Trash2, Users } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -182,6 +182,11 @@ function AgentGroupList({ data }: { data: AgentGroupsData }) {
                   </div>
                 </button>
                 <div className="flex gap-1">
+                  <Button asChild variant="ghost" size="icon" title={copy.operations}>
+                    <Link to={`/chat/agent-groups/${encodeURIComponent(group.id)}/operations`}>
+                      <BriefcaseBusiness size={15} />
+                    </Link>
+                  </Button>
                   <Button asChild variant="ghost" size="icon" title={copy.editGroup}>
                     <Link to={`/chat/agent-groups/${encodeURIComponent(group.id)}`}>
                       <Pencil size={15} />
@@ -622,6 +627,7 @@ const zhCopy = {
   refresh: "刷新",
   newGroup: "新建工作室",
   editGroup: "编辑工作室",
+  operations: "工作室运营",
   studioList: "\u5de5\u4f5c\u5ba4\u5217\u8868",
   loading: "正在加载工作室...",
   empty: "\u6682\u65e0\u5de5\u4f5c\u5ba4",
@@ -668,6 +674,7 @@ const enCopy = {
   refresh: "Refresh",
   newGroup: "New studio",
   editGroup: "Edit studio",
+  operations: "Studio operations",
   studioList: "Studio list",
   loading: "Loading studios...",
   empty: "No studios yet",
