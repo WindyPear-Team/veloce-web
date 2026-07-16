@@ -1,6 +1,6 @@
 import { type ReactNode, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { Bot, FolderOpen, MessageSquare, Plus, Save, Server, Sparkles, Trash2 } from "lucide-react"
+import { Bot, FolderOpen, MessageSquare, Plus, Save, Server, Sparkles, Trash2, X } from "lucide-react"
 import { Link } from "react-router-dom"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
@@ -51,6 +51,10 @@ interface MCPServer {
 
 interface KnowledgeBase { id: string; name: string; description: string; vectorized: boolean }
 
+type AgentCapabilityKind = "skills" | "knowledge" | "mcp"
+type AgentFormTab = "basic" | AgentCapabilityKind
+type AgentCapabilityItem = { id: string; name: string; description?: string }
+
 const agentsQueryKey = ["advanced-chat-agents", "full"] as const
 const sharedAgentsQueryKey = ["advanced-chat-agents"] as const
 const skillsQueryKey = ["advanced-chat-skills"] as const
@@ -74,6 +78,7 @@ export default function Agents() {
   const [isSaving, setIsSaving] = useState(false)
   const [isEditOpen, setIsEditOpen] = useState(false)
   const [isCreateOpen, setIsCreateOpen] = useState(false)
+  const [agentFormTab, setAgentFormTab] = useState<AgentFormTab>("basic")
   const [createName, setCreateName] = useState("")
   const [createPrompt, setCreatePrompt] = useState("")
   const [createDefaultModel, setCreateDefaultModel] = useState("")
@@ -147,6 +152,7 @@ export default function Agents() {
   const mcpServerName = useMemo(() => new Map(normalizedMCPServers.map((server) => [server.id, server.name])), [normalizedMCPServers])
 
   const openCreateDialog = () => {
+    setAgentFormTab("basic")
     setCreateName(t("chat.defaultAgentName"))
     setCreatePrompt("")
     setCreateDefaultModel("")
@@ -178,6 +184,7 @@ export default function Agents() {
 
   const openEditDialog = (agent: ChatAgent) => {
     setEditForm(agent)
+    setAgentFormTab("basic")
     setIsEditOpen(true)
   }
 
@@ -251,6 +258,7 @@ export default function Agents() {
       setIsGenerateOpen(false)
       if (savedAgent) {
         setEditForm(savedAgent)
+        setAgentFormTab("basic")
         setIsEditOpen(true)
       }
       success(copy.agentGenerated)
@@ -418,6 +426,13 @@ export default function Agents() {
             <DialogTitle>{t("chat.editAgent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <AgentFormTabList
+              activeTab={agentFormTab}
+              onChange={setAgentFormTab}
+              labels={{ basic: copy.basicInfo, skills: t("chat.skills"), knowledge: copy.knowledgeBases, mcp: t("chat.mcpServers") }}
+            />
+            {agentFormTab === "basic" && (
+              <>
             <div className="grid gap-4 md:grid-cols-3">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("common.name")}</span>
@@ -479,25 +494,31 @@ export default function Agents() {
                 onChange={(event) => setPrompt(event.target.value)}
               />
             </label>
-			<div className="grid gap-4 md:grid-cols-3">
-              <CapabilityPicker
-                label={t("chat.skills")}
-                icon={<Sparkles size={14} />}
-                empty={t("chat.noSkills")}
-                selected={skillIDs}
-                items={skills.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description }))}
-                onToggle={(id) => setSkillIDs((current) => toggleString(current, id))}
-              />
-				<CapabilityPicker label={copy.knowledgeBases} icon={<FolderOpen size={14} />} empty={copy.noKnowledgeBases} selected={knowledgeBaseIDs} items={knowledgeBases.map((base) => ({ id: base.id, name: base.name, description: base.description }))} onToggle={(id) => setKnowledgeBaseIDs((current) => toggleString(current, id))} />
-              <CapabilityPicker
-                label={t("chat.mcpServers")}
-                icon={<Server size={14} />}
-                empty={t("chat.noMCPServers")}
-                selected={mcpServerIDs}
-                items={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) }))}
-                onToggle={(id) => setMCPServerIDs((current) => toggleString(current, id))}
-              />
-            </div>
+              </>
+            )}
+            {agentFormTab !== "basic" && (
+            <AgentCapabilityTabs
+              activeTab={agentFormTab}
+              skills={skills.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description }))}
+              knowledgeBases={knowledgeBases.map((base) => ({ id: base.id, name: base.name, description: base.description }))}
+              mcpServers={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) }))}
+              skillIDs={skillIDs}
+              knowledgeBaseIDs={knowledgeBaseIDs}
+              mcpServerIDs={mcpServerIDs}
+              onChangeSkills={setSkillIDs}
+              onChangeKnowledgeBases={setKnowledgeBaseIDs}
+              onChangeMCPServers={setMCPServerIDs}
+              labels={{
+                skills: t("chat.skills"),
+                knowledge: copy.knowledgeBases,
+                mcp: t("chat.mcpServers"),
+                add: copy.add,
+                noAdded: copy.noAddedCapabilities,
+                noAvailable: copy.noAvailableCapabilities,
+                remove: t("chat.remove"),
+              }}
+            />
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsEditOpen(false)}>
@@ -517,6 +538,13 @@ export default function Agents() {
             <DialogTitle>{t("chat.newAgent")}</DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
+            <AgentFormTabList
+              activeTab={agentFormTab}
+              onChange={setAgentFormTab}
+              labels={{ basic: copy.basicInfo, skills: t("chat.skills"), knowledge: copy.knowledgeBases, mcp: t("chat.mcpServers") }}
+            />
+            {agentFormTab === "basic" && (
+              <>
             <div className="grid gap-4 md:grid-cols-3">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("common.name")}</span>
@@ -577,25 +605,31 @@ export default function Agents() {
                 onChange={(event) => setCreatePrompt(event.target.value)}
               />
             </label>
-			<div className="grid gap-4 md:grid-cols-3">
-              <CapabilityPicker
-                label={t("chat.skills")}
-                icon={<Sparkles size={14} />}
-                empty={t("chat.noSkills")}
-                selected={createSkillIDs}
-                items={skills.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description }))}
-                onToggle={(id) => setCreateSkillIDs((current) => toggleString(current, id))}
-              />
-				<CapabilityPicker label={copy.knowledgeBases} icon={<FolderOpen size={14} />} empty={copy.noKnowledgeBases} selected={createKnowledgeBaseIDs} items={knowledgeBases.map((base) => ({ id: base.id, name: base.name, description: base.description }))} onToggle={(id) => setCreateKnowledgeBaseIDs((current) => toggleString(current, id))} />
-              <CapabilityPicker
-                label={t("chat.mcpServers")}
-                icon={<Server size={14} />}
-                empty={t("chat.noMCPServers")}
-                selected={createMCPServerIDs}
-                items={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) }))}
-                onToggle={(id) => setCreateMCPServerIDs((current) => toggleString(current, id))}
-              />
-            </div>
+              </>
+            )}
+            {agentFormTab !== "basic" && (
+            <AgentCapabilityTabs
+              activeTab={agentFormTab}
+              skills={skills.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description }))}
+              knowledgeBases={knowledgeBases.map((base) => ({ id: base.id, name: base.name, description: base.description }))}
+              mcpServers={normalizedMCPServers.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) }))}
+              skillIDs={createSkillIDs}
+              knowledgeBaseIDs={createKnowledgeBaseIDs}
+              mcpServerIDs={createMCPServerIDs}
+              onChangeSkills={setCreateSkillIDs}
+              onChangeKnowledgeBases={setCreateKnowledgeBaseIDs}
+              onChangeMCPServers={setCreateMCPServerIDs}
+              labels={{
+                skills: t("chat.skills"),
+                knowledge: copy.knowledgeBases,
+                mcp: t("chat.mcpServers"),
+                add: copy.add,
+                noAdded: copy.noAddedCapabilities,
+                noAvailable: copy.noAvailableCapabilities,
+                remove: t("chat.remove"),
+              }}
+            />
+            )}
           </div>
           <DialogFooter>
             <Button variant="ghost" onClick={() => setIsCreateOpen(false)}>
@@ -657,56 +691,127 @@ export default function Agents() {
   )
 }
 
-function CapabilityPicker({
-  label,
-  icon,
-  empty,
-  selected,
-  items,
-  onToggle,
+function AgentFormTabList({
+  activeTab,
+  onChange,
+  labels,
 }: {
-  label: string
-  icon: ReactNode
-  empty: string
-  selected: string[]
-  items: Array<{ id: string; name: string; description?: string }>
-  onToggle: (id: string) => void
+  activeTab: AgentFormTab
+  onChange: (tab: AgentFormTab) => void
+  labels: { basic: string; skills: string; knowledge: string; mcp: string }
 }) {
+  const tabs: Array<{ id: AgentFormTab; label: string; icon: ReactNode }> = [
+    { id: "basic", label: labels.basic, icon: <Bot size={15} /> },
+    { id: "skills", label: labels.skills, icon: <Sparkles size={15} /> },
+    { id: "knowledge", label: labels.knowledge, icon: <FolderOpen size={15} /> },
+    { id: "mcp", label: labels.mcp, icon: <Server size={15} /> },
+  ]
+
   return (
-    <div className="space-y-2 text-sm">
-      <span className="flex items-center gap-1 font-medium">
-        {icon}
-        {label}
-      </span>
-      {items.length === 0 ? (
-        <div className="rounded-md border border-dashed px-3 py-4 text-center text-xs text-muted-foreground">{empty}</div>
+    <div className="flex flex-wrap gap-2" role="tablist">
+      {tabs.map((tab) => (
+        <button
+          key={tab.id}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === tab.id}
+          onClick={() => onChange(tab.id)}
+          className={cn("inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm transition-colors hover:bg-muted", activeTab === tab.id && "border-primary bg-primary/5 text-primary")}
+        >
+          {tab.icon}
+          {tab.label}
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function AgentCapabilityTabs({
+  activeTab,
+  skills,
+  knowledgeBases,
+  mcpServers,
+  skillIDs,
+  knowledgeBaseIDs,
+  mcpServerIDs,
+  onChangeSkills,
+  onChangeKnowledgeBases,
+  onChangeMCPServers,
+  labels,
+}: {
+  activeTab: AgentCapabilityKind
+  skills: AgentCapabilityItem[]
+  knowledgeBases: AgentCapabilityItem[]
+  mcpServers: AgentCapabilityItem[]
+  skillIDs: string[]
+  knowledgeBaseIDs: string[]
+  mcpServerIDs: string[]
+  onChangeSkills: (ids: string[]) => void
+  onChangeKnowledgeBases: (ids: string[]) => void
+  onChangeMCPServers: (ids: string[]) => void
+  labels: { skills: string; knowledge: string; mcp: string; add: string; noAdded: string; noAvailable: string; remove: string }
+}) {
+  const [isPickerOpen, setIsPickerOpen] = useState(false)
+  const capabilities: Record<AgentCapabilityKind, { label: string; items: AgentCapabilityItem[]; selected: string[]; onChange: (ids: string[]) => void }> = {
+    skills: { label: labels.skills, items: skills, selected: skillIDs, onChange: onChangeSkills },
+    knowledge: { label: labels.knowledge, items: knowledgeBases, selected: knowledgeBaseIDs, onChange: onChangeKnowledgeBases },
+    mcp: { label: labels.mcp, items: mcpServers, selected: mcpServerIDs, onChange: onChangeMCPServers },
+  }
+  const activeCapability = capabilities[activeTab]
+  const selectedItems = activeCapability.items.filter((item) => activeCapability.selected.includes(item.id))
+  const availableItems = activeCapability.items.filter((item) => !activeCapability.selected.includes(item.id))
+
+  return (
+    <div className="space-y-3">
+      {selectedItems.length === 0 ? (
+        <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{labels.noAdded}</div>
       ) : (
-        <div className="grid max-h-56 gap-2 overflow-y-auto pr-1">
-          {items.map((item) => {
-            const checked = selected.includes(item.id)
-            return (
-              <label
-                key={item.id}
-                className={cn(
-                  "flex cursor-pointer items-start gap-2 rounded-md border p-2 transition-colors hover:bg-muted/50",
-                  checked && "border-primary bg-primary/5"
-                )}
-              >
-                <input
-                  type="checkbox"
-                  className="mt-1"
-                  checked={checked}
-                  onChange={() => onToggle(item.id)}
-                />
-                <span className="min-w-0">
-                  <span className="block truncate text-sm font-medium">{item.name}</span>
-                  {item.description && <span className="block truncate text-xs text-muted-foreground">{item.description}</span>}
-                </span>
-              </label>
-            )
-          })}
+        <div className="space-y-2">
+          {selectedItems.map((item) => (
+            <div key={item.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-md border p-3">
+              <div className="min-w-0">
+                <div className="truncate text-sm font-medium">{item.name}</div>
+                {item.description && <div className="mt-1 truncate text-xs text-muted-foreground">{item.description}</div>}
+              </div>
+              <Button variant="ghost" size="sm" onClick={() => activeCapability.onChange(activeCapability.selected.filter((id) => id !== item.id))} title={labels.remove}>
+                <X size={15} />
+              </Button>
+            </div>
+          ))}
         </div>
       )}
+      <Button className="gap-2" onClick={() => setIsPickerOpen(true)}>
+        <Plus size={16} />
+        {labels.add}
+      </Button>
+
+      <Dialog open={isPickerOpen} onOpenChange={setIsPickerOpen}>
+        <DialogContent className="max-h-[75vh] max-w-lg overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{labels.add}{activeCapability.label}</DialogTitle>
+          </DialogHeader>
+          {availableItems.length === 0 ? (
+            <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{labels.noAvailable}</div>
+          ) : (
+            <div className="space-y-2">
+              {availableItems.map((item) => (
+                <button
+                  key={item.id}
+                  type="button"
+                  className="grid w-full grid-cols-[1fr_auto] gap-2 rounded-md border p-3 text-left transition-colors hover:bg-muted/50"
+                  onClick={() => activeCapability.onChange([...activeCapability.selected, item.id])}
+                >
+                  <span className="min-w-0">
+                    <span className="block truncate text-sm font-medium">{item.name}</span>
+                    {item.description && <span className="mt-1 block truncate text-xs text-muted-foreground">{item.description}</span>}
+                  </span>
+                  <Plus size={16} className="mt-0.5 text-muted-foreground" />
+                </button>
+              ))}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -757,12 +862,16 @@ function normalizeAgent(value: unknown): ChatAgent | null {
 function normalizeKnowledgeBases(value: unknown): KnowledgeBase[] { const source = isRecord(value) && Array.isArray(value.knowledge_bases) ? value.knowledge_bases : []; return source.map((item) => { if (!isRecord(item) || typeof item.id !== "string") return null; return { id: item.id, name: typeof item.name === "string" ? item.name : item.id, description: typeof item.description === "string" ? item.description : "", vectorized: item.vectorized === true } }).filter((item): item is KnowledgeBase => Boolean(item)) }
 
 const zhAgentsCopy = {
+  basicInfo: "基本信息",
   channel: "渠道",
   noChannel: "未指定渠道",
   streamAgent: "流式输出",
 	streaming: "流式",
 	knowledgeBases: "知识库",
 	noKnowledgeBases: "没有已向量化的知识库",
+  add: "添加",
+  noAddedCapabilities: "尚未添加任何项目",
+  noAvailableCapabilities: "没有可添加的项目",
   generateAgent: "生成代理",
   generatingAgent: "正在生成...",
   generationDescription: "选择一个代理，描述新代理的功能、目标和工作方式。生成时会使用所选代理的模型、渠道和已配置能力，并自动创建新代理。",
@@ -777,12 +886,16 @@ const zhAgentsCopy = {
 }
 
 const enAgentsCopy: typeof zhAgentsCopy = {
+  basicInfo: "Basic information",
   channel: "Channel",
   noChannel: "No channel",
   streamAgent: "Stream responses",
 	streaming: "Streaming",
 	knowledgeBases: "Knowledge bases",
 	noKnowledgeBases: "No vectorized knowledge bases",
+  add: "Add",
+  noAddedCapabilities: "No items added",
+  noAvailableCapabilities: "No items available to add",
   generateAgent: "Generate agent",
   generatingAgent: "Generating...",
   generationDescription: "Choose an agent, then describe the new agent's responsibilities, goals, and working style. Generation uses the selected agent's model, channel, and configured capabilities, then creates the new agent.",
@@ -835,10 +948,6 @@ function mcpServerSummary(server: MCPServer) {
     return [server.command, ...(Array.isArray(server.args) ? server.args : [])].filter(Boolean).join(" ")
   }
   return server.url || ""
-}
-
-function toggleString(values: string[], value: string) {
-  return values.includes(value) ? values.filter((item) => item !== value) : [...values, value]
 }
 
 function stringArray(value: unknown): string[] {

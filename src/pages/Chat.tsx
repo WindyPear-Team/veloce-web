@@ -353,6 +353,7 @@ type ChatMode = "basic" | "advanced"
 type ChatRunMode = "chat" | "assistant" | "agent_group"
 type ConnectorApprovalMode = "manual" | "full_access" | "assistant"
 type SessionConfigTab = "basic" | "advanced" | "agent" | "agent_group" | "skills" | "knowledge" | "mcp" | "device"
+type SessionCapabilityPicker = "skills" | "knowledge" | "mcp" | null
 type AttachmentTarget = "composer" | "editor"
 type ComposerControlMenu = "" | "mode" | "model" | "device" | "workspace" | "agent" | "agent_group" | "approval"
 type WorkspacePickerTarget = "session" | "pending"
@@ -487,9 +488,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [collapsedSessionFolderIDs, setCollapsedSessionFolderIDs] = useState<Set<string>>(() => new Set())
   const [configTab, setConfigTab] = useState<SessionConfigTab>("basic")
   const [pendingAgentID, setPendingAgentID] = useState("")
-  const [pendingSkillID, setPendingSkillID] = useState("")
-	const [pendingKnowledgeBaseID, setPendingKnowledgeBaseID] = useState("")
-  const [pendingMCPServerID, setPendingMCPServerID] = useState("")
+  const [sessionCapabilityPicker, setSessionCapabilityPicker] = useState<SessionCapabilityPicker>(null)
   const [pendingConnectorDeviceID, setPendingConnectorDeviceID] = useState("")
   const [pendingConnectorWorkspace, setPendingConnectorWorkspace] = useState("")
   const [pendingConnectorApprovalMode, setPendingConnectorApprovalMode] = useState<ConnectorApprovalMode>("manual")
@@ -1328,36 +1327,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       setPendingAgentID(defaultAgent?.id || "")
     }
   }, [agents, pendingAgentID])
-
-  useEffect(() => {
-    if (!pendingSkillID && availableSkillsToAdd[0]) {
-      setPendingSkillID(availableSkillsToAdd[0].id)
-      return
-    }
-    if (pendingSkillID && !availableSkillsToAdd.some((skill) => skill.id === pendingSkillID)) {
-      setPendingSkillID(availableSkillsToAdd[0]?.id || "")
-    }
-  }, [availableSkillsToAdd, pendingSkillID])
-
-	useEffect(() => {
-		if (!pendingKnowledgeBaseID && availableKnowledgeBasesToAdd[0]) {
-			setPendingKnowledgeBaseID(availableKnowledgeBasesToAdd[0].id)
-			return
-		}
-		if (pendingKnowledgeBaseID && !availableKnowledgeBasesToAdd.some((base) => base.id === pendingKnowledgeBaseID)) {
-			setPendingKnowledgeBaseID(availableKnowledgeBasesToAdd[0]?.id || "")
-		}
-	}, [availableKnowledgeBasesToAdd, pendingKnowledgeBaseID])
-
-  useEffect(() => {
-    if (!pendingMCPServerID && availableMCPServersToAdd[0]) {
-      setPendingMCPServerID(availableMCPServersToAdd[0].id)
-      return
-    }
-    if (pendingMCPServerID && !availableMCPServersToAdd.some((server) => server.id === pendingMCPServerID)) {
-      setPendingMCPServerID(availableMCPServersToAdd[0]?.id || "")
-    }
-  }, [availableMCPServersToAdd, pendingMCPServerID])
 
   useEffect(() => {
     if (!pendingConnectorDeviceID && selectableConnectorDevices[0]) {
@@ -3212,6 +3181,29 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     </>
   )
 
+  const sessionCapabilityPickerConfig = sessionCapabilityPicker === "skills"
+    ? {
+        title: copy.skills,
+        empty: copy.noSkills,
+        items: availableSkillsToAdd.map((skill) => ({ id: skill.id, name: skill.name, description: skill.description })),
+        onAdd: addSessionSkill,
+      }
+    : sessionCapabilityPicker === "knowledge"
+      ? {
+          title: knowledgeCopy.label,
+          empty: language === "zh" ? "没有可添加的已向量化知识库" : "No vectorized knowledge bases available to add",
+          items: availableKnowledgeBasesToAdd.map((base) => ({ id: base.id, name: base.name, description: base.description })),
+          onAdd: addSessionKnowledgeBase,
+        }
+      : sessionCapabilityPicker === "mcp"
+        ? {
+            title: copy.mcpServers,
+            empty: copy.noMCPServers,
+            items: availableMCPServersToAdd.map((server) => ({ id: server.id, name: server.name, description: mcpServerSummary(server) })),
+            onAdd: addSessionMCPServer,
+          }
+        : null
+
   const sessionsSidebar = (
     <aside
       className="flex h-full w-80 max-w-[85vw] flex-col bg-background text-foreground"
@@ -4207,10 +4199,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       setConfigTab(tab)
                     }}
                     className={cn(
-                      "h-9 rounded-md border px-3 text-sm transition-colors hover:bg-muted",
+                      "inline-flex h-9 items-center justify-center gap-2 rounded-md border px-3 text-sm transition-colors hover:bg-muted",
                       configTab === tab && "border-primary bg-primary/5 text-primary"
                     )}
                   >
+                    {tab === "skills" && <Sparkles size={14} />}
+                    {tab === "knowledge" && <FolderOpen size={14} />}
+                    {tab === "mcp" && <Server size={14} />}
                     {label}
                   </button>
                 ))}
@@ -4390,34 +4385,47 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       ))}
                     </div>
                   )}
-                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <select
-                      className="h-10 rounded-md border bg-background px-3 text-sm"
-                      value={pendingSkillID}
-                      onChange={(event) => setPendingSkillID(event.target.value)}
-                    >
-                      <option value="">{availableSkillsToAdd.length ? copy.selectSkills : copy.noSkills}</option>
-                      {availableSkillsToAdd.map((skill) => (
-                        <option key={skill.id} value={skill.id}>
-                          {skill.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button className="gap-2" disabled={!pendingSkillID} onClick={() => addSessionSkill(pendingSkillID)}>
-                      <Plus size={16} />
-                      {copy.add}
-                    </Button>
-                  </div>
+                  <Button className="gap-2" onClick={() => setSessionCapabilityPicker("skills")}>
+                    <Plus size={16} />
+                    {copy.add}
+                  </Button>
                 </div>
               )}
 
-				{configTab === "knowledge" && (
-				  <div className="space-y-4 rounded-md border p-3">
-					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between"><div className="flex items-center gap-2 text-sm font-medium"><FolderOpen size={15} />{knowledgeCopy.label}</div><Button asChild variant="outline" size="sm"><Link to="/chat/knowledge">{knowledgeCopy.manage}</Link></Button></div>
-					{sessionKnowledgeBases.length === 0 ? <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{knowledgeCopy.empty}</div> : <div className="space-y-2">{sessionKnowledgeBases.map((base) => <div key={base.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-md border p-3"><div className="min-w-0"><div className="truncate text-sm font-medium">{base.name}</div>{base.description && <div className="mt-1 truncate text-xs text-muted-foreground">{base.description}</div>}</div><Button variant="ghost" size="sm" onClick={() => removeSessionKnowledgeBase(base.id)} title={copy.remove}><X size={15} /></Button></div>)}</div>}
-					<div className="grid gap-2 sm:grid-cols-[1fr_auto]"><select className="h-10 rounded-md border bg-background px-3 text-sm" value={pendingKnowledgeBaseID} onChange={(event) => setPendingKnowledgeBaseID(event.target.value)}><option value="">{availableKnowledgeBasesToAdd.length ? knowledgeCopy.select : knowledgeCopy.empty}</option>{availableKnowledgeBasesToAdd.map((base) => <option key={base.id} value={base.id}>{base.name}</option>)}</select><Button className="gap-2" disabled={!pendingKnowledgeBaseID} onClick={() => addSessionKnowledgeBase(pendingKnowledgeBaseID)}><Plus size={16} />{knowledgeCopy.add}</Button></div>
-				  </div>
-				)}
+              {configTab === "knowledge" && (
+                <div className="space-y-4 rounded-md border p-3">
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                    <div className="flex items-center gap-2 text-sm font-medium">
+                      <FolderOpen size={15} />
+                      {knowledgeCopy.label}
+                    </div>
+                    <Button asChild variant="outline" size="sm">
+                      <Link to="/chat/knowledge">{knowledgeCopy.manage}</Link>
+                    </Button>
+                  </div>
+                  {sessionKnowledgeBases.length === 0 ? (
+                    <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{knowledgeCopy.empty}</div>
+                  ) : (
+                    <div className="space-y-2">
+                      {sessionKnowledgeBases.map((base) => (
+                        <div key={base.id} className="grid grid-cols-[1fr_auto] gap-2 rounded-md border p-3">
+                          <div className="min-w-0">
+                            <div className="truncate text-sm font-medium">{base.name}</div>
+                            {base.description && <div className="mt-1 truncate text-xs text-muted-foreground">{base.description}</div>}
+                          </div>
+                          <Button variant="ghost" size="sm" onClick={() => removeSessionKnowledgeBase(base.id)} title={copy.remove}>
+                            <X size={15} />
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Button className="gap-2" onClick={() => setSessionCapabilityPicker("knowledge")}>
+                    <Plus size={16} />
+                    {copy.add}
+                  </Button>
+                </div>
+              )}
 
               {configTab === "mcp" && (
                 <div className="space-y-4 rounded-md border p-3">
@@ -4447,24 +4455,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       ))}
                     </div>
                   )}
-                  <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <select
-                      className="h-10 rounded-md border bg-background px-3 text-sm"
-                      value={pendingMCPServerID}
-                      onChange={(event) => setPendingMCPServerID(event.target.value)}
-                    >
-                      <option value="">{availableMCPServersToAdd.length ? copy.selectMCPServer : copy.noMCPServers}</option>
-                      {availableMCPServersToAdd.map((server) => (
-                        <option key={server.id} value={server.id}>
-                          {server.name}
-                        </option>
-                      ))}
-                    </select>
-                    <Button className="gap-2" disabled={!pendingMCPServerID} onClick={() => addSessionMCPServer(pendingMCPServerID)}>
-                      <Plus size={16} />
-                      {copy.add}
-                    </Button>
-                  </div>
+                  <Button className="gap-2" onClick={() => setSessionCapabilityPicker("mcp")}>
+                    <Plus size={16} />
+                    {copy.add}
+                  </Button>
                 </div>
               )}
 
@@ -4659,6 +4653,35 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             <DialogFooter>
               <Button onClick={() => setIsConfigOpen(false)}>{copy.done}</Button>
             </DialogFooter>
+          </DialogContent>
+        </Dialog>
+      )}
+      {isAdvanced && sessionCapabilityPickerConfig && (
+        <Dialog open onOpenChange={(open) => !open && setSessionCapabilityPicker(null)}>
+          <DialogContent className="max-h-[75vh] max-w-lg overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>{copy.add}{sessionCapabilityPickerConfig.title}</DialogTitle>
+            </DialogHeader>
+            {sessionCapabilityPickerConfig.items.length === 0 ? (
+              <div className="rounded-md border border-dashed px-3 py-8 text-center text-sm text-muted-foreground">{sessionCapabilityPickerConfig.empty}</div>
+            ) : (
+              <div className="space-y-2">
+                {sessionCapabilityPickerConfig.items.map((item) => (
+                  <button
+                    key={item.id}
+                    type="button"
+                    className="grid w-full grid-cols-[1fr_auto] gap-2 rounded-md border p-3 text-left transition-colors hover:bg-muted/50"
+                    onClick={() => sessionCapabilityPickerConfig.onAdd(item.id)}
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium">{item.name}</span>
+                      {item.description && <span className="mt-1 block truncate text-xs text-muted-foreground">{item.description}</span>}
+                    </span>
+                    <Plus size={16} className="mt-0.5 text-muted-foreground" />
+                  </button>
+                ))}
+              </div>
+            )}
           </DialogContent>
         </Dialog>
       )}
