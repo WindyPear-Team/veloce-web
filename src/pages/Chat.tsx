@@ -175,13 +175,6 @@ interface ChatAgentGroup {
   agents: ChatAgentGroupAgent[]
 }
 
-interface AgentMentionState {
-  open: boolean
-  start: number
-  query: string
-  selected: number
-}
-
 interface MCPServer {
   id: string
   name: string
@@ -512,7 +505,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [isRefreshingWorkspaceSkills, setIsRefreshingWorkspaceSkills] = useState(false)
   const [decidingConnectorTaskID, setDecidingConnectorTaskID] = useState("")
   const [prompt, setPrompt] = useState("")
-  const [agentMention, setAgentMention] = useState<AgentMentionState>({ open: false, start: 0, query: "", selected: 0 })
   const [attachments, setAttachments] = useState<ChatAttachment[]>([])
   const [isFilePickerOpen, setIsFilePickerOpen] = useState(false)
   const [isUploadingAttachments, setIsUploadingAttachments] = useState(false)
@@ -995,29 +987,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       connector_tasks: [],
     }
   }, [activeRunID, activeRunMode, currentAgentGroup, currentSession?.id])
-  const agentMentionOptions = useMemo(() => {
-    if (activeRunMode !== "agent_group" || !currentAgentGroup) {
-      return []
-    }
-    const query = agentMention.query.trim().toLowerCase()
-    const agents = currentAgentGroup.agents
-    if (!query) {
-      return agents
-    }
-    return agents.filter((agent) => {
-      const id = agent.id.toLowerCase()
-      const name = agent.name.toLowerCase()
-      const type = (agent.type || "").toLowerCase()
-      return id.includes(query) || name.includes(query) || type.includes(query)
-    })
-  }, [activeRunMode, agentMention.query, currentAgentGroup])
-
-  useEffect(() => {
-    if (activeRunMode !== "agent_group" || !currentAgentGroup) {
-      closeAgentMention()
-    }
-  }, [activeRunMode, currentAgentGroup?.id])
-
   useEffect(() => {
     if ((configTab === "device" && activeRunMode === "chat") || (configTab === "agent" && activeRunMode === "agent_group")) {
       setConfigTab("basic")
@@ -2077,109 +2046,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     }
   }
 
-  const closeAgentMention = () => {
-    setAgentMention((current) => current.open ? { ...current, open: false, selected: 0 } : current)
-  }
-
-  const updateAgentMention = (value: string, caret: number | null) => {
-    if (activeRunMode !== "agent_group" || !currentAgentGroup || caret === null) {
-      closeAgentMention()
-      return
-    }
-    const beforeCaret = value.slice(0, caret)
-    const match = /(^|\s)@([^\s@]*)$/.exec(beforeCaret)
-    if (!match) {
-      closeAgentMention()
-      return
-    }
-    const start = beforeCaret.length - match[2].length - 1
-    setAgentMention({ open: true, start, query: match[2], selected: 0 })
-  }
-
   const handleComposerPromptChange = (event: ChangeEvent<HTMLTextAreaElement>) => {
-    const value = event.currentTarget.value
-    setPrompt(value)
-    updateAgentMention(value, event.currentTarget.selectionStart)
-  }
-
-  const selectAgentMention = (agent: ChatAgentGroupAgent) => {
-    const textarea = composerTextareaRef.current
-    const caret = textarea?.selectionStart ?? prompt.length
-    const token = `@${(agent.name || agent.id).trim()} `
-    const nextPrompt = `${prompt.slice(0, agentMention.start)}${token}${prompt.slice(caret)}`
-    const nextCaret = agentMention.start + token.length
-    setPrompt(nextPrompt)
-    setAgentMention({ open: false, start: 0, query: "", selected: 0 })
-    window.setTimeout(() => {
-      const current = composerTextareaRef.current
-      current?.focus()
-      current?.setSelectionRange(nextCaret, nextCaret)
-    }, 0)
+    setPrompt(event.currentTarget.value)
   }
 
   const handleComposerPromptKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (agentMention.open) {
-      if (event.key === "Escape") {
-        event.preventDefault()
-        closeAgentMention()
-        return
-      }
-      if (event.key === "ArrowDown" || event.key === "ArrowUp") {
-        event.preventDefault()
-        setAgentMention((current) => {
-          const count = agentMentionOptions.length
-          if (!count) {
-            return current
-          }
-          const direction = event.key === "ArrowDown" ? 1 : -1
-          return { ...current, selected: (current.selected + direction + count) % count }
-        })
-        return
-      }
-      if ((event.key === "Enter" || event.key === "Tab") && agentMentionOptions.length > 0) {
-        event.preventDefault()
-        selectAgentMention(agentMentionOptions[Math.min(agentMention.selected, agentMentionOptions.length - 1)])
-        return
-      }
-    }
     if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) {
       event.preventDefault()
       sendMessage()
     }
-  }
-
-  const agentMentionPicker = () => {
-    if (!agentMention.open || activeRunMode !== "agent_group" || !currentAgentGroup) {
-      return null
-    }
-    return (
-      <div className="absolute bottom-full left-0 z-40 mb-2 max-h-56 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-        {agentMentionOptions.length === 0 ? (
-          <div className="px-3 py-2 text-xs text-muted-foreground">{agentGroupCopy.noAgents}</div>
-        ) : (
-          agentMentionOptions.map((agent, index) => (
-            <button
-              key={agent.id}
-              type="button"
-              className={cn(
-                "flex min-h-10 w-full items-center justify-between gap-3 rounded px-2 text-left text-sm hover:bg-muted",
-                index === agentMention.selected && "bg-primary/10 text-primary"
-              )}
-              onMouseDown={(event) => {
-                event.preventDefault()
-                selectAgentMention(agent)
-              }}
-            >
-              <span className="min-w-0">
-                <span className="block truncate font-medium">{agent.name || agent.id}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">@{agent.id}</span>
-              </span>
-              <span className="shrink-0 rounded border px-1.5 py-0.5 text-[11px] text-muted-foreground">{agent.type}</span>
-            </button>
-          ))
-        )}
-      </div>
-    )
   }
 
   const sendMessage = async () => {
@@ -2210,7 +2085,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         setLoadedSharedSession(sharedSession)
         setPrompt("")
         setAttachments([])
-        closeAgentMention()
         cancelEdit()
       } catch (err) {
         error(apiErrorMessage(err, language === "zh" ? "发送共享消息失败" : "Failed to send shared message"))
@@ -2275,7 +2149,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       model_name: activeRunMode === "agent_group" ? undefined : resolvedModel,
     }), { materialize: true })
     setPrompt("")
-    closeAgentMention()
     setAttachments([])
     setIsSending(true)
     cancelEdit()
@@ -3181,7 +3054,6 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     setFilePickerTarget("composer")
     setAttachmentMenuTarget("")
     setComposerControlMenu("")
-    closeAgentMention()
   }
 
   const basicConfig = (
@@ -3269,9 +3141,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             placeholder={activeRunMode === "assistant" ? copy.assistantPromptPlaceholder : activeRunMode === "agent_group" ? agentGroupCopy.promptPlaceholder : copy.promptPlaceholder}
             onChange={handleComposerPromptChange}
             onKeyDown={handleComposerPromptKeyDown}
-            onClick={(event) => updateAgentMention(prompt, event.currentTarget.selectionStart)}
           />
-          {agentMentionPicker()}
         </div>
         {isSharedSession && <div className="px-3 pb-2 text-xs text-muted-foreground">{language === "zh" ? "共享会话：参与者可追加任务消息；运行仅可使用本池分配的企业设备。" : "Shared session: participants can add task messages; runs may only use enterprise devices assigned to this pool."}</div>}
         <div className="flex items-center justify-between gap-2">
@@ -8087,7 +7957,7 @@ const enAgentGroupCopy = {
   noGroupSelected: "No studio selected",
   chiefCount: "{count} chief",
   runAgentGroup: "Send to studio",
-  promptPlaceholder: "Send a task to the studio, or use @agent to address one agent",
+  promptPlaceholder: "Tell the Chief what you want done; it will clarify and arrange concrete work for the studio",
   groupRequired: "Select a studio before sending",
   workStatus: "Work status",
   workStatusActive: "{count} working",
@@ -8119,7 +7989,7 @@ const zhAgentGroupCopy: AgentGroupCopy = {
   noGroupSelected: "\u5c1a\u672a\u9009\u62e9\u5de5\u4f5c\u5ba4",
   chiefCount: "{count} \u4e2a chief",
   runAgentGroup: "\u53d1\u9001\u5230\u5de5\u4f5c\u5ba4",
-  promptPlaceholder: "\u5411\u5de5\u4f5c\u5ba4\u53d1\u9001\u4efb\u52a1\uff0c\u6216\u4f7f\u7528 @agent \u6307\u5b9a\u4ee3\u7406",
+  promptPlaceholder: "告诉 Chief 你希望完成什么；它会澄清需求并安排具体工作",
   groupRequired: "\u53d1\u9001\u524d\u8bf7\u5148\u9009\u62e9\u5de5\u4f5c\u5ba4",
   workStatus: "\u5de5\u4f5c\u72b6\u6001",
   workStatusActive: "{count} \u4e2a\u6b63\u5728\u5de5\u4f5c",
