@@ -8,6 +8,7 @@ import Agents from "./Agents"
 import Skills from "./Skills"
 import AdvancedChatMCP from "./AdvancedChatMCP"
 import AdvancedChatFiles from "./AdvancedChatFiles"
+import KnowledgeBases from "./KnowledgeBases"
 import AdvancedChatMemories from "./AdvancedChatMemories"
 import Images from "./Images"
 import Videos from "./Videos"
@@ -203,6 +204,7 @@ export default function AdvancedChat() {
                     <Route path="images" element={<Images />} />
                     <Route path="videos" element={<Videos />} />
                     <Route path="files" element={<AdvancedChatFiles />} />
+                    <Route path="knowledge" element={<KnowledgeBases />} />
                     <Route path="memories" element={<AdvancedChatMemories />} />
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-overview" element={<AdminOverview />} />}
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-logs" element={<AdminAuditLogs />} />}
@@ -240,6 +242,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/images") return zh ? "图像" : "Images"
   if (pathname === "/chat/videos") return zh ? "视频" : "Videos"
   if (pathname === "/chat/files") return zh ? "文件库" : "Files"
+  if (pathname === "/chat/knowledge") return zh ? "知识库" : "Knowledge bases"
   if (pathname === "/chat/memories") return zh ? "记忆" : "Memory"
   if (pathname.startsWith("/chat/channels")) return zh ? "消息通道" : "Message Channels"
   if (pathname === "/chat/deliveries") return zh ? "结果投递" : "Result Delivery"
@@ -275,6 +278,7 @@ function AdvancedChatSidebar({
   const location = useLocation()
   const { language, t } = useI18n()
   const filesLabel = language === "zh" ? "文件库" : "Files"
+  const knowledgeLabel = t("nav.knowledgeBases")
   const memoriesLabel = language === "zh" ? "记忆" : "Memory"
   const messageChannelsLabel = language === "zh" ? "消息通道" : "Message Channels"
   const deliveriesLabel = language === "zh" ? "结果投递" : "Result Delivery"
@@ -311,6 +315,7 @@ function AdvancedChatSidebar({
   const directItems: AdvancedChatSidebarItem[] = [
     { href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" },
     { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
+    { href: "/chat/knowledge", label: knowledgeLabel, icon: Database, active: location.pathname === "/chat/knowledge" },
   ]
   const groups: AdvancedChatSidebarGroup[] = [
     {

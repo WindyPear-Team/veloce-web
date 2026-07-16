@@ -265,6 +265,9 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/chat/files") {
     return language === "zh" ? "文件库" : "Files"
   }
+  if (normalizedPathname === "/chat/knowledge") {
+    return t("nav.knowledgeBases")
+  }
   if (normalizedPathname === "/chat/memories") {
     return language === "zh" ? "记忆" : "Memory"
   }
