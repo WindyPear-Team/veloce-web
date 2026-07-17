@@ -60,6 +60,8 @@ interface UpstreamChannel {
   priority: number
   weight: number
   enabled: boolean
+  price_sync_enabled: boolean
+  price_sync_cron: string
   group_multipliers?: GroupMultiplier[]
 }
 
@@ -531,7 +533,8 @@ function UpstreamDialog({
   onClose: () => void
   onSave: (channel: Partial<UpstreamChannel>) => void
 }) {
-  const { t } = useI18n()
+  const { language, t } = useI18n()
+  const copy = language === "zh" ? zhChannelCopy : enChannelCopy
   const [draft, setDraft] = useState<Partial<UpstreamChannel>>(emptyUpstream(userChannels[0]?.id))
   const selectedType = draft.type || "completion"
   const selectedTypeConfig = channelTypeConfig(selectedType)
@@ -629,6 +632,25 @@ function UpstreamDialog({
               placeholder={t("admin.weight")}
             />
           </FieldLabel>
+          <div className="space-y-3 rounded-md border p-3 md:col-span-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={draft.price_sync_enabled ?? true}
+                onChange={(e) => setDraft({ ...draft, price_sync_enabled: e.target.checked })}
+              />
+              <span className="font-medium">{copy.priceSyncEnabled}</span>
+            </label>
+            <FieldLabel label={copy.priceSyncCron}>
+              <Input
+                value={draft.price_sync_cron || "0 * * * *"}
+                disabled={draft.price_sync_enabled === false}
+                onChange={(e) => setDraft({ ...draft, price_sync_cron: e.target.value })}
+                placeholder="0 * * * *"
+              />
+            </FieldLabel>
+            <p className="text-xs text-muted-foreground">{copy.priceSyncCronHint}</p>
+          </div>
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" checked={Boolean(draft.enabled)} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
             {t("common.enabled")}
@@ -1361,6 +1383,8 @@ function emptyUpstream(userChannelID?: number): Partial<UpstreamChannel> {
     priority: 1,
     weight: 1,
     enabled: true,
+    price_sync_enabled: true,
+    price_sync_cron: "0 * * * *",
   }
 }
 
@@ -1374,6 +1398,8 @@ function upstreamPayload(channel: Partial<UpstreamChannel>) {
     priority: Number(channel.priority ?? 1),
     weight: Number(channel.weight ?? 1),
     enabled: channel.enabled ?? true,
+    price_sync_enabled: channel.price_sync_enabled ?? true,
+    price_sync_cron: channel.price_sync_cron || "0 * * * *",
   }
 }
 
@@ -1895,6 +1921,9 @@ const zhChannelCopy = {
   overrideMultiplier: "覆盖倍率",
   keepInherited: "留空继承",
   noGroups: "暂无分组",
+  priceSyncEnabled: "自动同步价格",
+  priceSyncCron: "同步 Cron",
+  priceSyncCronHint: "使用五段 Cron 表达式，例如“0 * * * *”表示每小时整点同步；关闭后不会自动同步。",
 }
 
 const enChannelCopy: typeof zhChannelCopy = {
@@ -1948,4 +1977,7 @@ const enChannelCopy: typeof zhChannelCopy = {
   overrideMultiplier: "Override multiplier",
   keepInherited: "Empty inherits",
   noGroups: "No groups",
+  priceSyncEnabled: "Automatically sync prices",
+  priceSyncCron: "Sync cron",
+  priceSyncCronHint: "Use a five-field cron expression. For example, “0 * * * *” syncs on the hour; disabled channels are not synced automatically.",
 }
