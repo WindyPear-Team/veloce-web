@@ -43,6 +43,8 @@ export interface PublicSettings {
   theme_dark_muted: string
   theme_dark_muted_foreground: string
   theme_dark_border: string
+  theme_background_image: string
+  theme_custom_css: string
   sidebar_dashboard_enabled: boolean
   sidebar_usage_enabled: boolean
   sidebar_wallet_enabled: boolean
@@ -141,6 +143,8 @@ export const defaultPublicSettings: PublicSettings = {
   theme_dark_muted: "#1e293b",
   theme_dark_muted_foreground: "#94a3b8",
   theme_dark_border: "#1e293b",
+  theme_background_image: "",
+  theme_custom_css: "",
   sidebar_dashboard_enabled: true,
   sidebar_usage_enabled: true,
   sidebar_wallet_enabled: true,

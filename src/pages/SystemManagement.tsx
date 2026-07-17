@@ -31,6 +31,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { PageTab, PageTabs } from "@/components/layout/PageTabs"
 import { TabTransition } from "@/components/layout/TabTransition"
@@ -270,6 +271,7 @@ interface SystemSettings extends PublicSettings {
 type SystemTab =
   | "basic"
   | "theme"
+  | "themeSettings"
   | "billing"
   | "payment"
   | "checkIn"
@@ -294,7 +296,7 @@ type SystemSection = "general" | "theme" | "auth" | "content" | "operations" | "
 
 const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   general: ["basic", "billing", "checkIn", "security"],
-  theme: ["theme"],
+  theme: ["theme", "themeSettings"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
   operations: ["statusMonitor", "reliability", "logCleanup", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
@@ -309,7 +311,7 @@ interface NavRow {
   href: string
 }
 
-type ThemeColorFieldKey = Extract<keyof SystemSettings, `theme_${string}`>
+type ThemeColorFieldKey = Extract<keyof SystemSettings, `theme_light_${string}` | `theme_dark_${string}`>
 
 interface ThemeColorField {
   key: ThemeColorFieldKey
@@ -358,6 +360,10 @@ const defaultSystemSettings: SystemSettings = {
   payment_openpayment_notify_url: "",
   payment_openpayment_return_url: "",
 }
+
+const defaultThemeColorValues = Object.fromEntries(
+  Object.entries(defaultPublicSettings).filter(([key]) => /^theme_(light|dark)_/.test(key)),
+) as Pick<SystemSettings, ThemeColorFieldKey>
 
 const defaultRedeemDraft: RedeemCodeDraft = {
   code: "",
@@ -853,7 +859,12 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       {activeTab === "theme" && (
         <SettingsPanel title={copy.theme}>
           <div className="space-y-8">
-            <SectionTitle title={copy.themeSettings} description={copy.themeSettingsDescription} />
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <SectionTitle title={copy.theme} description={copy.themeSettingsDescription} />
+              <Button type="button" variant="outline" onClick={() => setForm((current) => ({ ...current, ...defaultThemeColorValues }))}>
+                {copy.restoreThemeDefaults}
+              </Button>
+            </div>
             <div className="grid gap-6 xl:grid-cols-2">
               <ThemeColorGroup
                 title={copy.themeLightMode}
@@ -869,6 +880,29 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               />
             </div>
             <ThemePreview form={form} copy={copy} />
+          </div>
+        </SettingsPanel>
+      )}
+
+      {activeTab === "themeSettings" && (
+        <SettingsPanel title={copy.themeSettings}>
+          <div className="space-y-8">
+            <SectionTitle title={copy.themeSettings} description={copy.themeCustomizationDescription} />
+            <div className="grid gap-6">
+              <TextField
+                label={copy.backgroundImage}
+                value={form.theme_background_image}
+                placeholder={copy.backgroundImagePlaceholder}
+                onChange={(value) => updateField("theme_background_image", value)}
+              />
+              <TextareaField
+                label={copy.customCSS}
+                value={form.theme_custom_css}
+                placeholder={copy.customCSSPlaceholder}
+                help={copy.customCSSHint}
+                onChange={(value) => updateField("theme_custom_css", value)}
+              />
+            </div>
           </div>
         </SettingsPanel>
       )}
@@ -1775,6 +1809,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
   return [
     { id: "basic", label: copy.basic, icon: Globe2 },
     { id: "theme", label: copy.theme, icon: Palette },
+    { id: "themeSettings", label: copy.themeSettings, icon: Pencil },
     { id: "billing", label: copy.billing, icon: HandCoins },
     { id: "payment", label: copy.paymentInterface, icon: CreditCard },
     { id: "checkIn", label: copy.checkInSettings, icon: CalendarCheck },
@@ -2299,10 +2334,10 @@ function TextareaField({
   return (
     <label className="block space-y-2 text-sm">
       <span className="font-medium">{label}</span>
-      <textarea
+      <Textarea
         value={value}
         placeholder={placeholder}
-        className="min-h-32 w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+        className="min-h-32 font-mono"
         onChange={(event) => onChange(event.target.value)}
       />
       {help && <p className="text-xs leading-5 text-muted-foreground">{help}</p>}
@@ -3402,9 +3437,16 @@ const zhCopy = {
   systemModePersonal: "自用模式",
   systemModeEnterprise: "企业模式",
   systemModeHint: "运营模式面向公开运营；自用模式关闭余额扣费和支付等运营能力；企业模式用于单企业私有部署，并启用企业成员、Workspace、RBAC 和治理能力。切换模式不会删除历史数据。",
-  theme: "主题设置",
-  themeSettings: "网站主题",
+  theme: "颜色自定义",
+  themeSettings: "主题设置",
   themeSettingsDescription: "配置全站浅色和深色模式下的主题颜色、强调色、背景、文字和边框。",
+  themeCustomizationDescription: "配置全站自定义背景图，并使用 CSS 覆盖细节样式。",
+  restoreThemeDefaults: "恢复默认",
+  backgroundImage: "自定义背景图",
+  backgroundImagePlaceholder: "https://example.com/background.jpg",
+  customCSS: "自定义 CSS 覆盖",
+  customCSSPlaceholder: "/* 在此输入覆盖全站样式的 CSS */",
+  customCSSHint: "CSS 会应用到全站。请仅粘贴可信样式，并在保存后检查各页面效果。",
   themeLightMode: "浅色模式",
   themeDarkMode: "深色模式",
   themeBackground: "背景色",
@@ -3779,9 +3821,16 @@ const enCopy: SystemCopy = {
   systemModePersonal: "Personal mode",
   systemModeEnterprise: "Enterprise mode",
   systemModeHint: "Operation mode is for public services; personal mode disables charging and payment features; enterprise mode enables single-enterprise members, workspaces, RBAC, and governance. Switching modes preserves existing data.",
-  theme: "Theme",
-  themeSettings: "Site theme",
+  theme: "Color customization",
+  themeSettings: "Theme settings",
   themeSettingsDescription: "Configure site theme colors, accents, backgrounds, text, and borders for light and dark modes.",
+  themeCustomizationDescription: "Set a site-wide custom background image and CSS overrides.",
+  restoreThemeDefaults: "Restore defaults",
+  backgroundImage: "Custom background image",
+  backgroundImagePlaceholder: "https://example.com/background.jpg",
+  customCSS: "Custom CSS overrides",
+  customCSSPlaceholder: "/* Add CSS that overrides site-wide styles here */",
+  customCSSHint: "CSS is applied across the entire site. Only use trusted styles and verify each page after saving.",
   themeLightMode: "Light mode",
   themeDarkMode: "Dark mode",
   themeBackground: "Background",

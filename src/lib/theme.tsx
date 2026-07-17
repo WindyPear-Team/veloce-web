@@ -10,6 +10,7 @@ export type ResolvedTheme = "light" | "dark"
 
 const themeStorageKey = "theme-mode"
 const themeStyleElementID = "windypear-theme-vars"
+const themeCustomizationStyleElementID = "windypear-theme-customizations"
 
 type ThemeContextValue = {
   mode: ThemeMode
@@ -142,7 +143,46 @@ function applyThemeVariables(settings: PublicSettings, resolvedTheme: ResolvedTh
     buildThemeBlock(":root", settings, "light"),
     buildThemeBlock(".dark", settings, "dark"),
   ].join("\n\n")
+  applyThemeCustomizations(settings)
   updateThemeColorMeta(settings, resolvedTheme)
+}
+
+function applyThemeCustomizations(settings: PublicSettings) {
+  let styleElement = document.getElementById(themeCustomizationStyleElementID) as HTMLStyleElement | null
+  const backgroundImage = safeBackgroundImageURL(settings.theme_background_image)
+  const customCSS = settings.theme_custom_css.trim()
+
+  if (!backgroundImage && !customCSS) {
+    styleElement?.remove()
+    return
+  }
+
+  if (!styleElement) {
+    styleElement = document.createElement("style")
+    styleElement.id = themeCustomizationStyleElementID
+    document.head.appendChild(styleElement)
+  }
+
+  const backgroundCSS = backgroundImage
+    ? `body {\n  background-image: url(${JSON.stringify(backgroundImage)});\n  background-size: cover;\n  background-position: center;\n  background-attachment: fixed;\n}\n`
+    : ""
+  styleElement.textContent = `${backgroundCSS}\n${customCSS}`
+}
+
+function safeBackgroundImageURL(value: string) {
+  const trimmed = value.trim()
+  if (!trimmed) {
+    return ""
+  }
+  if (trimmed.startsWith("/") || trimmed.startsWith("./") || trimmed.startsWith("../")) {
+    return trimmed
+  }
+  try {
+    const url = new URL(trimmed)
+    return url.protocol === "http:" || url.protocol === "https:" ? url.href : ""
+  } catch {
+    return ""
+  }
 }
 
 function buildThemeBlock(selector: string, settings: PublicSettings, theme: ResolvedTheme) {
