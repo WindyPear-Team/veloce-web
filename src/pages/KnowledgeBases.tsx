@@ -42,6 +42,7 @@ interface StorageSettings {
 }
 
 interface UserChannelCatalog { id: number; name: string; models: string[] }
+interface BuiltinEmbeddingModel { id: string; name: string; description: string; dimensions: number }
 
 interface KnowledgeDocumentsResponse {
   documents: KnowledgeDocument[]
@@ -90,6 +91,15 @@ export default function KnowledgeBases() {
     queryFn: async () => {
       const res = await api.get("/user/catalog")
       return Array.isArray(res.data) ? res.data.map(normalizeCatalogItem) : []
+    },
+  })
+  const { data: builtinEmbeddingModels = [] } = useQuery<BuiltinEmbeddingModel[]>({
+    queryKey: ["builtin-embedding-models"],
+    queryFn: async () => {
+      const res = await api.get("/user/advanced-chat/embedding-models")
+      return isRecord(res.data) && Array.isArray(res.data.models)
+        ? res.data.models.filter((item): item is BuiltinEmbeddingModel => isRecord(item) && typeof item.id === "string" && typeof item.name === "string").map((item) => ({ id: item.id, name: item.name, description: typeof item.description === "string" ? item.description : "", dimensions: Number(item.dimensions || 0) }))
+        : []
     },
   })
   const documentsQuery = useQuery<KnowledgeDocumentsResponse>({
@@ -236,7 +246,7 @@ export default function KnowledgeBases() {
     const currentEmbeddingChannelID = embeddingSettingsEdited ? embeddingChannelID : selectedBase.embedding_user_channel_id || 0
 		const availableModels = currentEmbeddingChannelID
 			? catalog.find((channel) => channel.id === currentEmbeddingChannelID)?.models || []
-			: Array.from(new Set(catalog.flatMap((channel) => channel.models)))
+			: Array.from(new Set([...catalog.flatMap((channel) => channel.models), ...builtinEmbeddingModels.map((model) => `builtin:${model.id}`)]))
 		const modelOptions = currentEmbeddingModel && !availableModels.includes(currentEmbeddingModel) ? [currentEmbeddingModel, ...availableModels] : availableModels
     return (
       <div className="space-y-6">
