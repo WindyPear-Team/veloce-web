@@ -23,6 +23,7 @@ import { ThemeProvider } from "./lib/theme"
 import { ToastProvider } from "./components/ui/toast"
 import { Button } from "./components/ui/button"
 import { Input } from "./components/ui/input"
+import { Switch } from "./components/ui/switch"
 import logoURL from "./assets/logo.png"
 
 const queryClient = new QueryClient()
@@ -536,11 +537,12 @@ function DesktopTitleBar({
             {tabs.map((tab) => {
               const active = tab.id === activeTabID
               return (
-                <button
+                <Button
                   key={tab.id}
                   type="button"
                   draggable
-                  className={`flex min-w-0 max-w-44 items-center gap-1 border px-2 text-left text-[11px] ${active ? "h-8 self-end rounded-t-md rounded-b-none border-border border-b-background bg-background text-foreground shadow-sm" : "h-7 rounded-md border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+                  variant={active ? "outline" : "ghost"}
+                  className={`flex min-w-0 max-w-44 items-center gap-1 border px-2 text-left text-[11px] ${active ? "h-8 self-end rounded-t-2xl rounded-b-none border-border border-b-background bg-background text-foreground shadow-sm" : "h-7 rounded-2xl border-transparent text-muted-foreground hover:bg-muted hover:text-foreground"}`}
                   onClick={() => onSelectTab(tab.id)}
                   onDragStart={(event) => {
                     draggingTabID.current = tab.id
@@ -588,7 +590,7 @@ function DesktopTitleBar({
                       x
                     </span>
                   )}
-                </button>
+                </Button>
               )
             })}
             <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" title={copy.newTab} aria-label={copy.newTab} onClick={onAddTab}>
@@ -683,10 +685,11 @@ function DesktopTitleBar({
                   const selected = normalizeServerURL(serverURL) === currentServer
                   const account = localStorage.getItem(serverAccountKey(serverURL)) || copy.anonymous
                   return (
-                    <button
+                    <Button
                       key={serverURL}
                       type="button"
-                      className="flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-xs hover:bg-muted"
+                      variant="ghost"
+                      className="flex h-auto w-full items-center gap-2 rounded-2xl px-2 py-2 text-left text-xs hover:bg-muted"
                       onClick={() => selectServer(serverURL)}
                     >
                       <span className="flex h-5 w-5 shrink-0 items-center justify-center">
@@ -698,7 +701,7 @@ function DesktopTitleBar({
                           {selected ? `${copy.current} · ${account}` : account}
                         </span>
                       </span>
-                    </button>
+                    </Button>
                   )
                 })}
               </div>
@@ -713,24 +716,15 @@ function DesktopTitleBar({
                 {copy.placeholder}
               </Button>
               <div className="mt-3 border-t pt-3">
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={Boolean(builtinStatus?.enabled)}
-                  className="flex w-full items-center justify-between gap-3 rounded-md px-2 py-2 text-left text-xs hover:bg-muted disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={isBuiltinBusy || !window.veloceDesktop}
-                  onClick={toggleBuiltinServer}
-                >
+                <div className="flex w-full items-center justify-between gap-3 rounded-2xl px-2 py-2 text-left text-xs">
                   <span className="min-w-0">
                     <span className="block font-medium">{copy.builtin}</span>
                     <span className="block truncate text-muted-foreground">
                       {!window.veloceDesktop ? copy.builtinUnavailable : isBuiltinBusy ? copy.builtinStarting : builtinStatus?.message || builtinStatus?.serverURL || copy.placeholder}
                     </span>
                   </span>
-                  <span className={`flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors ${builtinStatus?.enabled ? "bg-primary" : "bg-muted-foreground/30"}`}>
-                    <span className={`h-4 w-4 rounded-full bg-background shadow transition-transform ${builtinStatus?.enabled ? "translate-x-4" : ""}`} />
-                  </span>
-                </button>
+                  <Switch checked={Boolean(builtinStatus?.enabled)} disabled={isBuiltinBusy || !window.veloceDesktop} onCheckedChange={toggleBuiltinServer} />
+                </div>
               </div>
             </div>
           )}
@@ -847,24 +841,26 @@ function DesktopMenu({
 }) {
   return (
     <div className="relative">
-      <button
+      <Button
         type="button"
-        className={`h-7 rounded px-2 text-xs font-medium ${open ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
+        variant="ghost"
+        className={`h-7 rounded-2xl px-2 text-xs font-medium ${open ? "bg-muted text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`}
         onClick={onOpenChange}
       >
         {label}
-      </button>
+      </Button>
       {open && (
         <div className="absolute left-0 top-8 z-[70] min-w-32 rounded-md bg-popover p-1 text-popover-foreground shadow-lg">
           {items.map((item) => (
-            <button
+            <Button
               key={item.label}
               type="button"
-              className="flex h-8 w-full items-center rounded px-2 text-left text-xs hover:bg-muted"
+              variant="ghost"
+              className="flex h-8 w-full items-center rounded-2xl px-2 text-left text-xs hover:bg-muted"
               onClick={item.action}
             >
               {item.label}
-            </button>
+            </Button>
           ))}
         </div>
       )}
