@@ -94,7 +94,7 @@ const variantStyles: Record<ToastVariant, { wrapper: string; icon: ReactNode }> 
     icon: <XCircle size={18} className="shrink-0 text-red-500" />,
   },
   info: {
-    wrapper: "border-border bg-popover text-popover-foreground",
+    wrapper: "border-white/50 bg-popover/80 text-popover-foreground backdrop-blur-xl dark:border-white/10 dark:bg-popover/80",
     icon: <Info size={18} className="shrink-0 text-muted-foreground" />,
   },
 }

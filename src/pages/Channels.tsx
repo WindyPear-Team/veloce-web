@@ -634,8 +634,7 @@ function UpstreamDialog({
           </FieldLabel>
           <div className="space-y-3 rounded-md border p-3 md:col-span-2">
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 checked={draft.price_sync_enabled ?? true}
                 onChange={(e) => setDraft({ ...draft, price_sync_enabled: e.target.checked })}
               />
@@ -1145,8 +1144,7 @@ function SyncPreviewDialog({
                     models.map((item) => (
                       <TableRow key={item.model_name}>
                         <TableCell>
-                          <input
-                            type="checkbox"
+                          <input type="checkbox"
                             checked={selectedSet.has(item.model_name)}
                             onChange={(event) => toggleModel(item.model_name, event.target.checked)}
                           />
@@ -1209,8 +1207,7 @@ function BrowserSyncFallbackDialog({
               <Input value={fallback.url} readOnly />
             </FieldLabel>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 checked={fallback.includeToken}
                 onChange={(event) => onChange({ ...fallback, includeToken: event.target.checked })}
               />

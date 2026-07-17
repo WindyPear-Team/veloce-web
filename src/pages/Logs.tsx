@@ -5,6 +5,7 @@ import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
+import { PageTab, PageTabs } from "@/components/layout/PageTabs"
 import { TabTransition } from "@/components/layout/TabTransition"
 import {
   Table,
@@ -149,19 +150,19 @@ export default function Logs() {
       </div>
 
       <PageTitleSlot />
-      <div className="flex gap-2 overflow-x-auto border-b pb-2">
-        <Button variant={activeTab === "calls" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("calls")}>
+      <PageTabs aria-label={copy.title}>
+        <PageTab active={activeTab === "calls"} onClick={() => setActiveTab("calls")}>
           {copy.callRecords}
-        </Button>
+        </PageTab>
         {!personalMode && (
-          <Button variant={activeTab === "payments" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("payments")}>
+          <PageTab active={activeTab === "payments"} onClick={() => setActiveTab("payments")}>
             {copy.paymentOrders}
-          </Button>
+          </PageTab>
         )}
-        <Button variant={activeTab === "checkIns" ? "default" : "outline"} size="sm" onClick={() => setActiveTab("checkIns")}>
+        <PageTab active={activeTab === "checkIns"} onClick={() => setActiveTab("checkIns")}>
           {copy.checkInRecords}
-        </Button>
-      </div>
+        </PageTab>
+      </PageTabs>
 
       <PageInlineSlot slotKey="primary" />
       <TabTransition activeKey={activeTab} order={tabOrder}>

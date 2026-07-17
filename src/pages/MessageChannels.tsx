@@ -589,8 +589,7 @@ function SkillPicker({ label, skills, selected, onChange }: { label: string; ski
         ) : (
           skills.map((skill) => (
             <label key={skill.id} className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 checked={selected.includes(skill.id)}
                 onChange={(event) => {
                   onChange(event.target.checked ? [...selected, skill.id] : selected.filter((id) => id !== skill.id))

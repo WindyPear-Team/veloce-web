@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
+import { PageTab, PageTabs } from "@/components/layout/PageTabs"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -424,18 +425,17 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
         </div>
       </div>
 
-      <div className="flex flex-wrap gap-2 border-b">
+      <PageTabs className="flex-wrap" aria-label={copy.title}>
         {tabs.map((tab) => (
-          <button
+          <PageTab
             key={tab.id}
-            type="button"
-            className={cn("border-b-2 px-3 py-2 text-sm font-medium transition-colors", activeTab === tab.id ? "border-primary text-foreground" : "border-transparent text-muted-foreground hover:text-foreground")}
+            active={activeTab === tab.id}
             onClick={() => setActiveTab(tab.id)}
           >
             {tab.label}
-          </button>
+          </PageTab>
         ))}
-      </div>
+      </PageTabs>
 
       {activeTab === "basic" && (
         <BasicTab copy={copy} draft={draft} current={current} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={updateDraft} onAdvancedChange={updateAdvanced} />

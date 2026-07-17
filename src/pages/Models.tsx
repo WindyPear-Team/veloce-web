@@ -694,8 +694,7 @@ function PriceSyncPreviewDialog({
                     models.map((item) => (
                       <TableRow key={item.model_name}>
                         <TableCell>
-                          <input
-                            type="checkbox"
+                          <input type="checkbox"
                             checked={selectedSet.has(item.model_name)}
                             onChange={(event) => toggleModel(item.model_name, event.target.checked)}
                           />
@@ -768,8 +767,7 @@ function BrowserSyncFallbackDialog({
               <Input value={fallback.url} readOnly />
             </FieldLabel>
             <label className="flex items-center gap-2 text-sm">
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 checked={fallback.includeToken}
                 onChange={(event) => onChange({ ...fallback, includeToken: event.target.checked })}
               />

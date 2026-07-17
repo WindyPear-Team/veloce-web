@@ -30,6 +30,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
+import { PageTab, PageTabs } from "@/components/layout/PageTabs"
 import { TabTransition } from "@/components/layout/TabTransition"
 import { useToast } from "@/components/ui/toast"
 import {
@@ -810,19 +811,19 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       </div>
 
       <PageTitleSlot />
-      <div className="flex gap-2 overflow-x-auto border-b pb-2">
+      <PageTabs aria-label={t("system.title")}>
         {visibleTabs.map((tab) => (
-          <Button
+          <PageTab
             key={tab.id}
-            variant={activeTab === tab.id ? "default" : "outline"}
-            className="shrink-0 gap-2"
+            active={activeTab === tab.id}
+            className="inline-flex items-center gap-2"
             onClick={() => setActiveTab(tab.id)}
           >
             <tab.icon size={16} />
             {tab.label}
-          </Button>
+          </PageTab>
         ))}
-      </div>
+      </PageTabs>
 
       <PageInlineSlot slotKey="primary" />
       <TabTransition activeKey={activeTab} order={visibleTabs.map((tab) => tab.id)}>
@@ -1696,8 +1697,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <div className="min-w-[1200px]">
                 <div className="grid grid-cols-[42px_1.3fr_100px_140px_110px_150px_110px_120px_160px_110px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
                   <label className="flex items-center">
-                    <input
-                      type="checkbox"
+                    <input type="checkbox"
                       checked={allVisibleRedeemCodesSelected}
                       onChange={(event) => {
                         const visibleIDs = visibleRedeemCodes.map((code) => code.id)
@@ -1726,8 +1726,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                   visibleRedeemCodes.map((code) => (
                     <div key={code.id} className="grid grid-cols-[42px_1.3fr_100px_140px_110px_150px_110px_120px_160px_110px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
                       <label className="flex items-center">
-                        <input
-                          type="checkbox"
+                        <input type="checkbox"
                           checked={selectedRedeemCodeIDs.includes(code.id)}
                           onChange={(event) => {
                             setSelectedRedeemCodeIDs((current) => (
@@ -2769,8 +2768,7 @@ function MetaModelDialog({
               <TextField label={copy.metaModelProviderIconURL} value={draft.provider_icon_url} placeholder="https://example.com/icon.png" onChange={(value) => onDraftChange({ ...draft, provider_icon_url: value })} />
             </div>
             <label className="flex items-start gap-2 text-sm">
-              <input
-                type="checkbox"
+              <input type="checkbox"
                 className="mt-1"
                 checked={draft.expose_referenced_models}
                 onChange={(event) => onDraftChange({ ...draft, expose_referenced_models: event.target.checked })}

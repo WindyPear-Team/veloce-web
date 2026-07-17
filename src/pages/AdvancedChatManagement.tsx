@@ -547,8 +547,7 @@ function ToggleRow({
 }) {
   return (
     <label className="flex items-start gap-3 rounded-md border bg-background p-3 text-sm">
-      <input
-        type="checkbox"
+      <input type="checkbox"
         className="mt-1"
         checked={checked}
         onChange={(event) => onChange(event.target.checked)}

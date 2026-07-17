@@ -4,8 +4,15 @@ import { Link, useParams } from "react-router-dom"
 import { ChevronLeft, Save, SlidersHorizontal } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Textarea } from "@/components/ui/textarea"
+import { Switch } from "@/components/ui/switch"
 import { useToast } from "@/components/ui/toast"
 
 interface PluginDetail {
@@ -108,7 +115,7 @@ export default function PluginSettingsPage() {
 
       <Card>
         <CardHeader className="flex-row items-center justify-between gap-4 space-y-0">
-          <div><CardTitle className="text-base">{plugin?.name || "插件"} 配置</CardTitle><div className="mt-1 text-xs text-muted-foreground">{plugin?.version ? `版本 ${plugin.version}` : "按当前账号保存"}</div></div>
+          <div><CardTitle className="text-base">{plugin?.name || "插件"} 配置</CardTitle><div className="mt-1 text-xs text-muted-foreground">{plugin?.version ? <Badge variant="secondary">版本 {plugin.version}</Badge> : "按当前账号保存"}</div></div>
           <Button
             type="button"
             variant="outline"
@@ -132,12 +139,14 @@ export default function PluginSettingsPage() {
         </CardHeader>
         <CardContent>
           {settingsQuery.isLoading || pluginQuery.isLoading ? <div className="py-12 text-center text-sm text-muted-foreground">加载配置中...</div> : rawMode ? (
-            <textarea className="min-h-[28rem] w-full rounded-md border bg-background p-3 font-mono text-sm" value={rawText} onChange={(event) => setRawText(event.target.value)} />
+            <Textarea className="min-h-[28rem] font-mono" value={rawText} onChange={(event) => setRawText(event.target.value)} />
           ) : tabs.length ? (
             <div className="space-y-5">
-              <div className="flex gap-1 overflow-x-auto border-b" role="tablist" aria-label="插件配置分类">
-                {tabs.map((tab) => <button key={tab.id} type="button" role="tab" aria-selected={currentTab?.id === tab.id} className={`shrink-0 border-b-2 px-3 py-2 text-sm font-medium transition-colors ${currentTab?.id === tab.id ? "border-primary text-primary" : "border-transparent text-muted-foreground hover:text-foreground"}`} onClick={() => setActiveTab(tab.id)}>{tab.label}</button>)}
-              </div>
+              <Tabs value={currentTab?.id || ""} onValueChange={setActiveTab}>
+                <TabsList className="h-auto w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">
+                  {tabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">{tab.label}</TabsTrigger>)}
+                </TabsList>
+              </Tabs>
               {currentTab && <div className="space-y-5"><div>{currentTab.description && <p className="text-sm text-muted-foreground">{currentTab.description}</p>}</div><PluginSettingsForm fields={currentTab.fields} values={values} onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))} /></div>}
             </div>
           ) : <div className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">这个插件没有声明可视化配置项</div>}
@@ -152,13 +161,14 @@ function PluginSettingsForm({ fields, values, onChange }: { fields: PluginSettin
 }
 
 function PluginSettingsFieldControl({ field, value, onChange }: { field: PluginSettingsField; value: unknown; onChange: (value: unknown) => void }) {
-  const label = <div className="space-y-1"><div className="text-sm font-medium">{field.label}{field.required && <span className="ml-1 text-destructive">*</span>}</div>{field.description && <div className="text-xs text-muted-foreground">{field.description}</div>}</div>
-  if (["switch", "checkbox", "boolean"].includes(field.type)) return <label className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<input type="checkbox" className="mt-1 h-4 w-4 shrink-0" checked={Boolean(value)} onChange={(event) => onChange(event.target.checked)} /></label>
-  if (["textarea", "text"].includes(field.type)) return <div className="space-y-2">{label}<textarea className="min-h-28 w-full rounded-md border bg-background p-3 text-sm" value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
+  const label = <div className="space-y-1"><Label className="text-sm font-medium">{field.label}{field.required && <span className="ml-1 text-destructive">*</span>}</Label>{field.description && <div className="text-xs text-muted-foreground">{field.description}</div>}</div>
+  if (field.type === "switch") return <div className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<Switch className="mt-0.5 shrink-0" checked={Boolean(value)} onCheckedChange={onChange} /></div>
+  if (["checkbox", "boolean"].includes(field.type)) return <label className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<Checkbox className="mt-1 shrink-0" checked={Boolean(value)} onCheckedChange={(checked) => onChange(checked === true)} /></label>
+  if (["textarea", "text"].includes(field.type)) return <div className="space-y-2">{label}<Textarea className="min-h-28" value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
   if (["number", "integer"].includes(field.type)) return <div className="space-y-2">{label}<Input type="number" value={value === undefined || value === null ? "" : String(value)} placeholder={field.placeholder} min={field.min} max={field.max} step={field.step ?? (field.type === "integer" ? 1 : undefined)} onChange={(event) => { const raw = event.target.value; onChange(raw === "" ? "" : field.type === "integer" ? Math.trunc(Number(raw)) : Number(raw)) }} /></div>
-  if (["select", "enum"].includes(field.type)) return <div className="space-y-2">{label}<select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={String(value ?? "")} onChange={(event) => onChange(event.target.value)}>{!field.required && <option value="">不设置</option>}{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div>
+  if (["select", "enum"].includes(field.type)) return <div className="space-y-2">{label}<Select value={String(value ?? "")} onValueChange={(next) => onChange(next === "__unset__" ? "" : next)}><SelectTrigger><SelectValue placeholder={field.required ? field.placeholder : "不设置"} /></SelectTrigger><SelectContent>{!field.required && <SelectItem value="__unset__">不设置</SelectItem>}{field.options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select></div>
   if (["multiselect", "multi_select", "tags"].includes(field.type)) { const selected = Array.isArray(value) ? value.map(String) : []; return <div className="space-y-2">{label}<select multiple className="min-h-28 w-full rounded-md border bg-background px-3 py-2 text-sm" value={selected} onChange={(event) => onChange(Array.from(event.target.selectedOptions).map((option) => option.value))}>{field.options.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></div> }
-  if (["json", "object", "array"].includes(field.type)) return <div className="space-y-2">{label}<textarea key={JSON.stringify(value ?? null)} className="min-h-28 w-full rounded-md border bg-background p-3 font-mono text-sm" defaultValue={JSON.stringify(value ?? (field.type === "array" ? [] : {}), null, 2)} onBlur={(event) => { try { onChange(JSON.parse(event.target.value || (field.type === "array" ? "[]" : "{}"))) } catch { onChange(event.target.value) } }} /></div>
+  if (["json", "object", "array"].includes(field.type)) return <div className="space-y-2">{label}<Textarea key={JSON.stringify(value ?? null)} className="min-h-28 font-mono" defaultValue={JSON.stringify(value ?? (field.type === "array" ? [] : {}), null, 2)} onBlur={(event) => { try { onChange(JSON.parse(event.target.value || (field.type === "array" ? "[]" : "{}"))) } catch { onChange(event.target.value) } }} /></div>
   return <div className="space-y-2">{label}<Input type={field.type === "password" || field.type === "secret" ? "password" : "text"} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
 }
 

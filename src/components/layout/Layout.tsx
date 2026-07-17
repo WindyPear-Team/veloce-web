@@ -127,7 +127,7 @@ export function Layout() {
             </div>
           )}
           <div className="mx-auto w-full max-w-6xl flex-1 p-4 sm:p-6 lg:p-8">
-            <PageTransition>
+            <PageTransition className="page-shell-transition">
               <div className="space-y-6">
                 <Outlet />
                 <PageComponentSlots pageKey={currentPageKey} slotKey="after" />

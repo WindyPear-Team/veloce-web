@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 import api, { apiURL, getOAuthLoginURL, isDesktopTarget, setAuthToken } from "@/lib/api"
@@ -336,11 +337,10 @@ function AgreementControl({
   if (mode === "checkbox") {
     return (
       <label className="flex items-start gap-2 rounded-md border p-3 text-xs leading-5 text-muted-foreground">
-        <input
-          type="checkbox"
+        <Checkbox
           checked={checked}
           className="mt-0.5 h-4 w-4 shrink-0 rounded border-input"
-          onChange={(event) => onCheckedChange(event.target.checked)}
+          onCheckedChange={(next) => onCheckedChange(next === true)}
         />
         <span>{content}</span>
       </label>

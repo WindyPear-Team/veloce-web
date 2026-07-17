@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
@@ -164,34 +165,18 @@ export default function DataBoard() {
             </label>
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.granularity}</span>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={filters.granularity} onChange={(event) => updateFilter("granularity", event.target.value as TimeGranularity)}>
-                <option value="hour">{copy.granularityHour}</option>
-                <option value="day">{copy.granularityDay}</option>
-                <option value="week">{copy.granularityWeek}</option>
-                <option value="month">{copy.granularityMonth}</option>
-              </select>
+              <Select value={filters.granularity} onValueChange={(value) => updateFilter("granularity", value as TimeGranularity)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="hour">{copy.granularityHour}</SelectItem><SelectItem value="day">{copy.granularityDay}</SelectItem><SelectItem value="week">{copy.granularityWeek}</SelectItem><SelectItem value="month">{copy.granularityMonth}</SelectItem></SelectContent></Select>
             </label>
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.metric}</span>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={filters.metric} onChange={(event) => updateFilter("metric", event.target.value as MetricKey)}>
-                <option value="cost">{copy.metricCost}</option>
-                <option value="requests">{copy.metricRequests}</option>
-                <option value="tokens">{copy.metricTokens}</option>
-              </select>
+              <Select value={filters.metric} onValueChange={(value) => updateFilter("metric", value as MetricKey)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cost">{copy.metricCost}</SelectItem><SelectItem value="requests">{copy.metricRequests}</SelectItem><SelectItem value="tokens">{copy.metricTokens}</SelectItem></SelectContent></Select>
             </label>
           </div>
 
           <div className="grid gap-4 lg:grid-cols-[1fr_1fr_auto]">
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.apiKey}</span>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={filters.apiKeyID} onChange={(event) => updateFilter("apiKeyID", event.target.value)}>
-                <option value="">{copy.allAPIKeys}</option>
-                {apiKeys.map((key) => (
-                  <option key={key.id} value={key.id}>
-                    {key.name || copy.apiKeyFallback} {key.key_prefix ? `(${key.key_prefix})` : ""}
-                  </option>
-                ))}
-              </select>
+              <Select value={filters.apiKeyID || "all"} onValueChange={(value) => updateFilter("apiKeyID", value === "all" ? "" : value)}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="all">{copy.allAPIKeys}</SelectItem>{apiKeys.map((key) => <SelectItem key={key.id} value={String(key.id)}>{key.name || copy.apiKeyFallback} {key.key_prefix ? `(${key.key_prefix})` : ""}</SelectItem>)}</SelectContent></Select>
             </label>
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.modelName}</span>
