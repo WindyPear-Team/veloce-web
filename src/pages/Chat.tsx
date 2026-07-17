@@ -3143,7 +3143,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const advancedComposer = () => (
     <>
-      <div className="rounded-xl border border-slate-200 bg-card p-1 shadow-md">
+      <div className="rounded-xl border border-border bg-card p-1 shadow-md">
         <div className="relative min-w-0 flex-1">
           <textarea
             ref={composerTextareaRef}
@@ -3216,7 +3216,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         setSessionFolderContextMenu({ x: event.clientX, y: event.clientY })
       }}
     >
-      <div className="flex h-16 shrink-0 items-center justify-between border-b border-slate-200/80 px-4">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b border-border/80 px-4">
         <div className="min-w-0">
           <div className="truncate text-sm font-semibold">{copy.sessions}</div>
         </div>
@@ -3236,15 +3236,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           </Button>
         </div>
       </div>
-      <div className="border-b border-slate-200/80 p-3">
-        <Button className="h-10 w-full justify-start gap-2 rounded-md bg-white text-slate-900 shadow-sm hover:bg-slate-50" variant="outline" onClick={() => createNewSession()}>
+      <div className="border-b border-border/80 p-3">
+        <Button className="h-10 w-full justify-start gap-2 rounded-md bg-background text-foreground shadow-sm hover:bg-muted" variant="outline" onClick={() => createNewSession()}>
           <MessageSquarePlus size={16} />
           {copy.newSession}
         </Button>
         <label className="relative mt-3 block">
-          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+          <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground/70" />
           <input
-            className="h-9 w-full rounded-md border border-slate-200 bg-white py-1 pl-9 pr-3 text-sm outline-none placeholder:text-slate-400 focus:border-slate-400"
+            className="h-9 w-full rounded-md border border-border bg-background py-1 pl-9 pr-3 text-sm text-foreground outline-none placeholder:text-muted-foreground/70 focus:border-ring"
             value={sessionSearch}
             onChange={(event) => setSessionSearch(event.target.value)}
             placeholder={sessionSidebarCopy.search}
@@ -3255,13 +3255,13 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       <div className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
         {isAdvanced && enterpriseMode && sharedPools.length > 0 && (
           <div className="pb-3">
-            <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{language === "zh" ? "任务与部门会话" : "Task and department sessions"}</div>
+            <div className="px-2 pb-1 pt-1 text-xs font-medium text-muted-foreground">{language === "zh" ? "任务与部门会话" : "Task and department sessions"}</div>
             {sharedPools.map((pool) => {
               const expanded = String(pool.id) === selectedSharedPoolID
               return <div key={pool.id} className="pb-1">
-                <button type="button" className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-slate-500 hover:bg-white/70" onClick={() => setSelectedSharedPoolID(expanded ? "" : String(pool.id))}>
+                <button type="button" className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted" onClick={() => setSelectedSharedPoolID(expanded ? "" : String(pool.id))}>
                   <ChevronRight size={14} className={cn("shrink-0 transition-transform", expanded && "rotate-90")} />
-                  <Folder size={14} className={cn("shrink-0", pool.scope_type === "task" ? "text-teal-600" : "text-amber-600")} />
+                  <Folder size={14} className="shrink-0 text-primary" />
                   <span className="truncate">{sharedPoolLabel(pool, language)}</span>
                 </button>
                 {expanded && <Button size="sm" variant="ghost" className="ml-7 h-7 text-xs" onClick={() => createNewSession({ poolID: String(pool.id) })}><MessageSquarePlus className="mr-1 h-3.5 w-3.5" />{language === "zh" ? "在此新建会话" : "New session here"}</Button>}
@@ -3274,7 +3274,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           <div key={folder.id} className="pb-2">
             <button
               type="button"
-              className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-slate-500 hover:bg-white/70"
+              className="flex h-8 w-full items-center gap-2 rounded px-2 text-left text-xs font-medium text-muted-foreground hover:bg-muted"
               onClick={() => setCollapsedSessionFolderIDs((current) => {
                 const next = new Set(current)
                 if (next.has(folder.id)) {
@@ -3286,7 +3286,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               })}
             >
               <ChevronRight size={14} className={cn("shrink-0 transition-transform", (normalizedSessionSearch || !collapsedSessionFolderIDs.has(folder.id)) && "rotate-90")} />
-              <Folder size={14} className="shrink-0 text-amber-600" />
+              <Folder size={14} className="shrink-0 text-primary" />
               <span className="truncate">{folder.name}</span>
             </button>
             <Button size="sm" variant="ghost" className="ml-7 h-7 text-xs" onClick={() => createNewSession({ folderID: folder.id })}><MessageSquarePlus className="mr-1 h-3.5 w-3.5" />{language === "zh" ? "在此新建会话" : "New session here"}</Button>
@@ -3295,11 +3295,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         ))}
         {ungroupedSessions.length > 0 && (
           <div className="pb-2">
-            {sessionFolders.length > 0 && <div className="px-2 pb-1 pt-1 text-xs font-medium text-slate-500">{sessionSidebarCopy.uncategorized}</div>}
+            {sessionFolders.length > 0 && <div className="px-2 pb-1 pt-1 text-xs font-medium text-muted-foreground">{sessionSidebarCopy.uncategorized}</div>}
             {ungroupedSessions.map(sessionSidebarItem)}
           </div>
         )}
-        {searchedSessions.length === 0 && <div className="px-3 py-10 text-center text-sm text-slate-500">{sessionSidebarCopy.noSessions}</div>}
+        {searchedSessions.length === 0 && <div className="px-3 py-10 text-center text-sm text-muted-foreground">{sessionSidebarCopy.noSessions}</div>}
         {sessionMenu && typeof document !== "undefined" && (() => {
           const session = sessions.find((item) => item.id === sessionMenu.sessionID)
           if (!session) {
@@ -3336,7 +3336,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 </button>
                 {sessionFolders.map((folder) => (
                   <button key={folder.id} type="button" className="flex h-9 w-full items-center gap-2 rounded px-2 text-left hover:bg-muted" onClick={() => void moveSessionToFolder(session.id, folder.id)}>
-                    <Folder size={14} className="text-amber-600" />
+                    <Folder size={14} className="text-primary" />
                     <span className="truncate">{folder.name}</span>
                   </button>
                 ))}
@@ -3460,7 +3460,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       {messageSelectionContextMenuPortal}
       <div className={cn(
         "min-w-0 flex-1",
-        isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:relative xl:z-10 xl:mx-auto xl:mb-4 xl:overflow-visible xl:rounded-xl xl:border xl:border-slate-200 xl:bg-card xl:p-0" : "space-y-5",
+        isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:relative xl:z-10 xl:mx-auto xl:mb-4 xl:overflow-visible xl:rounded-xl xl:border xl:border-border xl:bg-card xl:p-0" : "space-y-5",
         isAdvanced && (isDesktopSessionsSidebarVisible ? "xl:max-w-[1180px]" : "xl:max-w-none")
       )}>
       <div className="sticky top-0 z-30 -mx-4 flex min-h-10 justify-end bg-transparent px-4 py-0 sm:-mx-6 sm:px-6 lg:-mx-8 lg:px-8 xl:mx-0">
@@ -3468,7 +3468,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           <Button
             variant="outline"
             size="icon"
-            className="h-9 w-9 border-slate-200 bg-white xl:hidden"
+            className="h-9 w-9 border-border bg-background xl:hidden"
             onClick={() => setIsSessionsSidebarOpen((open) => !open)}
             aria-label={isSessionsSidebarOpen ? copy.closeSessions : copy.openSessions}
             aria-expanded={isSessionsSidebarOpen}
@@ -3480,7 +3480,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             <Button
               variant="outline"
               size="icon"
-              className="h-9 w-9 border-slate-200 bg-white"
+              className="h-9 w-9 border-border bg-background"
               onClick={() => void openCurrentWorkspaceInVSCode()}
               aria-label={gitCopy.openInVSCode}
               title={gitCopy.openInVSCode}
@@ -3489,7 +3489,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
             </Button>
           )}
           {isAdvanced && (
-            <Button variant="outline" size="icon" className="h-9 w-9 border-slate-200 bg-white" onClick={() => openAdvancedConfig()} aria-label={copy.config} title={copy.config}>
+            <Button variant="outline" size="icon" className="h-9 w-9 border-border bg-background" onClick={() => openAdvancedConfig()} aria-label={copy.config} title={copy.config}>
               <Settings size={16} />
             </Button>
           )}
@@ -3498,7 +3498,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               <Button
                 variant="outline"
                 size="icon"
-                className="h-9 w-9 border-slate-200 bg-white"
+                className="h-9 w-9 border-border bg-background"
                 onClick={() => {
                   setIsGitPanelOpen((open) => !open)
                   setIsEnvironmentDevicePickerOpen(false)
@@ -3511,10 +3511,10 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                 <MoreHorizontal size={18} />
               </Button>
               {isGitPanelOpen && (
-                <div className="absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-3 text-popover-foreground shadow-lg">
+                <div className="absolute right-0 top-full z-40 mt-2 w-[22rem] max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover p-3 text-popover-foreground shadow-lg">
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex min-w-0 items-center gap-2 text-sm font-semibold">
-                      <GitBranch size={16} className="shrink-0 text-slate-600" />
+                      <GitBranch size={16} className="shrink-0 text-muted-foreground" />
                       <span className="truncate">{gitCopy.environment}</span>
                     </div>
                     <Button
@@ -3531,7 +3531,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </Button>
                   </div>
 
-                  <div className="relative mt-3 overflow-visible rounded-md border border-slate-200">
+                  <div className="relative mt-3 overflow-visible rounded-md border border-border">
                     <button
                       ref={environmentDeviceButtonRef}
                       type="button"
@@ -3542,7 +3542,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       }}
                       aria-expanded={isEnvironmentDevicePickerOpen}
                     >
-                      <Monitor size={16} className="shrink-0 text-slate-600" />
+                      <Monitor size={16} className="shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs text-muted-foreground">{gitCopy.executionEnvironment}</span>
                         <span className="block truncate text-sm font-medium">{currentConnectorDevice?.name || gitCopy.noDevice}</span>
@@ -3552,14 +3552,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <button
                       ref={environmentWorkspaceButtonRef}
                       type="button"
-                      className="flex min-h-12 w-full items-center gap-2 border-t border-slate-100 px-3 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
+                      className="flex min-h-12 w-full items-center gap-2 border-t border-border/70 px-3 text-left hover:bg-muted/50 disabled:cursor-not-allowed disabled:opacity-50"
                       disabled={!currentConnectorDeviceID}
                       onClick={() => {
                         setIsEnvironmentWorkspacePickerOpen((open) => !open)
                         setIsEnvironmentDevicePickerOpen(false)
                       }}
                     >
-                      <Folder size={16} className="shrink-0 text-amber-600" />
+                      <Folder size={16} className="shrink-0 text-primary" />
                       <span className="min-w-0 flex-1">
                         <span className="block text-xs text-muted-foreground">{gitCopy.runDirectory}</span>
                         <span className="block truncate font-mono text-xs text-foreground">{currentSession?.connector_workspace_path || gitCopy.noWorkspacePath}</span>
@@ -3568,7 +3568,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     </button>
 
                     {isEnvironmentDevicePickerOpen && typeof document !== "undefined" && createPortal(
-                      <div className="fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg" style={floatingMenuStyle(environmentDeviceButtonRef.current)}>
+                      <div className="fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg" style={floatingMenuStyle(environmentDeviceButtonRef.current)}>
                         <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{gitCopy.selectDevice}</div>
                         {selectableConnectorDevices.length === 0 ? (
                           <div className="px-2 py-4 text-center text-sm text-muted-foreground">{copy.noDevices}</div>
@@ -3591,7 +3591,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                 }}
                               >
                                 <span className="min-w-0 truncate font-medium">{device.name}</span>
-                                <span className={cn("shrink-0 text-[11px]", device.online ? "text-emerald-600" : "text-muted-foreground")}>
+                                <span className={cn("shrink-0 text-[11px]", device.online ? "text-primary" : "text-muted-foreground")}>
                                   {device.online ? copy.deviceOnline : copy.deviceOffline}
                                 </span>
                               </button>
@@ -3602,7 +3602,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       document.body
                     )}
                     {isEnvironmentWorkspacePickerOpen && typeof document !== "undefined" && createPortal(
-                      <div className="fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-md border border-slate-200 bg-popover p-2 text-popover-foreground shadow-lg" style={floatingMenuStyle(environmentWorkspaceButtonRef.current)}>
+                      <div className="fixed z-[70] w-72 max-w-[calc(100vw-2rem)] rounded-md border border-border bg-popover p-2 text-popover-foreground shadow-lg" style={floatingMenuStyle(environmentWorkspaceButtonRef.current)}>
                         <div className="px-2 py-1.5 text-xs font-medium text-muted-foreground">{gitCopy.runDirectory}</div>
                         {recentWorkspacePaths.length === 0 ? (
                           <div className="px-2 py-4 text-center text-sm text-muted-foreground">{copy.noWorkspaces}</div>
@@ -3624,7 +3624,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                             </button>
                           ))
                         )}
-                        <div className="mt-1 border-t border-slate-100 pt-1">
+                        <div className="mt-1 border-t border-border/70 pt-1">
                           <button
                             type="button"
                             className="flex h-9 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-muted"
@@ -3650,19 +3650,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <div className="py-4 text-sm text-destructive">{apiErrorMessage(gitStatusQuery.error, gitCopy.actionFailed)}</div>
                   ) : (
                     <div className="mt-3 space-y-3">
-                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-y border-slate-100 py-3 text-sm">
+                      <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 border-y border-border/70 py-3 text-sm">
                         <div className="min-w-0">
                           <div className="text-xs text-muted-foreground">{gitCopy.local}</div>
                           <div className="mt-1 flex min-w-0 items-center gap-1.5 font-medium">
-                            <GitBranch size={14} className="shrink-0 text-slate-500" />
+                            <GitBranch size={14} className="shrink-0 text-muted-foreground" />
                             <span className="truncate">{gitStatusQuery.data?.current_branch || "-"}</span>
                           </div>
                         </div>
                         <div className="text-right">
                           <div className="text-xs text-muted-foreground">{gitCopy.changes}</div>
                           <div className="mt-1 flex items-center justify-end gap-1.5 font-medium tabular-nums">
-                            <span className="text-emerald-600">+{gitStatusQuery.data?.additions || 0}</span>
-                            <span className="text-rose-600">-{gitStatusQuery.data?.deletions || 0}</span>
+                            <span className="text-primary">+{gitStatusQuery.data?.additions || 0}</span>
+                            <span className="text-destructive">-{gitStatusQuery.data?.deletions || 0}</span>
                             <span className="text-xs font-normal text-muted-foreground">{gitCopy.files.replace("{count}", String(gitStatusQuery.data?.changed_files || 0))}</span>
                           </div>
                         </div>
@@ -3671,7 +3671,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       <label className="block text-xs font-medium text-muted-foreground">
                         <span className="mb-1.5 flex items-center gap-1.5"><GitCompareArrows size={14} />{gitCopy.compareBranch}</span>
                         <select
-                          className="h-9 w-full rounded-md border border-slate-200 bg-background px-2 text-sm text-foreground"
+                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
                           value={gitCompareBranch}
                           onChange={(event) => setGitCompareBranch(event.target.value)}
                         >
@@ -3682,11 +3682,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         </select>
                       </label>
 
-                      <div className="space-y-2 border-t border-slate-100 pt-3">
+                      <div className="space-y-2 border-t border-border/70 pt-3">
                         <label className="block text-xs font-medium text-muted-foreground" htmlFor="git-commit-message">{gitCopy.commitMessage}</label>
                         <input
                           id="git-commit-message"
-                          className="h-9 w-full rounded-md border border-slate-200 bg-background px-2 text-sm outline-none focus:border-primary"
+                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground outline-none focus:border-ring"
                           value={gitCommitMessage}
                           maxLength={200}
                           placeholder={gitCopy.commitMessage}
@@ -3705,7 +3705,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       </div>
 
                       {gitTaskQuery.data && (
-                        <div className="border-t border-slate-100 pt-3 text-sm">
+                        <div className="border-t border-border/70 pt-3 text-sm">
                           <div className="flex items-center justify-between gap-2">
                             <span className="font-medium">{gitTaskStatusLabel(gitTaskQuery.data.status, gitCopy)}</span>
                             {gitTaskQuery.data.status === "pending_approval" && (
@@ -3734,7 +3734,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           <Button
             variant="outline"
             size="icon"
-            className="hidden h-9 w-9 border-slate-200 bg-white xl:inline-flex"
+            className="hidden h-9 w-9 border-border bg-background xl:inline-flex"
             onClick={() => setIsDesktopSessionsSidebarVisible((visible) => !visible)}
             aria-label={isDesktopSessionsSidebarVisible ? copy.closeSessions : copy.openSessions}
             aria-expanded={isDesktopSessionsSidebarVisible}
@@ -3779,7 +3779,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                           <button
                             key={suggestion.title}
                             type="button"
-                            className="flex min-h-16 items-center gap-2 rounded-md border border-slate-200 bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors hover:bg-muted"
+                            className="flex min-h-16 items-center gap-2 rounded-md border border-border bg-background px-3 py-2 text-sm text-foreground shadow-sm transition-colors hover:bg-muted"
                             onClick={() => chooseWelcomeSuggestion(suggestion.prompt)}
                           >
                             <Icon size={16} className="shrink-0 text-muted-foreground" />
@@ -3819,8 +3819,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                               "w-fit max-w-full p-3 text-sm",
                               isAdvanced
                                 ? message.role === "user"
-                                  ? "rounded-lg border border-slate-200 bg-slate-50 shadow-sm"
-                                  : "rounded-lg border border-slate-200 bg-background shadow-sm"
+                                  ? "rounded-lg border border-border bg-muted shadow-sm"
+                                  : "rounded-lg border border-border bg-background shadow-sm"
                                 : "rounded-md border bg-background"
                             )}>
                               <div className="flex items-start gap-2">
@@ -3891,7 +3891,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                                 <Button variant="ghost" size="icon" className="h-7 w-7" disabled={isSharedSession} onClick={() => beginEditMessage(message)} title={copy.editMessage}>
                                   <Pencil size={14} />
                                 </Button>
-                                <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" disabled={isSharedSession} onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive/80" disabled={isSharedSession} onClick={() => deleteMessage(message.id)} title={copy.deleteMessage}>
                                   <Trash2 size={14} />
                                 </Button>
                               </>
@@ -3922,7 +3922,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       type="button"
                       size="icon"
                       variant="outline"
-                      className="absolute -top-11 right-4 z-30 h-9 w-9 rounded-full border-slate-200 bg-background shadow-md hover:bg-slate-50 sm:right-6"
+                      className="absolute -top-11 right-4 z-30 h-9 w-9 rounded-full border-border bg-background shadow-md hover:bg-muted sm:right-6"
                       title={copy.jumpToLatest}
                       onClick={() => scrollMessagesToLatest()}
                     >
@@ -3944,17 +3944,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   {taskChangeSummary.files.length > 0 && (
                     <button
                       type="button"
-                      className="flex w-full items-center justify-between gap-3 rounded-md border border-slate-200 bg-card px-3 py-2 text-left text-xs shadow-sm transition-colors hover:bg-slate-50"
+                      className="flex w-full items-center justify-between gap-3 rounded-md border border-border bg-card px-3 py-2 text-left text-xs shadow-sm transition-colors hover:bg-muted"
                       onClick={() => setIsTaskChangesOpen(true)}
                     >
                       <span className="flex min-w-0 items-center gap-2">
-                        <FileDiff size={15} className="shrink-0 text-slate-600" />
+                        <FileDiff size={15} className="shrink-0 text-muted-foreground" />
                         <span className="truncate font-medium">{taskChangeCopy.summary.replace("{count}", String(taskChangeSummary.files.length))}</span>
                         {isActiveRunRunning && <span className="shrink-0 text-muted-foreground">{taskChangeCopy.inProgress}</span>}
                       </span>
                       <span className="flex shrink-0 items-center gap-2 font-medium tabular-nums">
-                        <span className="text-emerald-600">+{taskChangeSummary.additions}</span>
-                        <span className="text-rose-600">-{taskChangeSummary.deletions}</span>
+                        <span className="text-primary">+{taskChangeSummary.additions}</span>
+                        <span className="text-destructive">-{taskChangeSummary.deletions}</span>
                       </span>
                     </button>
                   )}
@@ -4086,7 +4086,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         className="flex h-10 w-full items-center gap-2 rounded px-2 text-left text-sm hover:bg-muted"
                         onClick={() => setWorkspacePickerPath(directory.path)}
                       >
-                        <Folder size={16} className="shrink-0 text-amber-600" />
+                        <Folder size={16} className="shrink-0 text-primary" />
                         <span className="truncate">{directory.name}</span>
                       </button>
                     ))}
@@ -4529,7 +4529,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                         <div className="truncate text-sm font-medium">{selectedConnectorDevice.name}</div>
                         <div className="mt-1 truncate text-xs text-muted-foreground">{currentSession?.connector_workspace_path || copy.unrestrictedWorkspace}</div>
                         {selectedConnectorDevice.remark && <div className="mt-1 truncate text-xs text-muted-foreground">{selectedConnectorDevice.remark}</div>}
-                        <div className={cn("mt-1 text-xs", selectedConnectorDevice.online ? "text-emerald-600" : "text-muted-foreground")}>
+                        <div className={cn("mt-1 text-xs", selectedConnectorDevice.online ? "text-primary" : "text-muted-foreground")}>
                           {selectedConnectorDevice.online ? copy.deviceOnline : copy.deviceOffline}
                         </div>
                       </div>
@@ -4821,7 +4821,7 @@ function AssistantMessageSequence({
           {block.parts.map((part, index) => (
               <div key={`${block.id}-part-${index}`} className="group space-y-1.5">
                 <div className="flex justify-start">
-                  <div className="w-fit max-w-full rounded-lg border border-slate-200 bg-background p-3 text-sm shadow-sm">
+                  <div className="w-fit max-w-full rounded-lg border border-border bg-background p-3 text-sm shadow-sm">
                     <div className="flex items-start gap-2">
                       <Bot className="mt-0.5 h-4 w-4 shrink-0" />
                       <div className="min-w-0 flex-1">
@@ -4842,7 +4842,7 @@ function AssistantMessageSequence({
                   <Button variant="ghost" size="icon" className="h-7 w-7" onClick={onEdit} title={editLabel}>
                     <Pencil size={14} />
                   </Button>
-                  <Button variant="ghost" size="icon" className="h-7 w-7 text-red-500 hover:text-red-600" onClick={onDelete} title={deleteLabel}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7 text-destructive hover:text-destructive/80" onClick={onDelete} title={deleteLabel}>
                     <Trash2 size={14} />
                   </Button>
                 </div>
@@ -5081,8 +5081,8 @@ function TaskChangesDialog({
           <DialogTitle>{copy.title}</DialogTitle>
           <div className="mt-1 flex items-center gap-3 text-xs font-medium tabular-nums">
             <span className="text-muted-foreground">{copy.summary.replace("{count}", String(summary.files.length))}</span>
-            <span className="text-emerald-600">+{summary.additions}</span>
-            <span className="text-rose-600">-{summary.deletions}</span>
+            <span className="text-primary">+{summary.additions}</span>
+            <span className="text-destructive">-{summary.deletions}</span>
           </div>
         </DialogHeader>
         <div className="grid min-h-0 md:grid-cols-[15rem_minmax(0,1fr)]">
@@ -5104,8 +5104,8 @@ function TaskChangesDialog({
                     <span className="truncate font-medium">{file.path}</span>
                   </div>
                   <div className="mt-1 flex gap-2 pl-5 text-xs font-medium tabular-nums">
-                    <span className="text-emerald-600">+{file.additions}</span>
-                    <span className="text-rose-600">-{file.deletions}</span>
+                    <span className="text-primary">+{file.additions}</span>
+                    <span className="text-destructive">-{file.deletions}</span>
                   </div>
                 </button>
               )
@@ -5187,9 +5187,9 @@ function PendingConnectorApprovalsPanel({
     return null
   }
   return (
-    <div className="rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm">
-      <div className="font-medium text-amber-900 dark:text-amber-200">{copy.connectorApprovalTitle}</div>
-      <div className="mt-1 text-xs text-amber-900/80 dark:text-amber-100/80">{copy.connectorApprovalDescription}</div>
+    <div className="rounded-md border border-primary/40 bg-primary/10 p-3 text-sm">
+      <div className="font-medium text-foreground">{copy.connectorApprovalTitle}</div>
+      <div className="mt-1 text-xs text-muted-foreground">{copy.connectorApprovalDescription}</div>
       <div className="mt-3 space-y-2">
         {tasks.map((task) => (
           <div key={task.id} className="rounded-md border bg-background p-2">
@@ -5370,7 +5370,7 @@ function AgentWorkConnectorTaskItem({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{task.action || "connector"}</span>
-            <span className={cn("rounded px-1.5 py-0.5", pending ? "bg-amber-500/10 text-amber-700 dark:text-amber-200" : "bg-muted text-muted-foreground")}>
+            <span className={cn("rounded px-1.5 py-0.5", pending ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}>
               {agentWorkStatusText(task.status, copy)}
             </span>
             {task.updated_at && <span className="text-muted-foreground">{formatAgentWorkTime(task.updated_at)}</span>}
@@ -5441,8 +5441,8 @@ function LineDiff({ oldText, newText }: { oldText: string; newText: string }) {
               key={`${hunkIndex}-${lineIndex}`}
               className={cn(
                 "grid grid-cols-[1.5rem_1fr] gap-2 whitespace-pre-wrap break-words px-2 py-0.5",
-                line.type === "remove" && "bg-red-50 text-red-800",
-                line.type === "add" && "bg-emerald-50 text-emerald-800",
+                line.type === "remove" && "bg-destructive/10 text-destructive",
+                line.type === "add" && "bg-primary/10 text-primary",
                 line.type === "context" && "text-muted-foreground"
               )}
             >
@@ -7756,10 +7756,10 @@ function booleanArgument(value: Record<string, unknown> | undefined, key: string
 function toolStatusClassName(status: string) {
   switch (status) {
     case "ok":
-      return "bg-emerald-50 text-emerald-700"
+      return "bg-primary/10 text-primary"
     case "running":
     case "approval_required":
-      return "bg-amber-50 text-amber-700"
+      return "bg-secondary text-secondary-foreground"
     case "missing":
     case "invalid_arguments":
     case "error":
