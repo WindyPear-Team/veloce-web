@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Copy, Plus, RotateCcw, RotateCw, Save, Trash } from "lucide-react"
@@ -515,16 +516,12 @@ function RestrictionPicker({
     <div className="grid gap-4 lg:grid-cols-2">
       <div className="space-y-2">
         <div className="text-sm font-medium">{t("settings.userChannels")}</div>
-        <select
-          className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-          value={channelId || ""}
-          onChange={(event) => onChannelIdChange(Number(event.target.value) || 0)}
-        >
-          <option value="">{t("admin.selectUserChannel")}</option>
+        <Select value={String((channelId || "") || "__shadcn_empty__")} onValueChange={(value) => onChannelIdChange(Number((value === "__shadcn_empty__" ? "" : value)) || 0)}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+          <SelectItem value="__shadcn_empty__">{t("admin.selectUserChannel")}</SelectItem>
           {catalog.map((channel) => (
-            <option key={channel.id} value={channel.id}>{channel.name}</option>
+            <SelectItem key={channel.id} value={String(channel.id)}>{channel.name}</SelectItem>
           ))}
-        </select>
+        </SelectContent></Select>
       </div>
 
       <div className="space-y-2">

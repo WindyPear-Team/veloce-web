@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import {
   Activity,
   ArrowDown,
@@ -832,11 +834,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
           <div className="grid gap-4 lg:grid-cols-2">
             <label className="grid gap-2 text-sm lg:col-span-2">
               <span className="font-medium">{copy.systemMode}</span>
-              <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.system_mode || "operation"} onChange={(event) => updateField("system_mode", event.target.value)}>
-                <option value="operation">{copy.systemModeOperation}</option>
-                <option value="personal">{copy.systemModePersonal}</option>
-				<option value="enterprise">{copy.systemModeEnterprise}</option>
-              </select>
+              <Select value={String((form.system_mode || "operation") || "__shadcn_empty__")} onValueChange={(value) => updateField("system_mode", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="operation">{copy.systemModeOperation}</SelectItem>
+                <SelectItem value="personal">{copy.systemModePersonal}</SelectItem>
+				<SelectItem value="enterprise">{copy.systemModeEnterprise}</SelectItem>
+              </SelectContent></Select>
               <span className="text-xs text-muted-foreground">{copy.systemModeHint}</span>
             </label>
             <TextField label={copy.siteName} value={form.site_name} placeholder={copy.siteNamePlaceholder} onChange={(value) => updateField("site_name", value)} />
@@ -887,14 +889,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                 />
                 <label className="block space-y-2 text-sm">
                   <span className="font-medium">{copy.groupMultiplierMode}</span>
-                  <select
-                    className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                    value={form.group_multiplier_mode || "min"}
-                    onChange={(event) => updateField("group_multiplier_mode", event.target.value)}
-                  >
-                    <option value="min">{copy.groupModeMin}</option>
-                    <option value="max">{copy.groupModeMax}</option>
-                  </select>
+                  <Select value={String((form.group_multiplier_mode || "min") || "__shadcn_empty__")} onValueChange={(value) => updateField("group_multiplier_mode", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                    <SelectItem value="min">{copy.groupModeMin}</SelectItem>
+                    <SelectItem value="max">{copy.groupModeMax}</SelectItem>
+                  </SelectContent></Select>
                 </label>
               </div>
               <div className="overflow-x-auto rounded-md border">
@@ -939,10 +937,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <TextField label={copy.paymentMethods} value={jsonListToCSV(form.payment_methods)} placeholder="alipay,wxpay" onChange={(value) => updateField("payment_methods", csvToJSONString(value))} />
               <label className="grid gap-2 text-sm">
                 <span className="font-medium">{copy.paymentGatewayProvider}</span>
-                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={form.payment_gateway_provider || "yipay"} onChange={(event) => updateField("payment_gateway_provider", event.target.value)}>
-                  <option value="yipay">{copy.paymentProviderYipay}</option>
-                  <option value="openpayment">{copy.paymentProviderOpenPayment}</option>
-                </select>
+                <Select value={String((form.payment_gateway_provider || "yipay") || "__shadcn_empty__")} onValueChange={(value) => updateField("payment_gateway_provider", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="yipay">{copy.paymentProviderYipay}</SelectItem>
+                  <SelectItem value="openpayment">{copy.paymentProviderOpenPayment}</SelectItem>
+                </SelectContent></Select>
               </label>
               {(form.payment_gateway_provider || "yipay") === "openpayment" ? (
                 <>
@@ -997,14 +995,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <ToggleField label={copy.sensitiveFilterEnabled} checked={form.sensitive_filter_enabled} onChange={(checked) => updateField("sensitive_filter_enabled", checked)} />
               <label className="block space-y-2 text-sm">
                 <span className="font-medium">{copy.sensitiveFilterScope}</span>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={form.sensitive_filter_scope || "request"}
-                  onChange={(event) => updateField("sensitive_filter_scope", event.target.value)}
-                >
-                  <option value="request">{copy.filterScopeRequest}</option>
-                  <option value="request_response">{copy.filterScopeRequestResponse}</option>
-                </select>
+                <Select value={String((form.sensitive_filter_scope || "request") || "__shadcn_empty__")} onValueChange={(value) => updateField("sensitive_filter_scope", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="request">{copy.filterScopeRequest}</SelectItem>
+                  <SelectItem value="request_response">{copy.filterScopeRequestResponse}</SelectItem>
+                </SelectContent></Select>
               </label>
               <ToggleField label={copy.ssrfProtectionEnabled} checked={form.ssrf_protection_enabled} onChange={(checked) => updateField("ssrf_protection_enabled", checked)} />
               <ToggleField label={copy.ssrfAllowPrivateNetworks} checked={form.ssrf_allow_private_networks} onChange={(checked) => updateField("ssrf_allow_private_networks", checked)} />
@@ -1030,14 +1024,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <EmailSuffixRoutingEditor value={form.registration_email_routing} groups={groups} onChange={(value) => updateField("registration_email_routing", value)} />
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.authAgreementMode}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={form.auth_agreement_mode || "notice"}
-                onChange={(event) => updateField("auth_agreement_mode", event.target.value)}
-              >
-                <option value="notice">{copy.authAgreementModeNotice}</option>
-                <option value="checkbox">{copy.authAgreementModeCheckbox}</option>
-              </select>
+              <Select value={String((form.auth_agreement_mode || "notice") || "__shadcn_empty__")} onValueChange={(value) => updateField("auth_agreement_mode", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="notice">{copy.authAgreementModeNotice}</SelectItem>
+                <SelectItem value="checkbox">{copy.authAgreementModeCheckbox}</SelectItem>
+              </SelectContent></Select>
             </label>
             <TextField label={copy.hcaptchaSiteKey} value={form.hcaptcha_site_key} placeholder={copy.hcaptchaSiteKeyPlaceholder} onChange={(value) => updateField("hcaptcha_site_key", value)} />
             <TextField label={copy.hcaptchaSecret} value={form.hcaptcha_secret} placeholder={copy.hcaptchaSecretPlaceholder} type="password" onChange={(value) => updateField("hcaptcha_secret", value)} />
@@ -1668,28 +1658,28 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               </div>
               <div className="grid gap-3 lg:grid-cols-[1.5fr_160px_180px_180px]">
                 <Input value={redeemSearch} placeholder={copy.redeemSearchPlaceholder} onChange={(event) => setRedeemSearch(event.target.value)} />
-                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={redeemStatusFilter} onChange={(event) => setRedeemStatusFilter(event.target.value)}>
-                  <option value="all">{copy.filterAllStatus}</option>
-                  <option value="enabled">{copy.filterEnabled}</option>
-                  <option value="disabled">{copy.filterDisabled}</option>
-                  <option value="expired">{copy.filterExpired}</option>
-                  <option value="used_up">{copy.filterUsedUp}</option>
-                </select>
-                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={redeemGroupFilter} onChange={(event) => setRedeemGroupFilter(event.target.value)}>
-                  <option value="all">{copy.filterAllGroups}</option>
-                  <option value="none">{copy.noGroupGrant}</option>
+                <Select value={String((redeemStatusFilter) || "__shadcn_empty__")} onValueChange={(value) => setRedeemStatusFilter((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="all">{copy.filterAllStatus}</SelectItem>
+                  <SelectItem value="enabled">{copy.filterEnabled}</SelectItem>
+                  <SelectItem value="disabled">{copy.filterDisabled}</SelectItem>
+                  <SelectItem value="expired">{copy.filterExpired}</SelectItem>
+                  <SelectItem value="used_up">{copy.filterUsedUp}</SelectItem>
+                </SelectContent></Select>
+                <Select value={String((redeemGroupFilter) || "__shadcn_empty__")} onValueChange={(value) => setRedeemGroupFilter((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="all">{copy.filterAllGroups}</SelectItem>
+                  <SelectItem value="none">{copy.noGroupGrant}</SelectItem>
                   {groups.map((group) => (
-                    <option key={group.id} value={group.id}>{group.name}</option>
+                    <SelectItem key={group.id} value={String(group.id)}>{group.name}</SelectItem>
                   ))}
-                </select>
-                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={redeemSort} onChange={(event) => setRedeemSort(event.target.value)}>
-                  <option value="created_desc">{copy.sortCreatedDesc}</option>
-                  <option value="created_asc">{copy.sortCreatedAsc}</option>
-                  <option value="code_asc">{copy.sortCodeAsc}</option>
-                  <option value="amount_desc">{copy.sortAmountDesc}</option>
-                  <option value="used_desc">{copy.sortUsedDesc}</option>
-                  <option value="expires_asc">{copy.sortExpiresAsc}</option>
-                </select>
+                </SelectContent></Select>
+                <Select value={String((redeemSort) || "__shadcn_empty__")} onValueChange={(value) => setRedeemSort((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="created_desc">{copy.sortCreatedDesc}</SelectItem>
+                  <SelectItem value="created_asc">{copy.sortCreatedAsc}</SelectItem>
+                  <SelectItem value="code_asc">{copy.sortCodeAsc}</SelectItem>
+                  <SelectItem value="amount_desc">{copy.sortAmountDesc}</SelectItem>
+                  <SelectItem value="used_desc">{copy.sortUsedDesc}</SelectItem>
+                  <SelectItem value="expires_asc">{copy.sortExpiresAsc}</SelectItem>
+                </SelectContent></Select>
               </div>
             </div>
 
@@ -1697,12 +1687,12 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <div className="min-w-[1200px]">
                 <div className="grid grid-cols-[42px_1.3fr_100px_140px_110px_150px_110px_120px_160px_110px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
                   <label className="flex items-center">
-                    <input type="checkbox"
+                    <Switch
                       checked={allVisibleRedeemCodesSelected}
-                      onChange={(event) => {
+                      onCheckedChange={(checked) => {
                         const visibleIDs = visibleRedeemCodes.map((code) => code.id)
                         setSelectedRedeemCodeIDs((current) => (
-                          event.target.checked
+                          checked
                             ? Array.from(new Set([...current, ...visibleIDs]))
                             : current.filter((id) => !visibleIDs.includes(id))
                         ))
@@ -1726,11 +1716,11 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                   visibleRedeemCodes.map((code) => (
                     <div key={code.id} className="grid grid-cols-[42px_1.3fr_100px_140px_110px_150px_110px_120px_160px_110px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
                       <label className="flex items-center">
-                        <input type="checkbox"
+                        <Switch
                           checked={selectedRedeemCodeIDs.includes(code.id)}
-                          onChange={(event) => {
+                          onCheckedChange={(checked) => {
                             setSelectedRedeemCodeIDs((current) => (
-                              event.target.checked ? [...current, code.id] : current.filter((id) => id !== code.id)
+                              checked ? [...current, code.id] : current.filter((id) => id !== code.id)
                             ))
                           }}
                         />
@@ -2332,7 +2322,7 @@ function ToggleField({
   return (
     <label className="flex items-center justify-between gap-4 rounded-md border p-3 text-sm">
       <span className="font-medium">{label}</span>
-      <input type="checkbox" checked={checked} className="h-4 w-4 rounded border-input" onChange={(event) => onChange(event.target.checked)} />
+      <Switch checked={checked} className="h-4 w-4 border-input" onCheckedChange={(checked) => onChange(checked)} />
     </label>
   )
 }
@@ -2385,7 +2375,7 @@ function AnnouncementDialog({
               onChange={(value) => onDraftChange({ ...draft, sort_order: value })}
             />
             <label className="flex h-10 items-center gap-2 self-end text-sm">
-              <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+              <Switch checked={draft.enabled} onCheckedChange={(checked) => onDraftChange({ ...draft, enabled: checked })} />
               {copy.enabled}
             </label>
           </div>
@@ -2442,17 +2432,17 @@ function StatusMonitorDialog({
           />
           <label className="block space-y-2 text-sm">
             <span className="font-medium">{copy.checkType}</span>
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.check_type} onChange={(event) => onDraftChange({ ...draft, check_type: event.target.value })}>
-              <option value="http">{copy.checkTypeHTTP}</option>
-              <option value="tcp">{copy.checkTypeTCP}</option>
-            </select>
+            <Select value={String((draft.check_type) || "__shadcn_empty__")} onValueChange={(value) => onDraftChange({ ...draft, check_type: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="http">{copy.checkTypeHTTP}</SelectItem>
+              <SelectItem value="tcp">{copy.checkTypeTCP}</SelectItem>
+            </SelectContent></Select>
           </label>
           <label className="block space-y-2 text-sm">
             <span className="font-medium">{copy.httpMethod}</span>
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.method} onChange={(event) => onDraftChange({ ...draft, method: event.target.value })}>
-              <option value="GET">GET</option>
-              <option value="HEAD">HEAD</option>
-            </select>
+            <Select value={String((draft.method) || "__shadcn_empty__")} onValueChange={(value) => onDraftChange({ ...draft, method: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="GET">GET</SelectItem>
+              <SelectItem value="HEAD">HEAD</SelectItem>
+            </SelectContent></Select>
           </label>
           <TextField
             label={copy.checkInterval}
@@ -2469,7 +2459,7 @@ function StatusMonitorDialog({
             onChange={(value) => onDraftChange({ ...draft, retention_hours: value })}
           />
           <label className="flex h-10 items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+            <Switch checked={draft.enabled} onCheckedChange={(checked) => onDraftChange({ ...draft, enabled: checked })} />
             {copy.enabled}
           </label>
         </div>
@@ -2591,12 +2581,12 @@ function RedeemCodeDialog({
           </label>
           <label className="block space-y-2 text-sm">
             <span className="font-medium">{copy.groupGrant}</span>
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.group_id} onChange={(event) => onDraftChange({ ...draft, group_id: event.target.value })}>
-              <option value="">{copy.noGroupGrant}</option>
+            <Select value={String((draft.group_id) || "__shadcn_empty__")} onValueChange={(value) => onDraftChange({ ...draft, group_id: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.noGroupGrant}</SelectItem>
               {groups.map((group) => (
-                <option key={group.id} value={group.id}>{group.name}</option>
+                <SelectItem key={group.id} value={String(group.id)}>{group.name}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </label>
           <TextField
             label={copy.groupDuration}
@@ -2607,12 +2597,12 @@ function RedeemCodeDialog({
           />
           <label className="block space-y-2 text-sm">
             <span className="font-medium">{copy.subscriptionPlan}</span>
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.subscription_plan_id} onChange={(event) => onDraftChange({ ...draft, subscription_plan_id: event.target.value })}>
-              <option value="">{copy.noSubscriptionPlan}</option>
+            <Select value={String((draft.subscription_plan_id) || "__shadcn_empty__")} onValueChange={(value) => onDraftChange({ ...draft, subscription_plan_id: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.noSubscriptionPlan}</SelectItem>
               {subscriptionPlans.filter((plan) => plan.enabled).map((plan) => (
-                <option key={plan.id} value={plan.id}>{plan.name}</option>
+                <SelectItem key={plan.id} value={String(plan.id)}>{plan.name}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </label>
           <TextField
             label={copy.subscriptionDuration}
@@ -2622,11 +2612,11 @@ function RedeemCodeDialog({
             onChange={(value) => onDraftChange({ ...draft, subscription_duration_days: value })}
           />
           <label className="flex h-10 items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft.allow_stacking} onChange={(event) => onDraftChange({ ...draft, allow_stacking: event.target.checked })} />
+            <Switch checked={draft.allow_stacking} onCheckedChange={(checked) => onDraftChange({ ...draft, allow_stacking: checked })} />
             {copy.allowStacking}
           </label>
           <label className="flex h-10 items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+            <Switch checked={draft.enabled} onCheckedChange={(checked) => onDraftChange({ ...draft, enabled: checked })} />
             {copy.enabled}
           </label>
         </div>
@@ -2687,7 +2677,7 @@ function SubscriptionPlanDialog({
             onChange={(value) => onDraftChange({ ...draft, reset_interval_days: value })}
           />
           <label className="flex h-10 items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+            <Switch checked={draft.enabled} onCheckedChange={(checked) => onDraftChange({ ...draft, enabled: checked })} />
             {copy.enabled}
           </label>
         </div>
@@ -2737,11 +2727,8 @@ function MetaModelDialog({
             <TextField label={copy.metaModelName} value={draft.name} placeholder={copy.metaModelNamePlaceholder} onChange={(value) => onDraftChange({ ...draft, name: value })} />
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.billingMode}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={draft.billing_mode}
-                onChange={(event) => {
-                  const billingMode = event.target.value
+              <Select value={String((draft.billing_mode) || "__shadcn_empty__")} onValueChange={(value) => {
+                  const billingMode = (value === "__shadcn_empty__" ? "" : value)
                   onDraftChange({
                     ...draft,
                     billing_mode: billingMode,
@@ -2749,11 +2736,10 @@ function MetaModelDialog({
                     output_price: billingMode === "meta" ? draft.output_price : "0",
                     cached_input_price: billingMode === "meta" ? draft.cached_input_price : "0",
                   })
-                }}
-              >
-                <option value="actual">{copy.billingModeActual}</option>
-                <option value="meta">{copy.billingModeMeta}</option>
-              </select>
+                }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="actual">{copy.billingModeActual}</SelectItem>
+                <SelectItem value="meta">{copy.billingModeMeta}</SelectItem>
+              </SelectContent></Select>
             </label>
           </div>
           <TextField label={copy.description} value={draft.description} placeholder={copy.metaModelDescriptionPlaceholder} onChange={(value) => onDraftChange({ ...draft, description: value })} />
@@ -2768,10 +2754,10 @@ function MetaModelDialog({
               <TextField label={copy.metaModelProviderIconURL} value={draft.provider_icon_url} placeholder="https://example.com/icon.png" onChange={(value) => onDraftChange({ ...draft, provider_icon_url: value })} />
             </div>
             <label className="flex items-start gap-2 text-sm">
-              <input type="checkbox"
+              <Switch
                 className="mt-1"
                 checked={draft.expose_referenced_models}
-                onChange={(event) => onDraftChange({ ...draft, expose_referenced_models: event.target.checked })}
+                onCheckedChange={(checked) => onDraftChange({ ...draft, expose_referenced_models: checked })}
               />
               <span>
                 <span className="block font-medium">{copy.metaModelExposeReferencedModels}</span>
@@ -2815,7 +2801,7 @@ function MetaModelDialog({
             ))}
           </div>
           <label className="flex h-10 items-center gap-2 text-sm">
-            <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ ...draft, enabled: event.target.checked })} />
+            <Switch checked={draft.enabled} onCheckedChange={(checked) => onDraftChange({ ...draft, enabled: checked })} />
             {copy.enabled}
           </label>
         </div>
@@ -2955,7 +2941,7 @@ function EmailSuffixRoutingEditor({ value, groups, onChange }: { value: string; 
   // Preserve incomplete rows while the administrator is editing. The backend
   // safely ignores incomplete mappings at registration time.
   const setRules = (next: Array<{ suffix: string; group_id: number }>) => onChange(JSON.stringify(next))
-  return <div className="space-y-2 rounded-md border p-3 lg:col-span-2"><div><div className="font-medium text-sm">邮箱后缀自动分组</div><p className="mt-1 text-xs text-muted-foreground">用户注册时，匹配的邮箱后缀会自动加入对应用户分组。</p></div>{rules.map((rule, index) => <div key={`${rule.suffix}-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><Input value={rule.suffix} placeholder="company.cn" onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, suffix: event.target.value.replace(/^@/, "") } : item))} /><select className="h-10 rounded-md border bg-background px-3 text-sm" value={rule.group_id} onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, group_id: Number(event.target.value) } : item))}><option value="0">选择分组</option>{groups.map((group) => <option key={group.id} value={group.id}>{group.name}</option>)}</select><Button type="button" variant="outline" onClick={() => setRules(rules.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}<Button type="button" size="sm" variant="outline" disabled={!groups.length} onClick={() => setRules([...rules, { suffix: "", group_id: groups[0]?.id || 0 }])}>添加映射</Button>{!groups.length && <p className="text-xs text-muted-foreground">请先在“用户分组”中创建分组。</p>}</div>
+  return <div className="space-y-2 rounded-md border p-3 lg:col-span-2"><div><div className="font-medium text-sm">邮箱后缀自动分组</div><p className="mt-1 text-xs text-muted-foreground">用户注册时，匹配的邮箱后缀会自动加入对应用户分组。</p></div>{rules.map((rule, index) => <div key={`${rule.suffix}-${index}`} className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"><Input value={rule.suffix} placeholder="company.cn" onChange={(event) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, suffix: event.target.value.replace(/^@/, "") } : item))} /><Select value={String((rule.group_id) || "__shadcn_empty__")} onValueChange={(value) => setRules(rules.map((item, itemIndex) => itemIndex === index ? { ...item, group_id: Number((value === "__shadcn_empty__" ? "" : value)) } : item))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="0">选择分组</SelectItem>{groups.map((group) => <SelectItem key={group.id} value={String(group.id)}>{group.name}</SelectItem>)}</SelectContent></Select><Button type="button" variant="outline" onClick={() => setRules(rules.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}<Button type="button" size="sm" variant="outline" disabled={!groups.length} onClick={() => setRules([...rules, { suffix: "", group_id: groups[0]?.id || 0 }])}>添加映射</Button>{!groups.length && <p className="text-xs text-muted-foreground">请先在“用户分组”中创建分组。</p>}</div>
 }
 
 function groupPayload(draft: GroupDraft) {

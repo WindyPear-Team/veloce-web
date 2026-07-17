@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Boxes, Search, X } from "lucide-react"
@@ -134,35 +135,23 @@ export default function ModelCatalog() {
                 placeholder={copy.searchPlaceholder}
               />
             </div>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={sortOrder}
-              onChange={(event) => setSortOrder(event.target.value as SortOrder)}
-            >
+            <Select value={String((sortOrder) || "__shadcn_empty__")} onValueChange={(value) => setSortOrder((value === "__shadcn_empty__" ? "" : value) as SortOrder)}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
               {sortOptions(copy).map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>
               ))}
-            </select>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={providerFilter}
-              onChange={(event) => setProviderFilter(event.target.value)}
-            >
-              <option value="">{copy.allProviders}</option>
+            </SelectContent></Select>
+            <Select value={String((providerFilter) || "__shadcn_empty__")} onValueChange={(value) => setProviderFilter((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.allProviders}</SelectItem>
               {providerOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>
               ))}
-            </select>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={channelFilter}
-              onChange={(event) => setChannelFilter(event.target.value)}
-            >
-              <option value="">{copy.allChannels}</option>
+            </SelectContent></Select>
+            <Select value={String((channelFilter) || "__shadcn_empty__")} onValueChange={(value) => setChannelFilter((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.allChannels}</SelectItem>
               {channelOptions.map((option) => (
-                <option key={option.value} value={option.value}>{option.label}</option>
+                <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
             <Button variant="outline" className="gap-2" disabled={!hasFilters} onClick={resetFilters}>
               <X size={16} />
               {copy.reset}

@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useState } from "react"
 import type { ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
@@ -259,18 +260,14 @@ function CallRecordsTable({
         extra={
           <label className="min-w-48 flex-1 space-y-1 text-sm">
             <span className="text-muted-foreground">{copy.apiKeyFilter}</span>
-            <select
-              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm"
-              value={apiKeyID}
-              onChange={(event) => onAPIKeyChange(event.target.value)}
-            >
-              <option value="">{copy.allAPIKeys}</option>
+            <Select value={String((apiKeyID) || "__shadcn_empty__")} onValueChange={(value) => onAPIKeyChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border border-input bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.allAPIKeys}</SelectItem>
               {apiKeys.map((key) => (
-                <option key={key.id} value={key.id}>
+                <SelectItem key={key.id} value={String(key.id)}>
                   {key.name || copy.apiKeyFallback} {key.key_prefix ? `(${key.key_prefix})` : ""}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </label>
         }
       />

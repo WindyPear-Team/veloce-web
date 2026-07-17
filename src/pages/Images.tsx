@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Download, Image as ImageIcon, WandSparkles } from "lucide-react"
@@ -408,32 +409,32 @@ const enCopy: typeof zhCopy = {
             </label>
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.mode}</span>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={mode} onChange={(event) => setMode(normalizeMode(event.target.value))}>
-                <option value="generate">{copy.modeGenerate}</option>
-                <option value="edit">{copy.modeEdit}</option>
-              </select>
+              <Select value={String((mode) || "__shadcn_empty__")} onValueChange={(value) => setMode(normalizeMode((value === "__shadcn_empty__" ? "" : value)))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="generate">{copy.modeGenerate}</SelectItem>
+                <SelectItem value="edit">{copy.modeEdit}</SelectItem>
+              </SelectContent></Select>
             </label>
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.model}</span>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={modelName} onChange={(event) => setModelName(event.target.value)}>
-                <option value="">{copy.selectModel}</option>
+              <Select value={String((modelName) || "__shadcn_empty__")} onValueChange={(value) => setModelName((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.selectModel}</SelectItem>
                 {modelOptions.map((model) => (
-                  <option key={model} value={model}>
+                  <SelectItem key={model} value={String(model)}>
                     {model}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <label className="block space-y-2 text-sm">
                 <span className="font-medium">{copy.size}</span>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={size} onChange={(event) => setSize(event.target.value)}>
+                <Select value={String((size) || "__shadcn_empty__")} onValueChange={(value) => setSize((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                   {imageSizes.map((option) => (
-                    <option key={option} value={option}>
+                    <SelectItem key={option} value={String(option)}>
                       {option === "auto" ? copy.auto : option}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
               <label className="block space-y-2 text-sm">
                 <span className="font-medium">{copy.count}</span>
@@ -454,17 +455,13 @@ const enCopy: typeof zhCopy = {
             )}
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.responseFormat}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={responseFormat}
-                onChange={(event) => setResponseFormat(normalizeResponseFormat(event.target.value))}
-              >
+              <Select value={String((responseFormat) || "__shadcn_empty__")} onValueChange={(value) => setResponseFormat(normalizeResponseFormat((value === "__shadcn_empty__" ? "" : value)))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                 {responseFormats.map((format) => (
-                  <option key={format} value={format}>
+                  <SelectItem key={format} value={String(format)}>
                     {format === "auto" ? copy.auto : format}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <div className="grid gap-3 sm:grid-cols-2">
               <OptionField label={copy.quality} value={quality} options={imageQualities} autoLabel={copy.auto} onChange={setQuality} />
@@ -593,13 +590,13 @@ function OptionField({
   return (
     <label className="block space-y-2 text-sm">
       <span className="font-medium">{label}</span>
-      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select value={String((value) || "__shadcn_empty__")} onValueChange={(value) => onChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
         {options.map((option) => (
-          <option key={option} value={option}>
+          <SelectItem key={option} value={String(option)}>
             {option === "auto" ? autoLabel : option}
-          </option>
+          </SelectItem>
         ))}
-      </select>
+      </SelectContent></Select>
     </label>
   )
 }

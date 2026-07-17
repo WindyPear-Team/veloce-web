@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ReactNode } from "react"
 import { Link, Navigate, Route, Routes, useLocation, useNavigate, useParams } from "react-router-dom"
@@ -504,7 +506,7 @@ function BasicTab({
           </SelectField>
           <Field label={copy.status}>
             <label className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
-              <input type="checkbox" checked={draft.enabled} onChange={(event) => onDraftChange({ enabled: event.target.checked })} />
+              <Switch checked={draft.enabled} onCheckedChange={(checked) => onDraftChange({ enabled: checked })} />
               {draft.enabled ? copy.enabled : copy.disabledState}
             </label>
           </Field>
@@ -668,7 +670,7 @@ function ConnectionSettings({
                 {lookups.devices.map((device) => <option key={device.id} value={device.id}>{device.name}{device.online ? "" : ` (${copy.offline})`}</option>)}
               </SelectField>
               <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-                <input type="checkbox" checked={draft.default_workspace_unrestricted} onChange={(event) => onDraftChange({ default_workspace_unrestricted: event.target.checked, default_workspace_path: event.target.checked ? "" : draft.default_workspace_path })} />
+                <Switch checked={draft.default_workspace_unrestricted} onCheckedChange={(checked) => onDraftChange({ default_workspace_unrestricted: checked, default_workspace_path: checked ? "" : draft.default_workspace_path })} />
                 {copy.unrestrictedWorkspace}
               </label>
               <Field label={copy.workspacePath}>
@@ -780,12 +782,12 @@ function TencentChannelTab({ copy, draft, current, onAdvancedChange }: { copy: C
                 {loadGuilds.isPending ? copy.loading : copy.tencentRefreshGuilds}
               </Button>
             </div>
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedGuildID} onChange={(event) => selectGuild(event.target.value)}>
-              <option value="">{copy.tencentSelectGuild}</option>
+            <Select value={String((selectedGuildID) || "__shadcn_empty__")} onValueChange={(value) => selectGuild((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.tencentSelectGuild}</SelectItem>
               {guilds.map((guild) => (
-                <option key={guild.id} value={guild.id}>{guild.name}{guild.role ? ` · ${guild.role}` : ""}</option>
+                <SelectItem key={guild.id} value={String(guild.id)}>{guild.name}{guild.role ? ` · ${guild.role}` : ""}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
             <Input value={selectedGuildID} placeholder="guild_id" onChange={(event) => updateConfigs({ guild_id: event.target.value, channel_id: selectedChannelID })} />
           </div>
 
@@ -796,12 +798,12 @@ function TencentChannelTab({ copy, draft, current, onAdvancedChange }: { copy: C
                 {loadChannels.isPending ? copy.loading : copy.tencentRefreshChannels}
               </Button>
             </div>
-            <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={selectedChannelID} onChange={(event) => updateConfig("channel_id", event.target.value)}>
-              <option value="">{copy.tencentSelectChannel}</option>
+            <Select value={String((selectedChannelID) || "__shadcn_empty__")} onValueChange={(value) => updateConfig("channel_id", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.tencentSelectChannel}</SelectItem>
               {channels.map((channel) => (
-                <option key={channel.id} value={channel.id}>{channel.name}</option>
+                <SelectItem key={channel.id} value={String(channel.id)}>{channel.name}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
             <Input value={selectedChannelID} placeholder="channel_id" onChange={(event) => updateConfig("channel_id", event.target.value)} />
           </div>
         </div>
@@ -1185,11 +1187,11 @@ function RoutingTab({
             <Input disabled={draft.default_workspace_unrestricted} value={draft.default_workspace_path} placeholder={draft.default_workspace_unrestricted ? copy.unrestrictedWorkspace : copy.workspacePathPlaceholder} onChange={(event) => onDraftChange({ default_workspace_path: event.target.value })} />
           </Field>
           <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-            <input type="checkbox" checked={draft.default_workspace_unrestricted} onChange={(event) => onDraftChange({ default_workspace_unrestricted: event.target.checked, default_workspace_path: event.target.checked ? "" : draft.default_workspace_path })} />
+            <Switch checked={draft.default_workspace_unrestricted} onCheckedChange={(checked) => onDraftChange({ default_workspace_unrestricted: checked, default_workspace_path: checked ? "" : draft.default_workspace_path })} />
             {copy.unrestrictedWorkspace}
           </label>
           <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-            <input type="checkbox" checked={draft.default_connector_auto_approve} onChange={(event) => onDraftChange({ default_connector_auto_approve: event.target.checked })} />
+            <Switch checked={draft.default_connector_auto_approve} onCheckedChange={(checked) => onDraftChange({ default_connector_auto_approve: checked })} />
             {copy.connectorAutoApprove}
           </label>
           <Field label={copy.commandPrefixes}>
@@ -1311,11 +1313,11 @@ function GroupsTab({ copy, draft, lookups, modelOptions, onDraftChange }: { copy
                   </SelectField>
                   <Field label={copy.workspacePath}><Input disabled={group.workspace_unrestricted} value={group.workspace_path} placeholder={group.workspace_unrestricted ? copy.unrestrictedWorkspace : copy.workspacePathPlaceholder} onChange={(event) => updateGroup(index, { workspace_path: event.target.value })} /></Field>
                   <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-                    <input type="checkbox" checked={group.workspace_unrestricted} onChange={(event) => updateGroup(index, { workspace_unrestricted: event.target.checked, workspace_path: event.target.checked ? "" : group.workspace_path })} />
+                    <Switch checked={group.workspace_unrestricted} onCheckedChange={(checked) => updateGroup(index, { workspace_unrestricted: checked, workspace_path: checked ? "" : group.workspace_path })} />
                     {copy.unrestrictedWorkspace}
                   </label>
                   <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-                    <input type="checkbox" checked={group.connector_auto_approve} onChange={(event) => updateGroup(index, { connector_auto_approve: event.target.checked })} />
+                    <Switch checked={group.connector_auto_approve} onCheckedChange={(checked) => updateGroup(index, { connector_auto_approve: checked })} />
                     {copy.connectorAutoApprove}
                   </label>
                   <Field label={copy.commandPrefixes}><Input value={group.connector_command_prefixes.join(",")} placeholder="go test,npm run build" onChange={(event) => updateGroup(index, { connector_command_prefixes: commandPrefixesFromText(event.target.value) })} /></Field>
@@ -1337,7 +1339,7 @@ function GroupsTab({ copy, draft, lookups, modelOptions, onDraftChange }: { copy
                   </SelectField>
                   <Field label={copy.contextCount}><Input type="number" min={0} max={100} value={group.context_message_count} onChange={(event) => updateGroup(index, { context_message_count: Number(event.target.value) || 0 })} /></Field>
                   <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-                    <input type="checkbox" checked={group.enabled} onChange={(event) => updateGroup(index, { enabled: event.target.checked })} />
+                    <Switch checked={group.enabled} onCheckedChange={(checked) => updateGroup(index, { enabled: checked })} />
                     {group.enabled ? copy.enabled : copy.disabledState}
                   </label>
                   <SkillPicker copy={copy} label={copy.skills} skills={lookups.skills} selected={group.skill_ids} onChange={(ids) => updateGroup(index, { skill_ids: ids })} />
@@ -1438,9 +1440,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function SelectField({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
   return (
     <Field label={label}>
-      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select value={String((value) || "__shadcn_empty__")} onValueChange={(value) => onChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
         {children}
-      </select>
+      </SelectContent></Select>
     </Field>
   )
 }
@@ -1528,7 +1530,7 @@ function QQIntentsPicker({ copy, value, onChange }: { copy: CopyText; value: str
       <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
         {qqIntentOptions.map((option) => (
           <label key={option.bit} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={(selected & option.bit) === option.bit} onChange={(event) => toggle(option.bit, event.target.checked)} />
+            <Switch checked={(selected & option.bit) === option.bit} onCheckedChange={(checked) => toggle(option.bit, checked)} />
             <span className="min-w-0 flex-1 truncate">{copy[option.labelKey]}</span>
             <span className="shrink-0 font-mono text-xs text-muted-foreground">{option.bit}</span>
           </label>

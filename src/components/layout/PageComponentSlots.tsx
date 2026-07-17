@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { ArrowDown, ArrowUp, Trash2 } from "lucide-react"
 import { Fragment, useState } from "react"
 import type { DragEvent, ReactNode } from "react"
@@ -47,7 +48,7 @@ interface DropTarget {
 }
 
 const selectClass =
-  "h-8 rounded-md border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+  "h-8 rounded-2xl border border-input bg-background px-2 text-xs ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
 export function PageComponentSlots({ pageKey, slotKey, defaultItems = [], className }: PageComponentSlotsProps) {
   const editor = usePageLayoutEditor()
@@ -228,16 +229,11 @@ function EditableSlot({
                       <span>{pageComponentLabel(item.type, editor.language)}</span>
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <select
-                        className={selectClass}
-                        value={item.width || "half"}
-                        aria-label={editor.copy.width}
-                        onChange={(event) => editor.updateComponentWidth(pageKey, slotKey, item.id, event.target.value as PageComponentWidth)}
-                      >
-                        <option value="full">{editor.copy.widthFull}</option>
-                        <option value="half">{editor.copy.widthHalf}</option>
-                        <option value="third">{editor.copy.widthThird}</option>
-                      </select>
+                      <Select value={String((item.width || "half") || "__shadcn_empty__")} onValueChange={(value) => editor.updateComponentWidth(pageKey, slotKey, item.id, (value === "__shadcn_empty__" ? "" : value) as PageComponentWidth)}><SelectTrigger className={selectClass} aria-label={editor.copy.width}><SelectValue /></SelectTrigger><SelectContent>
+                        <SelectItem value="full">{editor.copy.widthFull}</SelectItem>
+                        <SelectItem value="half">{editor.copy.widthHalf}</SelectItem>
+                        <SelectItem value="third">{editor.copy.widthThird}</SelectItem>
+                      </SelectContent></Select>
                       <IconButton label={editor.copy.moveUp} disabled={index === 0} onClick={() => editor.moveComponent(pageKey, slotKey, index, -1)}>
                         <ArrowUp className="h-4 w-4" />
                       </IconButton>
@@ -416,17 +412,13 @@ function ConfigFieldControl({
     return (
       <label className={className}>
         <span>{label}</span>
-        <select
-          className={cn(configInputClass, "h-9")}
-          value={stringConfig(config, field.key)}
-          onChange={(event) => onChange(event.target.value)}
-        >
+        <Select value={String((stringConfig(config, field.key)) || "__shadcn_empty__")} onValueChange={(value) => onChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className={cn(configInputClass, "h-9")}><SelectValue /></SelectTrigger><SelectContent>
           {(field.options || []).map((option) => (
-            <option key={option.value} value={option.value}>
+            <SelectItem key={option.value} value={String(option.value)}>
               {language === "zh" ? option.label.zh : option.label.en}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </SelectContent></Select>
       </label>
     )
   }
@@ -481,7 +473,7 @@ function IconButton({
 }
 
 const configInputClass =
-  "w-full rounded-md border border-input bg-background px-3 text-sm font-normal ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+  "w-full rounded-2xl border border-input bg-background px-3 text-sm font-normal ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
 
 const toneFieldOptions: ConfigFieldOption[] = [
   { value: "neutral", label: { zh: "默认", en: "Neutral" } },

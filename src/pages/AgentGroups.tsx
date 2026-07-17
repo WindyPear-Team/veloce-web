@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Plus, RefreshCcw, Save, Trash2, Users } from "lucide-react"
@@ -226,14 +227,14 @@ export default function AgentGroups() {
           <p className="mt-1 text-sm text-muted-foreground">{copy.subtitle}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <select className="h-10 min-w-60 rounded-md border bg-background px-3 text-sm" value={selectedDeviceID} onChange={(event) => setSelectedDeviceID(event.target.value)}>
-            <option value="">{copy.selectDevice}</option>
+          <Select value={String((selectedDeviceID) || "__shadcn_empty__")} onValueChange={(value) => setSelectedDeviceID((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 min-w-60 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+            <SelectItem value="__shadcn_empty__">{copy.selectDevice}</SelectItem>
             {devices.map((device) => (
-              <option key={device.id} value={device.id}>
+              <SelectItem key={device.id} value={String(device.id)}>
                 {device.name}{device.online ? "" : ` (${copy.offline})`}
-              </option>
+              </SelectItem>
             ))}
-          </select>
+          </SelectContent></Select>
           <Button variant="outline" className="gap-2" disabled={!selectedDeviceID || isFetching} onClick={() => refetch()}>
             <RefreshCcw size={16} />
             {copy.refresh}
@@ -319,23 +320,23 @@ export default function AgentGroups() {
                       <Input value={agent.name} onChange={(event) => updateAgent(index, { name: event.target.value })} />
                     </Field>
                     <Field label={copy.agentType}>
-                      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={agent.type} onChange={(event) => updateAgent(index, { type: event.target.value as AgentGroupAgent["type"] })}>
-                        <option value="chief">chief</option>
-                        <option value="worker">worker</option>
-                        <option value="critic">critic</option>
-                        <option value="reviewer">reviewer</option>
-                        <option value="checker">checker</option>
-                      </select>
+                      <Select value={String((agent.type) || "__shadcn_empty__")} onValueChange={(value) => updateAgent(index, { type: (value === "__shadcn_empty__" ? "" : value) as AgentGroupAgent["type"] })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                        <SelectItem value="chief">chief</SelectItem>
+                        <SelectItem value="worker">worker</SelectItem>
+                        <SelectItem value="critic">critic</SelectItem>
+                        <SelectItem value="reviewer">reviewer</SelectItem>
+                        <SelectItem value="checker">checker</SelectItem>
+                      </SelectContent></Select>
                     </Field>
                     <Field label={copy.boundAgent}>
-                      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={agent.chat_agent_id || ""} onChange={(event) => selectChatAgent(index, event.target.value)}>
-                        <option value="">{chatAgents.length ? copy.selectAgent : copy.noAgents}</option>
+                      <Select value={String((agent.chat_agent_id || "") || "__shadcn_empty__")} onValueChange={(value) => selectChatAgent(index, (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                        <SelectItem value="__shadcn_empty__">{chatAgents.length ? copy.selectAgent : copy.noAgents}</SelectItem>
                         {chatAgents.map((item) => (
-                          <option key={item.id} value={item.id}>
+                          <SelectItem key={item.id} value={String(item.id)}>
                             {item.name}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
+                      </SelectContent></Select>
                     </Field>
                     <div className="flex items-end">
                       <Button variant="ghost" size="icon" disabled={draft.agents.length <= 1} onClick={() => removeAgent(index)} title={copy.removeAgent}>

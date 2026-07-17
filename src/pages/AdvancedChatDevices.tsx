@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { ArrowLeft, Copy, KeyRound, Laptop, Play, Plus, RefreshCcw, Save, Server, Settings, Square, Terminal, Trash2, XCircle } from "lucide-react"
@@ -300,21 +301,17 @@ export default function AdvancedChatDevices() {
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.deviceType}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={deviceMode}
-                onChange={(event) => {
-                  const mode = normalizeDeviceMode(event.target.value)
+              <Select value={String((deviceMode) || "__shadcn_empty__")} onValueChange={(value) => {
+                  const mode = normalizeDeviceMode((value === "__shadcn_empty__" ? "" : value))
                   setDeviceMode(mode)
                   setToken("")
                   if (mode === "web_server" && !listenPort) {
                     setListenPort(8080)
                   }
-                }}
-              >
-                <option value="platform">{copy.standardDevice}</option>
-                <option value="web_server">{copy.websiteDevice}</option>
-              </select>
+                }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="platform">{copy.standardDevice}</SelectItem>
+                <SelectItem value="web_server">{copy.websiteDevice}</SelectItem>
+              </SelectContent></Select>
             </label>
             {deviceMode === "web_server" && (
               <label className="space-y-1 text-sm">

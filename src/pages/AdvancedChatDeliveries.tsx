@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
 import type { ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -261,10 +263,10 @@ export default function AdvancedChatDeliveries() {
             <div className="grid gap-4 md:grid-cols-2">
               <Field label={copy.name}><Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
               <Field label={copy.method}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.method} onChange={(event) => setForm({ ...form, method: event.target.value as DeliveryForm["method"] })}>
-                  <option value="webhook">{copy.webhook}</option>
-                  <option value="email">{copy.email}</option>
-                </select>
+                <Select value={String((form.method) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, method: (value === "__shadcn_empty__" ? "" : value) as DeliveryForm["method"] })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="webhook">{copy.webhook}</SelectItem>
+                  <SelectItem value="email">{copy.email}</SelectItem>
+                </SelectContent></Select>
               </Field>
             </div>
             <Field label={copy.description}>
@@ -296,7 +298,7 @@ export default function AdvancedChatDeliveries() {
               </>
             )}
             <label className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-              <input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />
+              <Switch checked={form.enabled} onCheckedChange={(checked) => setForm({ ...form, enabled: checked })} />
               <span className="font-medium">{copy.enabled}</span>
             </label>
           </div>

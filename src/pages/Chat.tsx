@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useRef, useState } from "react"
 import type { ChangeEvent, KeyboardEvent, MouseEvent as ReactMouseEvent, ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -3074,40 +3075,28 @@ export default function Chat({ variant = "basic" }: ChatProps) {
         <CardTitle>{copy.config}</CardTitle>
       </CardHeader>
       <CardContent className="grid gap-3 lg:grid-cols-[minmax(0,1.4fr)_220px_minmax(0,1fr)]">
-        <select
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-          value={selectedAPIKey?.id || ""}
-          onChange={(event) => setSelectedAPIKeyID(Number(event.target.value) || 0)}
-        >
-          <option value="">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</option>
+        <Select value={String((selectedAPIKey?.id || "") || "__shadcn_empty__")} onValueChange={(value) => setSelectedAPIKeyID(Number((value === "__shadcn_empty__" ? "" : value)) || 0)}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+          <SelectItem value="__shadcn_empty__">{selectableAPIKeys.length ? copy.selectKey : copy.noKeys}</SelectItem>
           {selectableAPIKeys.map((key) => (
-            <option key={key.id} value={key.id}>
+            <SelectItem key={key.id} value={String(key.id)}>
               {key.name || key.key_prefix}
-            </option>
+            </SelectItem>
           ))}
-        </select>
-        <select
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-          value={endpointMode}
-          onChange={(event) => setEndpointMode(normalizeEndpoint(event.target.value))}
-        >
-          <option value="chat">{copy.chatCompletions}</option>
-          <option value="responses">{copy.responsesAPI}</option>
-          <option value="claude">{copy.claudeMessages}</option>
-          <option value="gemini">{copy.geminiGenerate}</option>
-        </select>
-        <select
-          className="h-10 rounded-md border bg-background px-3 text-sm"
-          value={modelName}
-          onChange={(event) => setModelName(event.target.value)}
-        >
-          <option value="">{copy.selectModel}</option>
+        </SelectContent></Select>
+        <Select value={String((endpointMode) || "__shadcn_empty__")} onValueChange={(value) => setEndpointMode(normalizeEndpoint((value === "__shadcn_empty__" ? "" : value)))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+          <SelectItem value="chat">{copy.chatCompletions}</SelectItem>
+          <SelectItem value="responses">{copy.responsesAPI}</SelectItem>
+          <SelectItem value="claude">{copy.claudeMessages}</SelectItem>
+          <SelectItem value="gemini">{copy.geminiGenerate}</SelectItem>
+        </SelectContent></Select>
+        <Select value={String((modelName) || "__shadcn_empty__")} onValueChange={(value) => setModelName((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+          <SelectItem value="__shadcn_empty__">{copy.selectModel}</SelectItem>
           {modelSelectOptions.map((model) => (
-            <option key={model} value={model}>
+            <SelectItem key={model} value={String(model)}>
               {model}
-            </option>
+            </SelectItem>
           ))}
-        </select>
+        </SelectContent></Select>
       </CardContent>
     </Card>
   )
@@ -3670,16 +3659,12 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
                       <label className="block text-xs font-medium text-muted-foreground">
                         <span className="mb-1.5 flex items-center gap-1.5"><GitCompareArrows size={14} />{gitCopy.compareBranch}</span>
-                        <select
-                          className="h-9 w-full rounded-md border border-border bg-background px-2 text-sm text-foreground"
-                          value={gitCompareBranch}
-                          onChange={(event) => setGitCompareBranch(event.target.value)}
-                        >
-                          <option value="">{gitCopy.noComparison}</option>
+                        <Select value={String((gitCompareBranch) || "__shadcn_empty__")} onValueChange={(value) => setGitCompareBranch((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-9 w-full rounded-2xl border border-border bg-background px-2 text-sm text-foreground"><SelectValue /></SelectTrigger><SelectContent>
+                          <SelectItem value="__shadcn_empty__">{gitCopy.noComparison}</SelectItem>
                           {(gitStatusQuery.data?.branches || []).filter((branch) => branch !== gitStatusQuery.data?.current_branch).map((branch) => (
-                            <option key={branch} value={branch}>{branch}</option>
+                            <SelectItem key={branch} value={String(branch)}>{branch}</SelectItem>
                           ))}
-                        </select>
+                        </SelectContent></Select>
                       </label>
 
                       <div className="space-y-2 border-t border-border/70 pt-3">
@@ -4216,41 +4201,33 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   {activeRunMode !== "agent_group" && (
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">{copy.sessionModel}</span>
-                      <select
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        value={activeModelName}
-                        onChange={(event) => handleSessionModelChange(event.target.value)}
-                      >
-                        <option value="">{copy.selectModel}</option>
+                      <Select value={String((activeModelName) || "__shadcn_empty__")} onValueChange={(value) => handleSessionModelChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                        <SelectItem value="__shadcn_empty__">{copy.selectModel}</SelectItem>
                         {modelSelectOptions.map((model) => (
-                          <option key={model} value={model}>
+                          <SelectItem key={model} value={String(model)}>
                             {model}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
+                      </SelectContent></Select>
                     </label>
                   )}
 
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{copy.channel}</span>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={selectedUserChannel?.id || ""}
-                      onChange={(event) => {
-                        const nextID = Number(event.target.value) || 0
+                    <Select value={String((selectedUserChannel?.id || "") || "__shadcn_empty__")} onValueChange={(value) => {
+                        const nextID = Number((value === "__shadcn_empty__" ? "" : value)) || 0
                         setSelectedUserChannelID(nextID)
                         if (currentSession) {
                           updateSession(currentSession.id, (session) => ({ ...session, user_channel_id: nextID || undefined }), { persist: true })
                         }
-                      }}
-                    >
-                      <option value="">{selectableUserChannels.length ? copy.selectChannel : copy.noChannels}</option>
+                      }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="__shadcn_empty__">{selectableUserChannels.length ? copy.selectChannel : copy.noChannels}</SelectItem>
                       {selectableUserChannels.map((channel) => (
-                        <option key={channel.id} value={channel.id}>
+                        <SelectItem key={channel.id} value={String(channel.id)}>
                           {channel.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
+                    </SelectContent></Select>
                   </label>
                 </div>
               )}
@@ -4276,21 +4253,17 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   </label>
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{copy.reasoningEffort}</span>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={currentSession?.reasoning_effort || ""}
-                      onChange={(event) => {
+                    <Select value={String((currentSession?.reasoning_effort || "") || "__shadcn_empty__")} onValueChange={(value) => {
                         if (currentSession) {
-                          updateSession(currentSession.id, (session) => ({ ...session, reasoning_effort: event.target.value }), { persist: true })
+                          updateSession(currentSession.id, (session) => ({ ...session, reasoning_effort: (value === "__shadcn_empty__" ? "" : value) }), { persist: true })
                         }
-                      }}
-                    >
-                      <option value="">{copy.reasoningDefault}</option>
-                      <option value="minimal">{copy.reasoningMinimal}</option>
-                      <option value="low">{copy.reasoningLow}</option>
-                      <option value="medium">{copy.reasoningMedium}</option>
-                      <option value="high">{copy.reasoningHigh}</option>
-                    </select>
+                      }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="__shadcn_empty__">{copy.reasoningDefault}</SelectItem>
+                      <SelectItem value="minimal">{copy.reasoningMinimal}</SelectItem>
+                      <SelectItem value="low">{copy.reasoningLow}</SelectItem>
+                      <SelectItem value="medium">{copy.reasoningMedium}</SelectItem>
+                      <SelectItem value="high">{copy.reasoningHigh}</SelectItem>
+                    </SelectContent></Select>
                   </label>
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{copy.maxTokens}</span>
@@ -4337,18 +4310,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <div className="rounded-md border border-dashed px-3 py-5 text-center text-sm text-muted-foreground">{copy.noAgentAdded}</div>
                   )}
                   <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
-                    <select
-                      className="h-10 rounded-md border bg-background px-3 text-sm"
-                      value={pendingAgentID}
-                      onChange={(event) => setPendingAgentID(event.target.value)}
-                    >
-                      {agents.length === 0 && <option value="">{copy.noAgents}</option>}
+                    <Select value={String((pendingAgentID) || "__shadcn_empty__")} onValueChange={(value) => setPendingAgentID((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      {agents.length === 0 && <SelectItem value="__shadcn_empty__">{copy.noAgents}</SelectItem>}
                       {agents.map((agent) => (
-                        <option key={agent.id} value={agent.id}>
+                        <SelectItem key={agent.id} value={String(agent.id)}>
                           {agent.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
+                    </SelectContent></Select>
                     <Button className="gap-2" disabled={!pendingAgentID} onClick={() => setSessionAgent(pendingAgentID)}>
                       <Check size={16} />
                       {selectedAgent ? copy.replaceAgent : copy.setAgent}
@@ -4494,19 +4463,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   )}
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{agentGroupCopy.selectGroup}</span>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={currentSession?.agent_group_id || ""}
-                      disabled={isFetchingAgentGroups}
-                      onChange={(event) => setSessionAgentGroup(event.target.value)}
-                    >
-                      <option value="">{agentGroups.length ? agentGroupCopy.selectGroup : agentGroupCopy.noGroups}</option>
+                    <Select value={String((currentSession?.agent_group_id || "") || "__shadcn_empty__")} disabled={isFetchingAgentGroups} onValueChange={(value) => setSessionAgentGroup((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="__shadcn_empty__">{agentGroups.length ? agentGroupCopy.selectGroup : agentGroupCopy.noGroups}</SelectItem>
                       {agentGroups.map((group) => (
-                        <option key={group.id} value={group.id}>
+                        <SelectItem key={group.id} value={String(group.id)}>
                           {group.name}
-                        </option>
+                        </SelectItem>
                       ))}
-                    </select>
+                    </SelectContent></Select>
                   </label>
                 </div>
               )}
@@ -4578,18 +4542,14 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   <div className="grid gap-3 sm:grid-cols-[1fr_1.5fr_auto]">
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">{copy.selectDevice}</span>
-                      <select
-                        className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                        value={pendingConnectorDeviceID}
-                        onChange={(event) => setPendingConnectorDeviceID(event.target.value)}
-                      >
-                        <option value="">{selectableConnectorDevices.length ? copy.selectDevice : copy.noDevices}</option>
+                      <Select value={String((pendingConnectorDeviceID) || "__shadcn_empty__")} onValueChange={(value) => setPendingConnectorDeviceID((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                        <SelectItem value="__shadcn_empty__">{selectableConnectorDevices.length ? copy.selectDevice : copy.noDevices}</SelectItem>
                         {selectableConnectorDevices.map((device) => (
-                          <option key={device.id} value={device.id}>
+                          <SelectItem key={device.id} value={String(device.id)}>
                             {device.name}{device.online ? "" : ` (${copy.deviceOffline})`}
-                          </option>
+                          </SelectItem>
                         ))}
-                      </select>
+                      </SelectContent></Select>
                     </label>
                     <label className="space-y-1 text-sm">
                       <span className="font-medium">{copy.workspacePath}</span>
@@ -4623,15 +4583,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                   </div>
                   <label className="space-y-1 text-sm">
                     <span className="font-medium">{approvalModeCopy.label}</span>
-                    <select
-                      className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                      value={pendingConnectorApprovalMode}
-                      onChange={(event) => setPendingConnectorApprovalMode(normalizeConnectorApprovalMode(event.target.value))}
-                    >
-                      <option value="manual">{approvalModeCopy.manual}</option>
-                      <option value="full_access">{approvalModeCopy.fullAccess}</option>
-                      <option value="assistant" disabled={!currentAdvancedSettings.connector_approval_agent_id}>{approvalModeCopy.assistant}</option>
-                    </select>
+                    <Select value={String((pendingConnectorApprovalMode) || "__shadcn_empty__")} onValueChange={(value) => setPendingConnectorApprovalMode(normalizeConnectorApprovalMode((value === "__shadcn_empty__" ? "" : value)))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="manual">{approvalModeCopy.manual}</SelectItem>
+                      <SelectItem value="full_access">{approvalModeCopy.fullAccess}</SelectItem>
+                      <SelectItem value="assistant" disabled={!currentAdvancedSettings.connector_approval_agent_id}>{approvalModeCopy.assistant}</SelectItem>
+                    </SelectContent></Select>
                     {pendingConnectorApprovalMode === "assistant" && !currentAdvancedSettings.connector_approval_agent_id && (
                       <span className="block text-xs text-destructive">{approvalModeCopy.agentRequired}</span>
                     )}

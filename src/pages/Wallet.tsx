@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CalendarCheck, Copy, CreditCard, Gift, WalletCards } from "lucide-react"
 import { useState } from "react"
@@ -210,11 +211,11 @@ export default function Wallet() {
               </div>
               <div className="grid gap-2 sm:grid-cols-[1fr_160px]">
                 <Input value={rechargeAmount} type="number" min="0" placeholder={copy.rechargeAmountPlaceholder} onChange={(event) => setRechargeAmount(event.target.value)} />
-                <select className="h-10 rounded-md border bg-background px-3 text-sm" value={paymentMethod} onChange={(event) => setPaymentMethod(event.target.value)}>
+                <Select value={String((paymentMethod) || "__shadcn_empty__")} onValueChange={(value) => setPaymentMethod((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                   {(paymentConfig?.methods || parseJSONList(publicSettings.payment_methods)).map((method) => (
-                    <option key={method} value={method}>{paymentMethodLabel(method, copy)}</option>
+                    <SelectItem key={method} value={String(method)}>{paymentMethodLabel(method, copy)}</SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </div>
               <Button className="w-full gap-2" disabled={!canCreatePaymentOrder(rechargeAmount, paymentConfig, publicSettings) || createPaymentOrder.isPending} onClick={() => createPaymentOrder.mutate()}>
                 <CreditCard size={16} />

@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
@@ -379,16 +381,12 @@ export default function MessageChannels() {
                 <Input value={draft.name} onChange={(event) => setDraft((current) => ({ ...current, name: event.target.value }))} />
               </Field>
               <Field label={copy.provider}>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={draft.provider}
-                  onChange={(event) => {
-                    const provider = event.target.value as Draft["provider"]
+                <Select value={String((draft.provider) || "__shadcn_empty__")} onValueChange={(value) => {
+                    const provider = (value === "__shadcn_empty__" ? "" : value) as Draft["provider"]
                     setDraft((current) => ({ ...current, provider, bot_token: providerUsesBotToken(provider) ? current.bot_token : "" }))
-                  }}
-                >
-                  {providerOptions.map((provider) => <option key={provider.value} value={provider.value}>{provider.label}</option>)}
-                </select>
+                  }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  {providerOptions.map((provider) => <SelectItem key={provider.value} value={String(provider.value)}>{provider.label}</SelectItem>)}
+                </SelectContent></Select>
               </Field>
               {providerUsesBotToken(draft.provider) && (
                 <Field label={copy.botToken}>
@@ -403,10 +401,10 @@ export default function MessageChannels() {
               {draft.provider === "qq" && (
                 <>
                   <Field label={copy.qqConnectionMode}>
-                    <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={qqConnectionMode} onChange={(event) => updateProviderConfig("connection_mode", event.target.value)}>
-                      <option value="webhook">{copy.qqConnectionWebhook}</option>
-                      <option value="websocket">{copy.qqConnectionWebSocket}</option>
-                    </select>
+                    <Select value={String((qqConnectionMode) || "__shadcn_empty__")} onValueChange={(value) => updateProviderConfig("connection_mode", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="webhook">{copy.qqConnectionWebhook}</SelectItem>
+                      <SelectItem value="websocket">{copy.qqConnectionWebSocket}</SelectItem>
+                    </SelectContent></Select>
                   </Field>
                   <Field label={copy.qqBotID}>
                     <Input value={providerConfig.bot_id || ""} placeholder="1020..." onChange={(event) => updateProviderConfig("bot_id", event.target.value)} />
@@ -428,16 +426,16 @@ export default function MessageChannels() {
                     </div>
                   </Field>
                   <Field label={copy.qqMsgType}>
-                    <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={providerConfig.msg_type || "2"} onChange={(event) => updateProviderConfig("msg_type", event.target.value)}>
-                      <option value="0">{copy.qqMsgTypeText}</option>
-                      <option value="2">{copy.qqMsgTypeMarkdown}</option>
-                    </select>
+                    <Select value={String((providerConfig.msg_type || "2") || "__shadcn_empty__")} onValueChange={(value) => updateProviderConfig("msg_type", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                      <SelectItem value="0">{copy.qqMsgTypeText}</SelectItem>
+                      <SelectItem value="2">{copy.qqMsgTypeMarkdown}</SelectItem>
+                    </SelectContent></Select>
                   </Field>
                 </>
               )}
               <Field label={copy.status}>
                 <label className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
-                  <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+                  <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft((current) => ({ ...current, enabled: checked }))} />
                   {draft.enabled ? copy.enabled : copy.disabledState}
                 </label>
               </Field>
@@ -540,7 +538,7 @@ export default function MessageChannels() {
                           <Input type="number" min={0} max={100} value={group.context_message_count} onChange={(event) => updateGroup(index, { context_message_count: Number(event.target.value) || 0 })} />
                         </Field>
                         <label className="flex h-10 items-center gap-2 self-end rounded-md border px-3 text-sm">
-                          <input type="checkbox" checked={group.enabled} onChange={(event) => updateGroup(index, { enabled: event.target.checked })} />
+                          <Switch checked={group.enabled} onCheckedChange={(checked) => updateGroup(index, { enabled: checked })} />
                           {group.enabled ? copy.enabled : copy.disabledState}
                         </label>
                         <SkillPicker label={copy.skills} skills={skills} selected={group.skill_ids} onChange={(ids) => updateGroup(index, { skill_ids: ids })} />
@@ -572,9 +570,9 @@ function Field({ label, children }: { label: string; children: ReactNode }) {
 function SelectField({ label, value, onChange, children }: { label: string; value: string; onChange: (value: string) => void; children: ReactNode }) {
   return (
     <Field label={label}>
-      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select value={String((value) || "__shadcn_empty__")} onValueChange={(value) => onChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
         {children}
-      </select>
+      </SelectContent></Select>
     </Field>
   )
 }
@@ -589,10 +587,10 @@ function SkillPicker({ label, skills, selected, onChange }: { label: string; ski
         ) : (
           skills.map((skill) => (
             <label key={skill.id} className="flex items-center gap-2 text-sm">
-              <input type="checkbox"
+              <Switch
                 checked={selected.includes(skill.id)}
-                onChange={(event) => {
-                  onChange(event.target.checked ? [...selected, skill.id] : selected.filter((id) => id !== skill.id))
+                onCheckedChange={(checked) => {
+                  onChange(checked ? [...selected, skill.id] : selected.filter((id) => id !== skill.id))
                 }}
               />
               <span className="truncate">{skill.name}</span>
@@ -616,7 +614,7 @@ function QQIntentsPicker({ copy, value, onChange }: { copy: typeof zhCopy; value
       <div className="grid gap-2 rounded-md border p-3 sm:grid-cols-2">
         {qqIntentOptions.map((option) => (
           <label key={option.bit} className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={(selected & option.bit) === option.bit} onChange={(event) => toggle(option.bit, event.target.checked)} />
+            <Switch checked={(selected & option.bit) === option.bit} onCheckedChange={(checked) => toggle(option.bit, checked)} />
             <span className="min-w-0 flex-1 truncate">{copy[option.labelKey]}</span>
             <span className="shrink-0 font-mono text-xs text-muted-foreground">{option.bit}</span>
           </label>

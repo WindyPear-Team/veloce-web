@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Download, Edit, Plus, Trash } from "lucide-react"
@@ -330,16 +332,12 @@ export default function Models() {
         <CardContent>
           <div className="grid gap-3 md:grid-cols-[minmax(0,1fr)_auto]">
             <FieldLabel label={copy.sourceChannel}>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={priceChannelID || ""}
-                onChange={(event) => setPriceChannelID(Number(event.target.value) || 0)}
-              >
-                <option value="">{copy.selectChannel}</option>
+              <Select value={String((priceChannelID || "") || "__shadcn_empty__")} onValueChange={(value) => setPriceChannelID(Number((value === "__shadcn_empty__" ? "" : value)) || 0)}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.selectChannel}</SelectItem>
                 {channels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>{channel.name}</option>
+                  <SelectItem key={channel.id} value={String(channel.id)}>{channel.name}</SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </FieldLabel>
             <Button className="gap-2 self-end" disabled={!priceChannelID || previewPriceSync.isPending || browserPreviewSync.isPending} onClick={() => previewPriceSync.mutate()}>
               <Download size={16} />
@@ -478,11 +476,8 @@ function ModelDialog({
             />
           </FieldLabel>
           <FieldLabel label={copy.provider}>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={providerMode}
-              onChange={(event) => {
-                const providerID = event.target.value
+            <Select value={String((providerMode) || "__shadcn_empty__")} onValueChange={(value) => {
+                const providerID = (value === "__shadcn_empty__" ? "" : value)
                 setProviderMode(providerID)
                 if (providerID === "auto" || providerID === "custom") {
                   setDraft({ ...draft, provider: "", provider_icon_url: "" })
@@ -490,14 +485,13 @@ function ModelDialog({
                 }
                 const preset = providerPresets.find((item) => item.id === providerID)
                 setDraft({ ...draft, provider: providerID, provider_icon_url: preset?.iconURL || "" })
-              }}
-            >
-              <option value="auto">{copy.autoProvider}</option>
+              }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="auto">{copy.autoProvider}</SelectItem>
               {providerPresets.map((provider) => (
-                <option key={provider.id} value={provider.id}>{provider.name}</option>
+                <SelectItem key={provider.id} value={String(provider.id)}>{provider.name}</SelectItem>
               ))}
-              <option value="custom">{copy.customProvider}</option>
-            </select>
+              <SelectItem value="custom">{copy.customProvider}</SelectItem>
+            </SelectContent></Select>
           </FieldLabel>
           {providerMode === "custom" && (
             <FieldLabel label={copy.customProviderName}>
@@ -516,15 +510,11 @@ function ModelDialog({
             />
           </FieldLabel>
           <FieldLabel label={copy.quotaType}>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={String(draft.quota_type ?? 0)}
-              onChange={(event) => setDraft({ ...draft, quota_type: Number(event.target.value) || 0 })}
-            >
-              <option value="0">{copy.quotaToken}</option>
-              <option value="1">{copy.quotaPerCall}</option>
-              <option value="100">{copy.quotaVideo}</option>
-            </select>
+            <Select value={String((String(draft.quota_type ?? 0)) || "__shadcn_empty__")} onValueChange={(value) => setDraft({ ...draft, quota_type: Number((value === "__shadcn_empty__" ? "" : value)) || 0 })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="0">{copy.quotaToken}</SelectItem>
+              <SelectItem value="1">{copy.quotaPerCall}</SelectItem>
+              <SelectItem value="100">{copy.quotaVideo}</SelectItem>
+            </SelectContent></Select>
           </FieldLabel>
           {(draft.quota_type ?? 0) === 100 && (
             <VideoBillingEditor
@@ -612,7 +602,7 @@ function ModelDialog({
             />
           </PriceSection>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={Boolean(draft.enabled)} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            <Switch checked={Boolean(draft.enabled)} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
             {t("common.enabled")}
           </label>
         </div>
@@ -669,7 +659,7 @@ function PriceSyncPreviewDialog({
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>{preview.channel_name} · {preview.source}</span>
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={allSelected} onChange={(event) => toggleAll(event.target.checked)} />
+                <Switch checked={allSelected} onCheckedChange={(checked) => toggleAll(checked)} />
                 {copy.selectAll}
               </label>
             </div>
@@ -694,9 +684,9 @@ function PriceSyncPreviewDialog({
                     models.map((item) => (
                       <TableRow key={item.model_name}>
                         <TableCell>
-                          <input type="checkbox"
+                          <Switch
                             checked={selectedSet.has(item.model_name)}
-                            onChange={(event) => toggleModel(item.model_name, event.target.checked)}
+                            onCheckedChange={(checked) => toggleModel(item.model_name, checked)}
                           />
                         </TableCell>
                         <TableCell className="font-mono text-xs">{item.model_name}</TableCell>
@@ -767,9 +757,9 @@ function BrowserSyncFallbackDialog({
               <Input value={fallback.url} readOnly />
             </FieldLabel>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox"
+              <Switch
                 checked={fallback.includeToken}
-                onChange={(event) => onChange({ ...fallback, includeToken: event.target.checked })}
+                onCheckedChange={(checked) => onChange({ ...fallback, includeToken: checked })}
               />
               {copy.includeChannelToken}
             </label>
@@ -1032,15 +1022,11 @@ function TierEditor({
         <div className="space-y-2">
           {normalized.map((tier, index) => (
             <div key={`${tier.condition || "current"}-${tier.min_tokens}-${index}`} className="grid grid-cols-1 gap-2 sm:grid-cols-[minmax(150px,1.3fr)_minmax(120px,1fr)_minmax(120px,1fr)_auto]">
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={tier.condition || ""}
-                onChange={(event) => updateTier(index, { condition: event.target.value })}
-              >
+              <Select value={String((tier.condition || "") || "__shadcn_empty__")} onValueChange={(value) => updateTier(index, { condition: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                 {tierConditionOptions(copy).map((option) => (
-                  <option key={option.value || "current"} value={option.value}>{option.label}</option>
+                  <SelectItem key={option.value || "current"} value={String(option.value)}>{option.label}</SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
               <Input
                 type="number"
                 value={String(tier.min_tokens)}

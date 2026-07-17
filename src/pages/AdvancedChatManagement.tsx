@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui/switch"
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bot, Pencil, Plus, Save, Trash2 } from "lucide-react"
@@ -514,7 +515,7 @@ export default function AdvancedChatManagement({ mode = "attachments" }: { mode?
               />
             </label>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+              <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft((current) => ({ ...current, enabled: checked }))} />
               启用
             </label>
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">管理员内置 MCP 服务器由后端请求。</div>
@@ -547,10 +548,10 @@ function ToggleRow({
 }) {
   return (
     <label className="flex items-start gap-3 rounded-md border bg-background p-3 text-sm">
-      <input type="checkbox"
+      <Switch
         className="mt-1"
         checked={checked}
-        onChange={(event) => onChange(event.target.checked)}
+        onCheckedChange={(checked) => onChange(checked)}
       />
       <span>
         <span className="block font-medium">{title}</span>

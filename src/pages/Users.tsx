@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Edit, Trash } from "lucide-react"
@@ -206,16 +207,12 @@ export default function Users() {
               </label>
               <label className="block space-y-1 text-sm">
                 <span className="font-medium">{copy.primaryGroup}</span>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={editingUser.group_id}
-                  onChange={(event) => setEditingUser({ ...editingUser, group_id: event.target.value })}
-                >
-                  <option value="">{copy.selectGroup}</option>
+                <Select value={String((editingUser.group_id) || "__shadcn_empty__")} onValueChange={(value) => setEditingUser({ ...editingUser, group_id: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.selectGroup}</SelectItem>
                   {groups.map((group) => (
-                    <option key={group.id} value={group.id}>{group.name}</option>
+                    <SelectItem key={group.id} value={String(group.id)}>{group.name}</SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
               <label className="flex items-center gap-2 text-sm">
                 <input

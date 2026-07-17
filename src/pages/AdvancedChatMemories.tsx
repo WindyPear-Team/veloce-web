@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Brain, Plus, RefreshCw, Save, Trash2 } from "lucide-react"
@@ -311,27 +313,27 @@ export default function AdvancedChatMemories() {
             <div className="grid gap-3 md:grid-cols-2">
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.scope}</span>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.scope} onChange={(event) => setDraft((current) => ({ ...current, scope: event.target.value as "global" | "agent" }))}>
-                  <option value="global">{copy.global}</option>
-                  <option value="agent">{copy.agent}</option>
-                </select>
+                <Select value={String((draft.scope) || "__shadcn_empty__")} onValueChange={(value) => setDraft((current) => ({ ...current, scope: (value === "__shadcn_empty__" ? "" : value) as "global" | "agent" }))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="global">{copy.global}</SelectItem>
+                  <SelectItem value="agent">{copy.agent}</SelectItem>
+                </SelectContent></Select>
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.agent}</span>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" disabled={draft.scope !== "agent"} value={draft.agent_id} onChange={(event) => setDraft((current) => ({ ...current, agent_id: event.target.value }))}>
-                  <option value="">{copy.selectAgent}</option>
+                <Select value={String((draft.agent_id) || "__shadcn_empty__")} disabled={draft.scope !== "agent"} onValueChange={(value) => setDraft((current) => ({ ...current, agent_id: (value === "__shadcn_empty__" ? "" : value) }))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.selectAgent}</SelectItem>
                   {(agentsQuery.data || []).map((agent) => (
-                    <option key={agent.id} value={agent.id}>{agent.name}</option>
+                    <SelectItem key={agent.id} value={String(agent.id)}>{agent.name}</SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.kind}</span>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={draft.kind} onChange={(event) => setDraft((current) => ({ ...current, kind: event.target.value }))}>
+                <Select value={String((draft.kind) || "__shadcn_empty__")} onValueChange={(value) => setDraft((current) => ({ ...current, kind: (value === "__shadcn_empty__" ? "" : value) }))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                   {memoryKinds.map((kind) => (
-                    <option key={kind} value={kind}>{kind}</option>
+                    <SelectItem key={kind} value={String(kind)}>{kind}</SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.memoryTitle}</span>
@@ -339,7 +341,7 @@ export default function AdvancedChatMemories() {
               </label>
             </div>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+              <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft((current) => ({ ...current, enabled: checked }))} />
               {copy.enabled}
             </label>
             <label className="space-y-1 text-sm">

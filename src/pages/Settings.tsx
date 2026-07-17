@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Camera, KeyRound, UserCircle } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -368,43 +369,39 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
             <div className="text-sm text-muted-foreground">{copy.titleGenerationDescription}</div>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.titleChannel}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={titleUserChannelID || ""}
-                onChange={(event) => {
-                  const nextID = Number(event.target.value) || 0
+              <Select value={String((titleUserChannelID || "") || "__shadcn_empty__")} onValueChange={(value) => {
+                  const nextID = Number((value === "__shadcn_empty__" ? "" : value)) || 0
                   setTitleUserChannelID(nextID)
                   const nextModels = modelsForChannel(catalog, nextID)
                   if (titleModelName && !nextModels.includes(titleModelName)) {
                     setTitleModelName("")
                   }
-                }}
-              >
-                <option value="">{copy.anyChannel}</option>
+                }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.anyChannel}</SelectItem>
                 {catalog.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
+                  <SelectItem key={channel.id} value={String(channel.id)}>
                     {channel.name}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.titleModel}</span>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={titleModelName} onChange={(event) => setTitleModelName(event.target.value)}>
-                <option value="">{copy.titleDisabled}</option>
+              <Select value={String((titleModelName) || "__shadcn_empty__")} onValueChange={(value) => setTitleModelName((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.titleDisabled}</SelectItem>
                 {titleSelectOptions.map((model) => (
-                  <option key={model} value={model}>
+                  <SelectItem key={model} value={String(model)}>
                     {model}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.titleScope}</span>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={titleGenerationScope} onChange={(event) => setTitleGenerationScope(normalizeTitleScope(event.target.value))}>
-                <option value="recent">{copy.titleScopeRecent}</option>
-                <option value="all">{copy.titleScopeAll}</option>
-              </select>
+              <Select value={String((titleGenerationScope) || "__shadcn_empty__")} onValueChange={(value) => setTitleGenerationScope(normalizeTitleScope((value === "__shadcn_empty__" ? "" : value)))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="recent">{copy.titleScopeRecent}</SelectItem>
+                <SelectItem value="all">{copy.titleScopeAll}</SelectItem>
+              </SelectContent></Select>
             </label>
             <Button className="gap-2" disabled={saveTitleSettings.isPending} onClick={() => saveTitleSettings.mutate()}>
               {saveTitleSettings.isPending ? copy.saving : copy.saveTitleSettings}
@@ -419,16 +416,12 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
             <div className="text-sm text-muted-foreground">{copy.connectorApprovalDescription}</div>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.approvalAssistant}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={connectorApprovalAgentID}
-                onChange={(event) => setConnectorApprovalAgentID(event.target.value)}
-              >
-                <option value="">{copy.noApprovalAssistant}</option>
+              <Select value={String((connectorApprovalAgentID) || "__shadcn_empty__")} onValueChange={(value) => setConnectorApprovalAgentID((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.noApprovalAssistant}</SelectItem>
                 {advancedChatAgents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>{agent.name}</option>
+                  <SelectItem key={agent.id} value={String(agent.id)}>{agent.name}</SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <Button className="gap-2" disabled={saveTitleSettings.isPending} onClick={() => saveTitleSettings.mutate()}>
               {saveTitleSettings.isPending ? copy.saving : copy.saveApprovalSettings}

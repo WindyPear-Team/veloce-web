@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Activity, Filter } from "lucide-react"
@@ -112,13 +113,13 @@ export default function AdminAuditLogs() {
           <div className="grid gap-3 lg:grid-cols-4">
             <label className="space-y-1 text-sm">
               <span className="text-muted-foreground">{copy.type}</span>
-              <select className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm" value={logType} onChange={(event) => { setLogType(event.target.value); setPage(1) }}>
-                <option value="">{copy.allTypes}</option>
-                <option value="api">{copy.typeAPI}</option>
-                <option value="login">{copy.typeLogin}</option>
-                <option value="admin">{copy.typeAdmin}</option>
-                <option value="system">{copy.typeSystem}</option>
-              </select>
+              <Select value={String((logType) || "__shadcn_empty__")} onValueChange={(value) => { setLogType((value === "__shadcn_empty__" ? "" : value)); setPage(1) }}><SelectTrigger className="h-10 w-full rounded-2xl border border-input bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.allTypes}</SelectItem>
+                <SelectItem value="api">{copy.typeAPI}</SelectItem>
+                <SelectItem value="login">{copy.typeLogin}</SelectItem>
+                <SelectItem value="admin">{copy.typeAdmin}</SelectItem>
+                <SelectItem value="system">{copy.typeSystem}</SelectItem>
+              </SelectContent></Select>
             </label>
             <FilterInput label={copy.startDate} value={startDate} type="date" onChange={(value) => { setStartDate(value); setPage(1) }} />
             <FilterInput label={copy.endDate} value={endDate} type="date" onChange={(value) => { setEndDate(value); setPage(1) }} />

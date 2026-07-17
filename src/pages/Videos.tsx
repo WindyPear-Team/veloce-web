@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useMemo, useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Download, Video, WandSparkles } from "lucide-react"
@@ -289,14 +291,14 @@ export default function Videos() {
             </label>
             <label className="block space-y-2 text-sm">
               <span className="font-medium">{copy.model}</span>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={modelName} onChange={(event) => setModelName(event.target.value)}>
-                <option value="">{copy.selectModel}</option>
+              <Select value={String((modelName) || "__shadcn_empty__")} onValueChange={(value) => setModelName((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.selectModel}</SelectItem>
                 {modelOptions.map((model) => (
-                  <option key={model} value={model}>
+                  <SelectItem key={model} value={String(model)}>
                     {model}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <OptionField label={copy.size} value={size} options={sizeOptions.length > 0 ? sizeOptions : videoSizes} autoLabel={copy.auto} onChange={setSize} />
             <div className="grid gap-3 sm:grid-cols-2">
@@ -307,11 +309,11 @@ export default function Videos() {
               <label className="block space-y-2 text-sm">
                 <span className="font-medium">{copy.duration}</span>
                 {durationOptions.length > 0 ? (
-                  <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={duration} onChange={(event) => setDuration(normalizeDuration(event.target.value))}>
+                  <Select value={String((duration) || "__shadcn_empty__")} onValueChange={(value) => setDuration(normalizeDuration((value === "__shadcn_empty__" ? "" : value)))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                     {durationOptions.map((option) => (
-                      <option key={option} value={option}>{option}s</option>
+                      <SelectItem key={option} value={String(option)}>{option}s</SelectItem>
                     ))}
-                  </select>
+                  </SelectContent></Select>
                 ) : (
                   <Input min={1} max={60} type="number" value={duration} onChange={(event) => setDuration(normalizeDuration(event.target.value))} />
                 )}
@@ -330,7 +332,7 @@ export default function Videos() {
                 <Input value={seed} placeholder="1234" onChange={(event) => setSeed(event.target.value)} />
               </label>
               <label className="flex items-center gap-2 self-end pb-2 text-sm">
-                <input type="checkbox" checked={watermark} onChange={(event) => setWatermark(event.target.checked)} />
+                <Switch checked={watermark} onCheckedChange={(checked) => setWatermark(checked)} />
                 {copy.watermark}
               </label>
             </div>
@@ -471,13 +473,13 @@ function OptionField({
   return (
     <label className="block space-y-2 text-sm">
       <span className="font-medium">{label}</span>
-      <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={value} onChange={(event) => onChange(event.target.value)}>
+      <Select value={String((value) || "__shadcn_empty__")} onValueChange={(value) => onChange((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
         {options.map((option) => (
-          <option key={option} value={option}>
+          <SelectItem key={option} value={String(option)}>
             {option === "auto" ? autoLabel : option}
-          </option>
+          </SelectItem>
         ))}
-      </select>
+      </SelectContent></Select>
     </label>
   )
 }

@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui/switch"
 import { useMemo, useState } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
@@ -119,7 +120,7 @@ function DeclarativeForm({ pluginId, node }: { pluginId: string; node: Record<st
         if (type === "switch" || type === "checkbox") {
           return (
             <label key={name} className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={Boolean(values[name])} onChange={(event) => setValues((current) => ({ ...current, [name]: event.target.checked }))} />
+              <Switch checked={Boolean(values[name])} onCheckedChange={(checked) => setValues((current) => ({ ...current, [name]: checked }))} />
               {label}
             </label>
           )

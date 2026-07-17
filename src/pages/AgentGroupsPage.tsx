@@ -1,3 +1,4 @@
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { type ReactNode, useEffect, useMemo, useState } from "react"
 import { Link, Navigate, Route, Routes, useNavigate, useParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -451,38 +452,34 @@ function AgentDialog({
         </DialogHeader>
         <div className="space-y-4">
           <Field label={copy.chatAgent}>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={agent.chat_agent_id || ""}
-              onChange={(event) => {
-                const chatAgent = chatAgents.find((item) => item.id === event.target.value)
+            <Select value={String((agent.chat_agent_id || "") || "__shadcn_empty__")} onValueChange={(value) => {
+                const chatAgent = chatAgents.find((item) => item.id === (value === "__shadcn_empty__" ? "" : value))
                 updateAgent({
-                  chat_agent_id: event.target.value,
+                  chat_agent_id: (value === "__shadcn_empty__" ? "" : value),
                   id: agentMemberID(chatAgent),
                   name: chatAgent?.name || agent.name || "",
                 })
-              }}
-            >
-              <option value="">{copy.noChatAgentSelected}</option>
+              }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{copy.noChatAgentSelected}</SelectItem>
               {chatAgents.map((item) => (
-                <option key={item.id} value={item.id}>
+                <SelectItem key={item.id} value={String(item.id)}>
                   {item.name}
-                </option>
+                </SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </Field>
           <div className="grid gap-3 md:grid-cols-[1fr_140px]">
             <Field label={copy.agentName}>
               <Input value={agent.name} onChange={(event) => updateAgent({ name: event.target.value })} />
             </Field>
             <Field label={copy.agentType}>
-              <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={agent.type} onChange={(event) => updateAgent({ type: event.target.value as AgentGroupAgent["type"] })}>
-                <option value="chief">chief</option>
-                <option value="worker">worker</option>
-                <option value="critic">critic</option>
-                <option value="reviewer">reviewer</option>
-                <option value="checker">checker</option>
-              </select>
+              <Select value={String((agent.type) || "__shadcn_empty__")} onValueChange={(value) => updateAgent({ type: (value === "__shadcn_empty__" ? "" : value) as AgentGroupAgent["type"] })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="chief">chief</SelectItem>
+                <SelectItem value="worker">worker</SelectItem>
+                <SelectItem value="critic">critic</SelectItem>
+                <SelectItem value="reviewer">reviewer</SelectItem>
+                <SelectItem value="checker">checker</SelectItem>
+              </SelectContent></Select>
             </Field>
           </div>
         </div>

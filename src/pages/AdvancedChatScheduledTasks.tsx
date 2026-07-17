@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
@@ -365,20 +367,20 @@ export default function AdvancedChatScheduledTasks() {
             <div className="grid gap-4 md:grid-cols-2">
               <Field label={copy.name}><Input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></Field>
               <Field label={copy.agent}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.agent_id} onChange={(event) => setForm({ ...form, agent_id: event.target.value })}>
-                  <option value="">{copy.noAgent}</option>
-                  {agents.map((agent) => <option key={agent.id} value={agent.id}>{agent.name}</option>)}
-                </select>
+                <Select value={String((form.agent_id) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, agent_id: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.noAgent}</SelectItem>
+                  {agents.map((agent) => <SelectItem key={agent.id} value={String(agent.id)}>{agent.name}</SelectItem>)}
+                </SelectContent></Select>
               </Field>
             </div>
             <Field label={copy.description}><textarea className="min-h-20 w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></Field>
             <div className="grid gap-4 md:grid-cols-3">
               <Field label={copy.scheduleType}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.schedule_type} onChange={(event) => setForm({ ...form, schedule_type: event.target.value as TaskForm["schedule_type"] })}>
-                  <option value="manual">{copy.manual}</option>
-                  <option value="once">{copy.once}</option>
-                  <option value="interval">{copy.interval}</option>
-                </select>
+                <Select value={String((form.schedule_type) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, schedule_type: (value === "__shadcn_empty__" ? "" : value) as TaskForm["schedule_type"] })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="manual">{copy.manual}</SelectItem>
+                  <SelectItem value="once">{copy.once}</SelectItem>
+                  <SelectItem value="interval">{copy.interval}</SelectItem>
+                </SelectContent></Select>
               </Field>
               {form.schedule_type === "once" && <Field label={copy.runAt}><Input type="datetime-local" value={form.run_at} onChange={(event) => setForm({ ...form, run_at: event.target.value })} /></Field>}
               {form.schedule_type === "interval" && <Field label={copy.intervalSeconds}><Input type="number" min={60} value={form.interval_seconds} onChange={(event) => setForm({ ...form, interval_seconds: Number(event.target.value) || 60 })} /></Field>}
@@ -386,21 +388,21 @@ export default function AdvancedChatScheduledTasks() {
             </div>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label={copy.sessionMode}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.session_mode} onChange={(event) => setForm({ ...form, session_mode: event.target.value as TaskForm["session_mode"] })}>
-                  <option value="auto">{copy.autoSession}</option>
-                  <option value="existing">{copy.existingSession}</option>
-                </select>
+                <Select value={String((form.session_mode) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, session_mode: (value === "__shadcn_empty__" ? "" : value) as TaskForm["session_mode"] })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="auto">{copy.autoSession}</SelectItem>
+                  <SelectItem value="existing">{copy.existingSession}</SelectItem>
+                </SelectContent></Select>
               </Field>
               {form.session_mode === "existing" ? (
                 <Field label={copy.session}>
-                  <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.session_id} onChange={(event) => setForm({ ...form, session_id: event.target.value })}>
-                    <option value="">{copy.selectSession}</option>
-                    {sessions.map((session) => <option key={session.id} value={session.id}>{session.title || session.id}</option>)}
-                  </select>
+                  <Select value={String((form.session_id) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, session_id: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                    <SelectItem value="__shadcn_empty__">{copy.selectSession}</SelectItem>
+                    {sessions.map((session) => <SelectItem key={session.id} value={String(session.id)}>{session.title || session.id}</SelectItem>)}
+                  </SelectContent></Select>
                 </Field>
               ) : (
                 <label className="mt-7 flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-                  <input type="checkbox" checked={form.auto_delete_session} onChange={(event) => setForm({ ...form, auto_delete_session: event.target.checked })} />
+                  <Switch checked={form.auto_delete_session} onCheckedChange={(checked) => setForm({ ...form, auto_delete_session: checked })} />
                   <span className="font-medium">{copy.autoDeleteSession}</span>
                 </label>
               )}
@@ -408,39 +410,39 @@ export default function AdvancedChatScheduledTasks() {
             <Field label={copy.message}><textarea className="min-h-32 w-full rounded-md border bg-background px-3 py-2 text-sm" value={form.message} onChange={(event) => setForm({ ...form, message: event.target.value })} /></Field>
             <div className="grid gap-4 md:grid-cols-2">
               <Field label={copy.delivery}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.delivery_id} disabled={!settings.message_delivery_enabled} onChange={(event) => setForm({ ...form, delivery_id: event.target.value })}>
-                  <option value="">{copy.noDelivery}</option>
-                  {deliveries.filter((item) => item.enabled).map((delivery) => <option key={delivery.id} value={delivery.id}>{delivery.name}</option>)}
-                </select>
+                <Select value={String((form.delivery_id) || "__shadcn_empty__")} disabled={!settings.message_delivery_enabled} onValueChange={(value) => setForm({ ...form, delivery_id: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.noDelivery}</SelectItem>
+                  {deliveries.filter((item) => item.enabled).map((delivery) => <SelectItem key={delivery.id} value={String(delivery.id)}>{delivery.name}</SelectItem>)}
+                </SelectContent></Select>
               </Field>
               <Field label={copy.channel}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.user_channel_id || ""} onChange={(event) => setForm({ ...form, user_channel_id: Number(event.target.value) || 0 })}>
-                  <option value="">{copy.selectChannel}</option>
-                  {channelOptions.map((channel) => <option key={channel.id} value={channel.id}>{channel.name}</option>)}
-                </select>
+                <Select value={String((form.user_channel_id || "") || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, user_channel_id: Number((value === "__shadcn_empty__" ? "" : value)) || 0 })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.selectChannel}</SelectItem>
+                  {channelOptions.map((channel) => <SelectItem key={channel.id} value={String(channel.id)}>{channel.name}</SelectItem>)}
+                </SelectContent></Select>
               </Field>
             </div>
             <div className="grid gap-4 md:grid-cols-4">
               <Field label={copy.model}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.model_name} onChange={(event) => setForm({ ...form, model_name: event.target.value, user_channel_id: 0 })}>
-                  <option value="">{copy.selectModel}</option>
-                  {modelOptions.map((model) => <option key={model} value={model}>{model}</option>)}
-                </select>
+                <Select value={String((form.model_name) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, model_name: (value === "__shadcn_empty__" ? "" : value), user_channel_id: 0 })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.selectModel}</SelectItem>
+                  {modelOptions.map((model) => <SelectItem key={model} value={String(model)}>{model}</SelectItem>)}
+                </SelectContent></Select>
               </Field>
               <Field label={copy.temperature}><Input type="number" min={0} max={2} step={0.1} value={form.temperature ?? ""} onChange={(event) => setForm({ ...form, temperature: event.target.value === "" ? null : Number(event.target.value) })} /></Field>
               <Field label={copy.reasoningEffort}>
-                <select className="h-10 w-full rounded-md border bg-background px-3 text-sm" value={form.reasoning_effort} onChange={(event) => setForm({ ...form, reasoning_effort: event.target.value })}>
-                  <option value="">{copy.reasoningDefault}</option>
-                  <option value="minimal">{copy.reasoningMinimal}</option>
-                  <option value="low">{copy.reasoningLow}</option>
-                  <option value="medium">{copy.reasoningMedium}</option>
-                  <option value="high">{copy.reasoningHigh}</option>
-                </select>
+                <Select value={String((form.reasoning_effort) || "__shadcn_empty__")} onValueChange={(value) => setForm({ ...form, reasoning_effort: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.reasoningDefault}</SelectItem>
+                  <SelectItem value="minimal">{copy.reasoningMinimal}</SelectItem>
+                  <SelectItem value="low">{copy.reasoningLow}</SelectItem>
+                  <SelectItem value="medium">{copy.reasoningMedium}</SelectItem>
+                  <SelectItem value="high">{copy.reasoningHigh}</SelectItem>
+                </SelectContent></Select>
               </Field>
               <Field label={copy.maxTokens}><Input type="number" min={0} max={200000} value={form.max_tokens || ""} onChange={(event) => setForm({ ...form, max_tokens: Number(event.target.value) || 0 })} /></Field>
             </div>
             <label className="flex items-center gap-2 rounded-md border bg-muted/30 p-3 text-sm">
-              <input type="checkbox" checked={form.enabled} onChange={(event) => setForm({ ...form, enabled: event.target.checked })} />
+              <Switch checked={form.enabled} onCheckedChange={(checked) => setForm({ ...form, enabled: checked })} />
               <span className="font-medium">{copy.enabled}</span>
             </label>
           </div>

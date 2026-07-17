@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { type ReactNode, useMemo, useState } from "react"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bot, FolderOpen, MessageSquare, Plus, Save, Server, Sparkles, Trash2, X } from "lucide-react"
@@ -445,44 +447,36 @@ export default function Agents() {
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.channel}</span>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={userChannelID || ""}
-                  onChange={(event) => {
-                    const nextID = Number(event.target.value) || 0
+                <Select value={String((userChannelID || "") || "__shadcn_empty__")} onValueChange={(value) => {
+                    const nextID = Number((value === "__shadcn_empty__" ? "" : value)) || 0
                     setUserChannelID(nextID)
                     const nextModels = modelsForChannel(catalog, nextID)
                     if (defaultModel && !nextModels.includes(defaultModel)) {
                       setDefaultModel("")
                     }
-                  }}
-                >
-                  <option value="">{copy.noChannel}</option>
+                  }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.noChannel}</SelectItem>
                   {catalog.map((channel) => (
-                    <option key={channel.id} value={channel.id}>
+                    <SelectItem key={channel.id} value={String(channel.id)}>
                       {channel.name}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("chat.agentDefaultModel")}</span>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={defaultModel}
-                  onChange={(event) => setDefaultModel(event.target.value)}
-                >
-                  <option value="">{t("chat.noDefaultModel")}</option>
+                <Select value={String((defaultModel) || "__shadcn_empty__")} onValueChange={(value) => setDefaultModel((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{t("chat.noDefaultModel")}</SelectItem>
                   {editModelSelectOptions.map((model) => (
-                    <option key={model} value={model}>
+                    <SelectItem key={model} value={String(model)}>
                       {model}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
             </div>
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="h-4 w-4" checked={stream} onChange={(event) => setStream(event.target.checked)} />
+              <Switch className="h-4 w-4" checked={stream} onCheckedChange={(checked) => setStream(checked)} />
               <span className="font-medium">{copy.streamAgent}</span>
             </label>
             <label className="space-y-1 text-sm">
@@ -556,44 +550,36 @@ export default function Agents() {
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{copy.channel}</span>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={createUserChannelID || ""}
-                  onChange={(event) => {
-                    const nextID = Number(event.target.value) || 0
+                <Select value={String((createUserChannelID || "") || "__shadcn_empty__")} onValueChange={(value) => {
+                    const nextID = Number((value === "__shadcn_empty__" ? "" : value)) || 0
                     setCreateUserChannelID(nextID)
                     const nextModels = modelsForChannel(catalog, nextID)
                     if (createDefaultModel && !nextModels.includes(createDefaultModel)) {
                       setCreateDefaultModel("")
                     }
-                  }}
-                >
-                  <option value="">{copy.noChannel}</option>
+                  }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{copy.noChannel}</SelectItem>
                   {catalog.map((channel) => (
-                    <option key={channel.id} value={channel.id}>
+                    <SelectItem key={channel.id} value={String(channel.id)}>
                       {channel.name}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
               <label className="space-y-1 text-sm">
                 <span className="font-medium">{t("chat.agentDefaultModel")}</span>
-                <select
-                  className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                  value={createDefaultModel}
-                  onChange={(event) => setCreateDefaultModel(event.target.value)}
-                >
-                  <option value="">{t("chat.noDefaultModel")}</option>
+                <Select value={String((createDefaultModel) || "__shadcn_empty__")} onValueChange={(value) => setCreateDefaultModel((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="__shadcn_empty__">{t("chat.noDefaultModel")}</SelectItem>
                   {createModelSelectOptions.map((model) => (
-                    <option key={model} value={model}>
+                    <SelectItem key={model} value={String(model)}>
                       {model}
-                    </option>
+                    </SelectItem>
                   ))}
-                </select>
+                </SelectContent></Select>
               </label>
             </div>
             <label className="inline-flex items-center gap-2 text-sm">
-              <input type="checkbox" className="h-4 w-4" checked={createStream} onChange={(event) => setCreateStream(event.target.checked)} />
+              <Switch className="h-4 w-4" checked={createStream} onCheckedChange={(checked) => setCreateStream(checked)} />
               <span className="font-medium">{copy.streamAgent}</span>
             </label>
             <label className="space-y-1 text-sm">
@@ -652,18 +638,14 @@ export default function Agents() {
           <div className="space-y-4">
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.generationSource}</span>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={generationSourceAgentID}
-                onChange={(event) => setGenerationSourceAgentID(event.target.value)}
-              >
-                <option value="">{copy.generationSourcePlaceholder}</option>
+              <Select value={String((generationSourceAgentID) || "__shadcn_empty__")} onValueChange={(value) => setGenerationSourceAgentID((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <SelectItem value="__shadcn_empty__">{copy.generationSourcePlaceholder}</SelectItem>
                 {agents.map((agent) => (
-                  <option key={agent.id} value={agent.id}>
+                  <SelectItem key={agent.id} value={String(agent.id)}>
                     {agent.name}{agent.default_model ? ` · ${agent.default_model}` : ` · ${t("chat.noDefaultModel")}`}
-                  </option>
+                  </SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </label>
             <label className="space-y-1 text-sm">
               <span className="font-medium">{copy.generationRequirements}</span>

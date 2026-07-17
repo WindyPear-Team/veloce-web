@@ -1,3 +1,4 @@
+import { Switch } from "@/components/ui/switch"
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Bot, Pencil, Plus, Terminal, Trash2 } from "lucide-react"
@@ -350,7 +351,7 @@ export default function AdvancedChatMCP() {
               </>
             )}
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox" checked={draft.enabled} onChange={(event) => setDraft((current) => ({ ...current, enabled: event.target.checked }))} />
+              <Switch checked={draft.enabled} onCheckedChange={(checked) => setDraft((current) => ({ ...current, enabled: checked }))} />
               {t("advancedChat.mcp.enabledLabel")}
             </label>
             <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{t("advancedChat.mcp.hint")}</div>

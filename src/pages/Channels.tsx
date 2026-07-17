@@ -1,3 +1,5 @@
+import { Switch } from "@/components/ui/switch"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useEffect, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Download, Edit, ListTree, Plus, Power, SlidersHorizontal, Trash } from "lucide-react"
@@ -498,18 +500,14 @@ function UserChannelDialog({
             />
           </FieldLabel>
           <FieldLabel label={copy.routingAlgorithm}>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={draft.routing_algorithm || "priority"}
-              onChange={(e) => setDraft({ ...draft, routing_algorithm: e.target.value })}
-            >
+            <Select value={String((draft.routing_algorithm || "priority") || "__shadcn_empty__")} onValueChange={(value) => setDraft({ ...draft, routing_algorithm: (value === "__shadcn_empty__" ? "" : value) })}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
               {routingAlgorithmOptions(copy).map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
+                <SelectItem key={item.value} value={String(item.value)}>{item.label}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </FieldLabel>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={Boolean(draft.enabled)} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
+            <Switch checked={Boolean(draft.enabled)} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
             {t("common.enabled")}
           </label>
         </div>
@@ -567,15 +565,11 @@ function UpstreamDialog({
             <Input value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={t("channels.name")} />
           </FieldLabel>
           <FieldLabel label={t("channels.type")}>
-            <select
-              className="h-10 rounded-md border bg-background px-3 text-sm"
-              value={selectedType}
-              onChange={(e) => updateType(e.target.value)}
-            >
+            <Select value={String((selectedType) || "__shadcn_empty__")} onValueChange={(value) => updateType((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
               {providerTypes.map((item) => (
-                <option key={item.value} value={item.value}>{item.label}</option>
+                <SelectItem key={item.value} value={String(item.value)}>{item.label}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </FieldLabel>
           <FieldLabel label={t("admin.baseURL")}>
             <div className="flex gap-2">
@@ -605,16 +599,12 @@ function UpstreamDialog({
             {selectedTypeConfig.apiKeyHelp && <p className="text-xs text-muted-foreground">{selectedTypeConfig.apiKeyHelp}</p>}
           </FieldLabel>
           <FieldLabel label={t("admin.userChannel")}>
-            <select
-              className="h-10 rounded-md border bg-background px-3 text-sm"
-              value={draft.user_channel_id || ""}
-              onChange={(e) => setDraft({ ...draft, user_channel_id: Number(e.target.value) || null })}
-            >
-              <option value="">{t("admin.selectUserChannel")}</option>
+            <Select value={String((draft.user_channel_id || "") || "__shadcn_empty__")} onValueChange={(value) => setDraft({ ...draft, user_channel_id: Number((value === "__shadcn_empty__" ? "" : value)) || null })}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="__shadcn_empty__">{t("admin.selectUserChannel")}</SelectItem>
               {userChannels.map((item) => (
-                <option key={item.id} value={item.id}>{item.name}</option>
+                <SelectItem key={item.id} value={String(item.id)}>{item.name}</SelectItem>
               ))}
-            </select>
+            </SelectContent></Select>
           </FieldLabel>
           <FieldLabel label={t("channels.priority")}>
             <Input
@@ -634,9 +624,9 @@ function UpstreamDialog({
           </FieldLabel>
           <div className="space-y-3 rounded-md border p-3 md:col-span-2">
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox"
+              <Switch
                 checked={draft.price_sync_enabled ?? true}
-                onChange={(e) => setDraft({ ...draft, price_sync_enabled: e.target.checked })}
+                onCheckedChange={(checked) => setDraft({ ...draft, price_sync_enabled: checked })}
               />
               <span className="font-medium">{copy.priceSyncEnabled}</span>
             </label>
@@ -651,7 +641,7 @@ function UpstreamDialog({
             <p className="text-xs text-muted-foreground">{copy.priceSyncCronHint}</p>
           </div>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={Boolean(draft.enabled)} onChange={(e) => setDraft({ ...draft, enabled: e.target.checked })} />
+            <Switch checked={Boolean(draft.enabled)} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
             {t("common.enabled")}
           </label>
         </div>
@@ -875,15 +865,11 @@ function UpstreamModelConfigDialog({
         <div className="min-h-0 space-y-4 overflow-y-auto overflow-x-hidden pr-1">
           <div className="grid gap-3 md:grid-cols-[1fr_1fr_auto_auto]">
             <FieldLabel label={copy.syncFormat}>
-              <select
-                className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-                value={syncFormat}
-                onChange={(event) => setSyncFormat(event.target.value)}
-              >
+              <Select value={String((syncFormat) || "__shadcn_empty__")} onValueChange={(value) => setSyncFormat((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                 {syncFormatOptionLabels(language).map((option) => (
-                  <option key={option.value} value={option.value}>{option.label}</option>
+                  <SelectItem key={option.value} value={String(option.value)}>{option.label}</SelectItem>
                 ))}
-              </select>
+              </SelectContent></Select>
             </FieldLabel>
             <FieldLabel label={copy.customSyncPath}>
               <Input
@@ -1032,11 +1018,8 @@ function ChannelModelDialog({
             />
           </FieldLabel>
           <FieldLabel label={copy.provider}>
-            <select
-              className="h-10 w-full rounded-md border bg-background px-3 text-sm"
-              value={providerMode}
-              onChange={(event) => {
-                const providerID = event.target.value
+            <Select value={String((providerMode) || "__shadcn_empty__")} onValueChange={(value) => {
+                const providerID = (value === "__shadcn_empty__" ? "" : value)
                 setProviderMode(providerID)
                 if (providerID === "auto" || providerID === "custom") {
                   setDraft({ ...draft, provider: "", provider_icon_url: "" })
@@ -1044,14 +1027,13 @@ function ChannelModelDialog({
                 }
                 const preset = providerPresets.find((item) => item.id === providerID)
                 setDraft({ ...draft, provider: providerID, provider_icon_url: preset?.iconURL || "" })
-              }}
-            >
-              <option value="auto">{copy.autoProvider}</option>
+              }}><SelectTrigger className="h-10 w-full rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+              <SelectItem value="auto">{copy.autoProvider}</SelectItem>
               {providerPresets.map((provider) => (
-                <option key={provider.id} value={provider.id}>{provider.name}</option>
+                <SelectItem key={provider.id} value={String(provider.id)}>{provider.name}</SelectItem>
               ))}
-              <option value="custom">{copy.customProvider}</option>
-            </select>
+              <SelectItem value="custom">{copy.customProvider}</SelectItem>
+            </SelectContent></Select>
           </FieldLabel>
           {providerMode === "custom" && (
             <FieldLabel label={copy.customProviderName}>
@@ -1066,7 +1048,7 @@ function ChannelModelDialog({
             />
           </FieldLabel>
           <label className="flex items-center gap-2 text-sm">
-            <input type="checkbox" checked={Boolean(draft.enabled)} onChange={(event) => setDraft({ ...draft, enabled: event.target.checked })} />
+            <Switch checked={Boolean(draft.enabled)} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
             {t("common.enabled")}
           </label>
         </div>
@@ -1123,7 +1105,7 @@ function SyncPreviewDialog({
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>{preview.channel_name} · {preview.source}</span>
               <label className="flex items-center gap-2">
-                <input type="checkbox" checked={allSelected} onChange={(event) => toggleAll(event.target.checked)} />
+                <Switch checked={allSelected} onCheckedChange={(checked) => toggleAll(checked)} />
                 {copy.selectAll}
               </label>
             </div>
@@ -1144,9 +1126,9 @@ function SyncPreviewDialog({
                     models.map((item) => (
                       <TableRow key={item.model_name}>
                         <TableCell>
-                          <input type="checkbox"
+                          <Switch
                             checked={selectedSet.has(item.model_name)}
-                            onChange={(event) => toggleModel(item.model_name, event.target.checked)}
+                            onCheckedChange={(checked) => toggleModel(item.model_name, checked)}
                           />
                         </TableCell>
                         <TableCell className="font-mono text-xs">{item.model_name}</TableCell>
@@ -1207,9 +1189,9 @@ function BrowserSyncFallbackDialog({
               <Input value={fallback.url} readOnly />
             </FieldLabel>
             <label className="flex items-center gap-2 text-sm">
-              <input type="checkbox"
+              <Switch
                 checked={fallback.includeToken}
-                onChange={(event) => onChange({ ...fallback, includeToken: event.target.checked })}
+                onCheckedChange={(checked) => onChange({ ...fallback, includeToken: checked })}
               />
               {copy.includeChannelToken}
             </label>
