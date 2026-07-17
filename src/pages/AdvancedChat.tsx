@@ -81,6 +81,7 @@ export default function AdvancedChat() {
     },
   })
   const publicSettings = withPublicSettingsDefaults(settings)
+  const enterpriseMode = String(publicSettings.system_mode).toLowerCase() === "enterprise"
   const isDesktop = isDesktopTarget()
   const topNavItems = parseTopNavItems(publicSettings.top_nav_items)
   const currentPageKey = pageKeyFromPathname(location.pathname)
@@ -196,8 +197,8 @@ export default function AdvancedChat() {
                     <Route path="sites" element={<AdvancedChatSites />} />
                     <Route path="agent-groups/:groupID/operations" element={<PersonalCompany />} />
                     <Route path="agent-groups/*" element={<AgentGroupsPage />} />
-                    <Route path="agent-tasks" element={<AgentTasks />} />
-                    <Route path="tasks" element={<EnterpriseTasks />} />
+                    <Route path="agent-tasks" element={enterpriseMode ? <AgentTasks /> : <Navigate to="/chat" replace />} />
+                    <Route path="tasks" element={enterpriseMode ? <EnterpriseTasks /> : <Navigate to="/chat" replace />} />
                     {publicSettings.message_channel_enabled && <Route path="channels/*" element={<MessageChannels />} />}
                     <Route path="deliveries" element={<AdvancedChatDeliveries />} />
                     <Route path="scheduled-tasks" element={<AdvancedChatScheduledTasks />} />
@@ -285,6 +286,7 @@ function AdvancedChatSidebar({
   const scheduledTasksLabel = language === "zh" ? "计划任务" : "Scheduled Tasks"
   const agentGroupsLabel = language === "zh" ? "工作室" : "Agent Studios"
   const agentTasksLabel = language === "zh" ? "\u4ee3\u7406\u4efb\u52a1" : "Agent Tasks"
+  const enterpriseMode = String(publicSettings.system_mode).toLowerCase() === "enterprise"
   const sitesLabel = language === "zh" ? "站点" : language === "ja" ? "サイト" : "Sites"
   const creationLabel = language === "zh" ? "创作" : language === "ja" ? "作成" : "Create"
   const workflowLabel = language === "zh" ? "工作流" : language === "ja" ? "ワークフロー" : "Workflows"
@@ -313,7 +315,7 @@ function AdvancedChatSidebar({
     active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/"),
   }
   const directItems: AdvancedChatSidebarItem[] = [
-    { href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" },
+    ...(enterpriseMode ? [{ href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" }] : []),
     { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
     { href: "/chat/knowledge", label: knowledgeLabel, icon: Database, active: location.pathname === "/chat/knowledge" },
   ]
@@ -345,7 +347,7 @@ function AdvancedChatSidebar({
         { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" || location.pathname.startsWith("/chat/devices/") },
         { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
         { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
-        { href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" },
+        ...(enterpriseMode ? [{ href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" }] : []),
         { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
       ],
     },
