@@ -628,7 +628,7 @@ function DesktopTitleBar({
             <Activity size={16} />
           </Button>
           {isStatusOpen && (
-            <div className="absolute right-0 top-9 w-[min(380px,calc(100vw-2rem))] rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
+            <div className="desktop-acrylic-popover absolute right-0 top-9 w-[min(380px,calc(100vw-2rem))] rounded-2xl border p-3 text-popover-foreground">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <Activity size={14} />
                 <span>{copy.status}</span>
@@ -659,7 +659,7 @@ function DesktopTitleBar({
             <Globe2 size={16} />
           </Button>
           {isServerOpen && (
-            <div className="absolute right-0 top-9 w-[min(360px,calc(100vw-2rem))] rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
+            <div className="desktop-acrylic-popover absolute right-0 top-9 w-[min(360px,calc(100vw-2rem))] rounded-2xl border p-3 text-popover-foreground">
               <div className="mb-2 flex items-center gap-2 text-xs font-medium text-muted-foreground">
                 <Server size={14} />
                 <span>{copy.label}</span>
@@ -761,7 +761,7 @@ function DesktopTitleBar({
             )}
           </Button>
           {isAccountOpen && (
-            <div className="absolute right-0 top-9 z-[70] w-72 rounded-md border bg-popover p-3 text-popover-foreground shadow-lg">
+            <div className="desktop-acrylic-popover absolute right-0 top-9 z-[70] w-72 rounded-2xl border p-3 text-popover-foreground">
               <div className="flex min-w-0 items-center gap-3">
                 {user?.avatar_url ? (
                   <img src={apiURL(user.avatar_url)} alt="" className="h-9 w-9 shrink-0 rounded-full object-cover" />
