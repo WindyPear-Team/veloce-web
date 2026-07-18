@@ -281,6 +281,8 @@ interface SystemSettings extends PublicSettings {
   payment_openpayment_return_url: string
   auto_update_enabled: boolean
   auto_update_interval_hours: string
+  log_storage_mode: string
+  log_retention_days: string
 }
 
 type SystemTab =
@@ -377,6 +379,8 @@ const defaultSystemSettings: SystemSettings = {
   payment_openpayment_return_url: "",
   auto_update_enabled: false,
   auto_update_interval_hours: "24",
+  log_storage_mode: "single",
+  log_retention_days: "30",
 }
 
 const defaultThemeColorValues = Object.fromEntries(
@@ -568,6 +572,12 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       success(status.update_available ? copy.autoUpdateAvailable : copy.autoUpdateUpToDate)
     },
     onError: (err) => error(apiErrorMessage(err, copy.autoUpdateCheckFailed)),
+  })
+
+  const deleteLogs = useMutation({
+    mutationFn: async () => (await api.delete("/logs")).data as { deleted: number },
+    onSuccess: (result) => success(copy.logsDeleted.replace("{count}", String(result.deleted))),
+    onError: () => error(copy.logsDeleteFailed),
   })
 
   const saveGroup = useMutation({
@@ -1425,13 +1435,20 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         <SettingsPanel title={copy.logCleanup}>
           <div className="space-y-5">
             <SectionTitle title={copy.logCleanupTitle} description={copy.logCleanupDescription} />
-            <div className="grid gap-3 lg:grid-cols-3">
-              <TextField label={copy.logRetentionAPIDays} value={form.log_retention_api_days} placeholder="0" type="number" onChange={(value) => updateField("log_retention_api_days", value)} />
-              <TextField label={copy.logRetentionLoginDays} value={form.log_retention_login_days} placeholder="0" type="number" onChange={(value) => updateField("log_retention_login_days", value)} />
-              <TextField label={copy.logRetentionAdminDays} value={form.log_retention_admin_days} placeholder="0" type="number" onChange={(value) => updateField("log_retention_admin_days", value)} />
-              <TextField label={copy.logRetentionSystemDays} value={form.log_retention_system_days} placeholder="0" type="number" onChange={(value) => updateField("log_retention_system_days", value)} />
-              <TextField label={copy.logRetentionTokenDays} value={form.log_retention_token_days} placeholder="0" type="number" onChange={(value) => updateField("log_retention_token_days", value)} />
-              <TextField label={copy.logRetentionCleanupIntervalHours} value={form.log_retention_cleanup_interval_hours} placeholder="24" type="number" onChange={(value) => updateField("log_retention_cleanup_interval_hours", value)} />
+            <div className="grid gap-3 lg:grid-cols-2">
+              <label className="grid gap-2 text-sm">
+                <span className="font-medium">{copy.logStorageMode}</span>
+                <Select value={form.log_storage_mode} onValueChange={(value) => updateField("log_storage_mode", value)}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                  <SelectItem value="single">{copy.logStorageSingle}</SelectItem>
+                  <SelectItem value="daily">{copy.logStorageDaily}</SelectItem>
+                </SelectContent></Select>
+              </label>
+              <TextField label={copy.logRetentionDays} value={form.log_retention_days} placeholder="30" type="number" onChange={(value) => updateField("log_retention_days", value)} />
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="destructive" disabled={deleteLogs.isPending} onClick={() => {
+                if (window.confirm(copy.logsDeleteConfirm)) deleteLogs.mutate()
+              }}>{copy.logsDeleteAll}</Button>
             </div>
             <p className="text-xs leading-5 text-muted-foreground">{copy.logCleanupHint}</p>
           </div>
@@ -3668,14 +3685,22 @@ const zhCopy = {
   reliabilityRecoveryAfterSeconds: "恢复等待时间（秒）",
   reliabilityHint: "网络错误、401/403、408/429 和 5xx 会累计失败；普通 400 请求错误不会自动禁用渠道。",
   logCleanupTitle: "日志自动清理",
-  logCleanupDescription: "按日志类型分别设置保留时间，后台会按间隔自动删除过期记录。",
+  logCleanupDescription: "所有审计、调用、插件与状态检查日志都会保存到独立的 log 数据库，不影响业务主库。",
   logRetentionAPIDays: "API 调用日志保留天数",
   logRetentionLoginDays: "登录日志保留天数",
   logRetentionAdminDays: "管理修改日志保留天数",
   logRetentionSystemDays: "系统日志保留天数",
   logRetentionTokenDays: "计费调用日志保留天数",
   logRetentionCleanupIntervalHours: "清理间隔（小时）",
-  logCleanupHint: "保留天数填 0 表示不自动清理。计费调用日志会影响调用明细和统计趋势，缩短前请确认合规和对账要求。",
+  logCleanupHint: "单文件模式使用 log/flai-log.db；按日模式会在 log/ 下每天创建一个数据库文件。保存后立即生效，保留期清理由后台任务执行。",
+  logStorageMode: "日志数据库模式",
+  logStorageSingle: "单个日志数据库文件",
+  logStorageDaily: "每天一个日志数据库文件",
+  logRetentionDays: "日志保留天数（1–3650）",
+  logsDeleteAll: "一键删除全部日志",
+  logsDeleteConfirm: "确定删除所有日志吗？此操作不可恢复。",
+  logsDeleted: "已删除 {count} 条日志",
+  logsDeleteFailed: "删除日志失败",
   autoUpdate: "自动更新",
   autoUpdateDescription: "从 WindyPear-Team/veloce 的最新正式 Release 检查并安装与当前系统和架构完全匹配的社区版程序包。",
   autoUpdateEnabled: "启用自动更新",
@@ -4067,14 +4092,22 @@ const enCopy: SystemCopy = {
   reliabilityRecoveryAfterSeconds: "Recovery wait time (seconds)",
   reliabilityHint: "Network errors, 401/403, 408/429, and 5xx responses count as failures. Normal 400 request errors do not disable channels.",
   logCleanupTitle: "Automatic log cleanup",
-  logCleanupDescription: "Set retention per log type. The background cleanup task deletes expired records on schedule.",
+  logCleanupDescription: "Audit, usage, plugin, and status-check records are stored in an independent log database outside the business database.",
   logRetentionAPIDays: "API access log retention days",
   logRetentionLoginDays: "Login log retention days",
   logRetentionAdminDays: "Admin change log retention days",
   logRetentionSystemDays: "System log retention days",
   logRetentionTokenDays: "Billing call log retention days",
   logRetentionCleanupIntervalHours: "Cleanup interval (hours)",
-  logCleanupHint: "Set retention days to 0 to keep logs indefinitely. Billing call log cleanup affects call details and usage trend statistics.",
+  logCleanupHint: "Single-file mode uses log/flai-log.db. Daily mode creates one database file per day under log/. Saved settings take effect immediately; the background task removes expired records.",
+  logStorageMode: "Log database mode",
+  logStorageSingle: "Single log database file",
+  logStorageDaily: "One log database per day",
+  logRetentionDays: "Log retention days (1–3650)",
+  logsDeleteAll: "Delete all logs",
+  logsDeleteConfirm: "Delete all logs? This cannot be undone.",
+  logsDeleted: "Deleted {count} log records",
+  logsDeleteFailed: "Failed to delete logs",
   autoUpdate: "Automatic Updates",
   autoUpdateDescription: "Check and install the current OS/architecture community package from the latest stable WindyPear-Team/veloce release.",
   autoUpdateEnabled: "Enable automatic updates",
