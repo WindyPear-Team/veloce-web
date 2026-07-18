@@ -16,6 +16,7 @@ interface ConfirmDialogOptions {
   title?: string
   confirmLabel?: string
   cancelLabel?: string
+  destructive?: boolean
 }
 
 interface PendingConfirmation extends ConfirmDialogOptions {

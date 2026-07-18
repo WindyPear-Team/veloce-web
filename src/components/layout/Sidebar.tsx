@@ -27,7 +27,8 @@ interface MenuItem {
 
 interface SystemSubItem {
   path: string
-  labelKey: TranslationKey
+  labelKey?: TranslationKey
+  label?: string
   colorClass: string
 }
 
@@ -38,6 +39,7 @@ const systemSubItems: SystemSubItem[] = [
   { path: "/dashboard/admin/content", labelKey: "nav.systemContent", colorClass: "bg-cyan-500" },
   { path: "/dashboard/admin/operations", labelKey: "nav.systemOperations", colorClass: "bg-amber-500" },
   { path: "/dashboard/admin/advanced-chat", labelKey: "nav.systemAdvancedChat", colorClass: "bg-violet-500" },
+  { path: "/dashboard/admin/sandboxes", label: "云端沙箱", colorClass: "bg-sky-500" },
 ]
 
 const userMenuItems: MenuItem[] = [
@@ -176,7 +178,7 @@ function SidebarLink({
                 )}
               >
                 <span className={cn("size-1.5 shrink-0 rounded-full", child.colorClass)} />
-                {t(child.labelKey)}
+                {child.label || (child.labelKey ? t(child.labelKey) : child.path)}
               </Link>
             )
           })}

@@ -27,6 +27,7 @@ import PublicContent from "./pages/PublicContent"
 import EnterpriseTasks from "./pages/EnterpriseTasks"
 import EnterpriseTaskDetail from "./pages/EnterpriseTaskDetail"
 import EnterpriseManagement from "./pages/EnterpriseManagement"
+import { CloudSandboxHostsPanel } from "./pages/CloudSandboxes"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
 import { I18nProvider, useI18n } from "./lib/i18n"
@@ -431,6 +432,14 @@ function App() {
                   element={
                     <AdminRoute>
                       <SystemManagement section="advancedChat" />
+                    </AdminRoute>
+                  }
+                />
+                <Route
+                  path="admin/sandboxes"
+                  element={
+                    <AdminRoute>
+                      <CloudSandboxHostsPanel />
                     </AdminRoute>
                   }
                 />

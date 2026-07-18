@@ -1,4 +1,4 @@
-import { BarChart3, Bot, Boxes, Brain, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, ScrollText, Send, Shield, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
+import { Bot, Brain, CalendarClock, ChevronRight, Database, FileText, Globe2, Home, Laptop, ListTree, Menu, MessageSquare, Palette, Send, Server, SlidersHorizontal, Sparkles, UserCircle, Users, Video } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, Navigate, Route, Routes, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -27,6 +27,7 @@ import AdminAuditLogs from "./AdminAuditLogs"
 import Channels from "./Channels"
 import Models from "./Models"
 import UsersPage from "./Users"
+import CloudSandboxes from "./CloudSandboxes"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
 import { AnnouncementButton } from "@/components/AnnouncementButton"
@@ -187,7 +188,7 @@ export default function AdvancedChat() {
 
       <div className={cn("flex min-h-0 flex-1", isChatRoute && "bg-background")}>
         <div className="hidden lg:block lg:h-full lg:shrink-0">
-          <AdvancedChatSidebar className={isChatRoute ? "border-r-0 bg-background" : undefined} publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} />
+          <AdvancedChatSidebar className={isChatRoute ? "border-r-0 bg-background" : undefined} publicSettings={publicSettings} />
         </div>
 
         <div className={cn("fixed inset-0 z-40 transition-opacity duration-200 lg:hidden", isDesktop ? "top-0" : "top-16", isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!isSidebarOpen}>
@@ -198,7 +199,7 @@ export default function AdvancedChat() {
               onClick={() => setIsSidebarOpen(false)}
             />
             <div className={cn("relative z-50 h-full w-64 max-w-[85vw] transition-transform duration-200 ease-out", isSidebarOpen ? "translate-x-0" : "-translate-x-full")}>
-              <AdvancedChatSidebar className={cn("w-full", isChatRoute && "border-r-0 bg-background")} publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} onNavigate={() => setIsSidebarOpen(false)} />
+              <AdvancedChatSidebar className={cn("w-full", isChatRoute && "border-r-0 bg-background")} publicSettings={publicSettings} onNavigate={() => setIsSidebarOpen(false)} />
             </div>
         </div>
 
@@ -221,6 +222,7 @@ export default function AdvancedChat() {
                     <Route path="mcp" element={<AdvancedChatMCP />} />
                     <Route path="devices" element={<AdvancedChatDevices />} />
                     <Route path="devices/:id" element={<AdvancedChatDeviceDetail />} />
+                    <Route path="sandboxes" element={<CloudSandboxes />} />
                     <Route path="sites" element={<AdvancedChatSites />} />
                     <Route path="agent-groups/:groupID/operations" element={<PersonalCompany />} />
                     <Route path="agent-groups/*" element={<AgentGroupsPage />} />
@@ -245,6 +247,7 @@ export default function AdvancedChat() {
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-channels" element={<Channels />} />}
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-models" element={<Models />} />}
                     {isDesktopTarget() && user?.is_admin && <Route path="admin-users" element={<UsersPage />} />}
+
                     <Route path="*" element={<Navigate to="/chat" replace />} />
                   </Routes>
                 )}
@@ -278,6 +281,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/agents") return zh ? "助理" : "Agents"
   if (pathname === "/chat/skills" || pathname.startsWith("/chat/skills/")) return zh ? "技能" : "Skills"
   if (pathname === "/chat/devices" || pathname.startsWith("/chat/devices/")) return zh ? "设备" : "Devices"
+  if (pathname === "/chat/sandboxes") return zh ? "云端沙箱" : "Cloud Sandboxes"
   if (pathname === "/chat/sites") return zh ? "站点" : "Sites"
   if (pathname.includes("/agent-groups/") && pathname.endsWith("/operations")) return zh ? "工作室运营" : "Studio Operations"
   if (pathname.startsWith("/chat/agent-groups")) return zh ? "工作室" : "Agent Studios"
@@ -289,18 +293,17 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname === "/chat/admin-channels") return zh ? "渠道" : "Channels"
   if (pathname === "/chat/admin-models") return zh ? "模型" : "Models"
   if (pathname === "/chat/admin-users") return zh ? "用户" : "Users"
+  if (pathname === "/chat/admin/sandboxes") return zh ? "云端沙箱主机" : "Sandbox Hosts"
   return zh ? "聊天" : "Chat"
 }
 
 function AdvancedChatSidebar({
   className,
   publicSettings,
-  isAdmin,
   onNavigate,
 }: {
   className?: string
   publicSettings: PublicSettings
-  isAdmin: boolean
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -318,23 +321,6 @@ function AdvancedChatSidebar({
   const creationLabel = language === "zh" ? "创作" : language === "ja" ? "作成" : "Create"
   const workflowLabel = language === "zh" ? "工作流" : language === "ja" ? "ワークフロー" : "Workflows"
   const agentLabel = language === "zh" ? "代理" : language === "ja" ? "エージェント" : "Agents"
-  const adminLabel = language === "zh" ? "管理" : language === "ja" ? "管理" : "Admin"
-  const systemSubItems = [
-    { href: "/chat/admin/general", label: t("nav.systemGeneral") },
-    { href: "/chat/admin/theme", label: t("nav.systemTheme") },
-    { href: "/chat/admin/auth", label: t("nav.systemAuth") },
-    { href: "/chat/admin/content", label: t("nav.systemContent") },
-    { href: "/chat/admin/operations", label: t("nav.systemOperations") },
-    { href: "/chat/admin/advanced-chat", label: t("nav.systemAdvancedChat") },
-  ]
-  const adminItems: AdvancedChatSidebarItem[] = [
-    { href: "/chat/admin-overview", label: t("nav.adminOverview"), icon: BarChart3, active: location.pathname === "/chat/admin-overview" },
-    { href: "/chat/admin-logs", label: t("nav.auditLogs"), icon: ScrollText, active: location.pathname === "/chat/admin-logs" },
-    { href: "/chat/admin/general", label: t("nav.system"), icon: Shield, active: location.pathname.startsWith("/chat/admin/"), children: systemSubItems },
-    { href: "/chat/admin-channels", label: t("nav.channels"), icon: Database, active: location.pathname === "/chat/admin-channels" },
-    { href: "/chat/admin-models", label: t("nav.models"), icon: Boxes, active: location.pathname === "/chat/admin-models" },
-    { href: "/chat/admin-users", label: t("nav.users"), icon: Users, active: location.pathname === "/chat/admin-users" },
-  ]
   const homeItem: AdvancedChatSidebarItem = {
     href: "/chat",
     label: t("nav.chat"),
@@ -372,13 +358,13 @@ function AdvancedChatSidebar({
         { href: "/chat/memories", label: memoriesLabel, icon: Brain, active: location.pathname === "/chat/memories" },
         { href: "/chat/skills", label: t("nav.skills"), icon: Sparkles, active: location.pathname === "/chat/skills" || location.pathname.startsWith("/chat/skills/") },
         { href: "/chat/devices", label: t("nav.devices"), icon: Laptop, active: location.pathname === "/chat/devices" || location.pathname.startsWith("/chat/devices/") },
+        { href: "/chat/sandboxes", label: language === "zh" ? "云端沙箱" : "Cloud Sandboxes", icon: Server, active: location.pathname === "/chat/sandboxes" },
         { href: "/chat/sites", label: sitesLabel, icon: Globe2, active: location.pathname === "/chat/sites" },
         { href: "/chat/agent-groups", label: agentGroupsLabel, icon: Users, active: location.pathname.startsWith("/chat/agent-groups") },
         ...(enterpriseMode ? [{ href: "/chat/agent-tasks", label: agentTasksLabel, icon: ListTree, active: location.pathname === "/chat/agent-tasks" }] : []),
         { href: "/chat/mcp", label: t("nav.mcp"), icon: Bot, active: location.pathname === "/chat/mcp" },
       ],
     },
-    ...(isDesktopTarget() && isAdmin ? [{ id: "admin", label: adminLabel, items: adminItems }] : []),
   ].filter((group) => group.items.length > 0)
   const [selectedGroupID, setSelectedGroupID] = useState("")
   const routeGroup = groups.find((group) => group.items.some((item) => item.active || item.children?.some((child) => location.pathname === child.href)))
