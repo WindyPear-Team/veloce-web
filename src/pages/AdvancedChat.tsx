@@ -55,6 +55,32 @@ interface AdvancedChatSidebarItem {
   children?: { href: string; label: string }[]
 }
 
+const advancedChatSidebarIconTones: Record<string, string> = {
+  "/chat": "bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-300",
+  "/chat/tasks": "bg-orange-500/15 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300",
+  "/chat/files": "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
+  "/chat/knowledge": "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300",
+  "/chat/images": "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-300",
+  "/chat/videos": "bg-violet-500/15 text-violet-600 dark:bg-violet-400/15 dark:text-violet-300",
+  "/chat/channels": "bg-sky-500/15 text-sky-600 dark:bg-sky-400/15 dark:text-sky-300",
+  "/chat/deliveries": "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300",
+  "/chat/scheduled-tasks": "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
+  "/chat/agents": "bg-purple-500/15 text-purple-600 dark:bg-purple-400/15 dark:text-purple-300",
+  "/chat/memories": "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300",
+  "/chat/skills": "bg-fuchsia-500/15 text-fuchsia-600 dark:bg-fuchsia-400/15 dark:text-fuchsia-300",
+  "/chat/devices": "bg-teal-500/15 text-teal-600 dark:bg-teal-400/15 dark:text-teal-300",
+  "/chat/sites": "bg-lime-500/15 text-lime-700 dark:bg-lime-400/15 dark:text-lime-300",
+  "/chat/agent-groups": "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-300",
+  "/chat/agent-tasks": "bg-orange-500/15 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300",
+  "/chat/mcp": "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-300",
+  "/chat/admin-overview": "bg-fuchsia-500/15 text-fuchsia-600 dark:bg-fuchsia-400/15 dark:text-fuchsia-300",
+  "/chat/admin-logs": "bg-slate-500/15 text-slate-600 dark:bg-slate-400/15 dark:text-slate-300",
+  "/chat/admin/general": "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300",
+  "/chat/admin-channels": "bg-teal-500/15 text-teal-600 dark:bg-teal-400/15 dark:text-teal-300",
+  "/chat/admin-models": "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-300",
+  "/chat/admin-users": "bg-lime-500/15 text-lime-700 dark:bg-lime-400/15 dark:text-lime-300",
+}
+
 interface AdvancedChatSidebarGroup {
   id: string
   label: string
@@ -161,28 +187,26 @@ export default function AdvancedChat() {
           <AdvancedChatSidebar className={isChatRoute ? "border-r-0 bg-background" : undefined} publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} />
         </div>
 
-        {isSidebarOpen && (
-          <div className={cn("fixed inset-0 z-40 lg:hidden", isDesktop ? "top-0" : "top-16")}>
+        <div className={cn("fixed inset-0 z-40 transition-opacity duration-200 lg:hidden", isDesktop ? "top-0" : "top-16", isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!isSidebarOpen}>
             <button
               type="button"
-              className="absolute inset-0 bg-black/50"
+              className="absolute inset-0 bg-black/35 backdrop-blur-sm transition-opacity duration-200"
               aria-label={t("advancedChat.closeMenu")}
               onClick={() => setIsSidebarOpen(false)}
             />
-            <div className="relative z-50 h-full w-72 max-w-[85vw]">
+            <div className={cn("relative z-50 h-full w-64 max-w-[85vw] transition-transform duration-200 ease-out", isSidebarOpen ? "translate-x-0" : "-translate-x-full")}>
               <AdvancedChatSidebar className={cn("w-full", isChatRoute && "border-r-0 bg-background")} publicSettings={publicSettings} isAdmin={Boolean(user?.is_admin)} onNavigate={() => setIsSidebarOpen(false)} />
             </div>
-          </div>
-        )}
+        </div>
 
-        <main className={cn("flex min-h-0 flex-1 flex-col", isChatRoute ? "overflow-hidden" : "overflow-y-auto")}>
+        <main className={cn("flex min-h-0 flex-1 flex-col transition-[filter] duration-200", isChatRoute ? "overflow-hidden" : "overflow-y-auto", isSidebarOpen && "max-lg:blur-sm")}>
           {!isChatRoute && publicSettings.announcement && (
             <div className="border-b bg-muted/50 px-4 py-3 text-sm sm:px-6 lg:px-8">
               <div className="mx-auto max-w-6xl whitespace-pre-wrap">{publicSettings.announcement}</div>
             </div>
           )}
           <div className={cn("w-full flex-1", isChatRoute ? "min-h-0" : "mx-auto max-w-6xl p-4 sm:p-6 lg:p-8")}>
-            <PageTransition transitionKey={transitionKey} className={isChatRoute ? "h-full min-h-0" : undefined}>
+            <PageTransition transitionKey={transitionKey} className={cn("page-shell-transition", isChatRoute && "h-full min-h-0")}>
               <div className={cn(isChatRoute ? "h-full" : "space-y-6")}>
                 {isChatRoute ? (
                   <Chat variant="advanced" />
@@ -372,11 +396,13 @@ function AdvancedChatSidebar({
         to={item.href}
         onClick={onNavigate}
         className={cn(
-          "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
-          item.active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+          "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition-colors",
+          item.active ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-muted"
         )}
       >
-        <item.icon size={18} />
+        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-xl", item.active ? "bg-primary-foreground/15 text-primary-foreground" : advancedChatSidebarIconTones[item.href] || "bg-muted text-muted-foreground")}>
+          <item.icon size={16} />
+        </span>
         <span className="flex-1 truncate">{item.label}</span>
       </Link>
       {item.children && item.active && (
@@ -387,7 +413,7 @@ function AdvancedChatSidebar({
               to={child.href}
               onClick={onNavigate}
               className={cn(
-                "rounded-md px-3 py-1.5 text-xs transition-colors",
+                "rounded-xl px-3 py-1.5 text-xs transition-colors",
                 location.pathname === child.href ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
               )}
             >
@@ -400,7 +426,7 @@ function AdvancedChatSidebar({
   )
 
   return (
-    <aside className={cn("flex h-full w-64 flex-col border-r bg-card", className)}>
+    <aside className={cn("flex h-full w-56 flex-col border-r bg-card", className)}>
       <nav className="relative min-h-0 flex-1 overflow-hidden px-4 py-4">
         <div className={cn("h-full overflow-y-auto transition-transform duration-200 ease-out", showingGroup && "-translate-x-full")}>
           <div className="flex flex-col gap-1">
@@ -415,11 +441,13 @@ function AdvancedChatSidebar({
                   to={firstItem.href}
                   onClick={() => setSelectedGroupID(group.id)}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-4 py-2 text-sm font-medium transition-colors",
+                    "flex items-center gap-3 rounded-2xl px-3 py-2 text-sm font-medium transition-colors",
                     group.id === routeGroup?.id ? "bg-muted text-foreground" : "hover:bg-muted"
                   )}
                 >
-                  <firstItem.icon size={18} />
+                  <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-xl", advancedChatSidebarIconTones[firstItem.href] || "bg-muted text-muted-foreground")}>
+                    <firstItem.icon size={16} />
+                  </span>
                   <span className="flex-1 truncate">{group.label}</span>
                   <ChevronRight size={15} className="text-muted-foreground" />
                 </Link>
@@ -434,7 +462,7 @@ function AdvancedChatSidebar({
                 <Link
                   to="/chat"
                   onClick={() => setSelectedGroupID("")}
-                  className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-muted"
+                  className="flex h-8 w-8 items-center justify-center rounded-2xl hover:bg-muted"
                   aria-label={t("nav.chat")}
                   title={t("nav.chat")}
                 >

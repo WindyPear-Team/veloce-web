@@ -13,6 +13,7 @@ import { useI18n } from "@/lib/i18n"
 import { pageKeyFromPathname } from "@/lib/page-layouts"
 import type { PublicSettings } from "@/lib/public-settings"
 import { parseTopNavItems, withPublicSettingsDefaults } from "@/lib/public-settings"
+import { cn } from "@/lib/utils"
 
 interface CurrentUser {
   username?: string
@@ -106,21 +107,19 @@ export function Layout() {
           <Sidebar />
         </div>
 
-        {isSidebarOpen && (
-          <div className="fixed inset-0 top-16 z-40 lg:hidden">
+        <div className={cn("fixed inset-0 top-16 z-40 transition-opacity duration-200 lg:hidden", isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!isSidebarOpen}>
             <button
               type="button"
-              className="absolute inset-0 bg-black/50"
+              className="absolute inset-0 bg-black/35 backdrop-blur-sm transition-opacity duration-200"
               aria-label="Close menu"
               onClick={() => setIsSidebarOpen(false)}
             />
-            <div className="relative z-50 h-full w-72 max-w-[85vw]">
+            <div className={cn("relative z-50 h-full w-64 max-w-[85vw] transition-transform duration-200 ease-out", isSidebarOpen ? "translate-x-0" : "-translate-x-full")}>
               <Sidebar className="w-full" onNavigate={() => setIsSidebarOpen(false)} />
             </div>
-          </div>
-        )}
+        </div>
 
-        <main className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        <main className={cn("flex min-h-0 flex-1 flex-col overflow-y-auto transition-[filter] duration-200", isSidebarOpen && "max-lg:blur-sm")}>
           {publicSettings.announcement && (
             <div className="border-b bg-muted/50 px-4 py-3 text-sm sm:px-6 lg:px-8">
               <div className="mx-auto max-w-6xl whitespace-pre-wrap">{publicSettings.announcement}</div>

@@ -24,6 +24,7 @@ interface SettingsNavItem {
   section?: SettingsSection
   label: string
   icon: typeof UserCircle
+  colorClass: string
 }
 
 export default function SettingsWorkspace() {
@@ -83,15 +84,13 @@ export default function SettingsWorkspace() {
 
       <div className="flex min-h-0 flex-1">
         <SettingsSidebar pathname={location.pathname} copy={copy} onLogout={logout} />
-        {isSidebarOpen && (
-          <div className={cn("fixed inset-0 z-40 lg:hidden", isDesktop ? "top-0" : "top-16")}>
-            <button type="button" className="absolute inset-0 bg-black/50" aria-label={copy.closeMenu} onClick={() => setIsSidebarOpen(false)} />
-            <SettingsSidebar className="relative z-50 h-full w-72 max-w-[85vw]" pathname={location.pathname} copy={copy} onLogout={logout} onNavigate={() => setIsSidebarOpen(false)} />
-          </div>
-        )}
-        <main className="min-h-0 flex-1 overflow-y-auto">
+        <div className={cn("fixed inset-0 z-40 transition-opacity duration-200 lg:hidden", isDesktop ? "top-0" : "top-16", isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!isSidebarOpen}>
+          <button type="button" className="absolute inset-0 bg-black/35 backdrop-blur-sm transition-opacity duration-200" aria-label={copy.closeMenu} onClick={() => setIsSidebarOpen(false)} />
+          <SettingsSidebar className={cn("relative z-50 h-full w-64 max-w-[85vw] transition-transform duration-200 ease-out", isSidebarOpen ? "translate-x-0" : "-translate-x-full")} pathname={location.pathname} copy={copy} onLogout={logout} onNavigate={() => setIsSidebarOpen(false)} />
+        </div>
+        <main className={cn("min-h-0 flex-1 overflow-y-auto transition-[filter] duration-200", isSidebarOpen && "max-lg:blur-sm")}>
           <div className="mx-auto w-full max-w-5xl p-4 sm:p-6 lg:p-8">
-            <PageTransition transitionKey={location.pathname}>
+            <PageTransition transitionKey={location.pathname} className="page-shell-transition">
               <Routes>
                 <Route index element={<Navigate to="profile" replace />} />
                 <Route path="profile" element={<Settings section="profile" />} />
@@ -117,14 +116,14 @@ function SettingsSidebar({ pathname, copy, onLogout, className, onNavigate }: {
 }) {
   const visibilityClass = className ? "flex flex-col" : "hidden lg:flex lg:flex-col"
   const items: SettingsNavItem[] = [
-    { href: "/settings/profile", section: "profile", label: copy.account, icon: UserCircle },
-    { href: "/settings/assistant", section: "assistant", label: copy.assistant, icon: Bot },
-    { href: "/settings/security", section: "security", label: copy.security, icon: Shield },
-    { href: "/settings/wallet", label: copy.wallet, icon: CreditCard },
+    { href: "/settings/profile", section: "profile", label: copy.account, icon: UserCircle, colorClass: "bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-300" },
+    { href: "/settings/assistant", section: "assistant", label: copy.assistant, icon: Bot, colorClass: "bg-violet-500/15 text-violet-600 dark:bg-violet-400/15 dark:text-violet-300" },
+    { href: "/settings/security", section: "security", label: copy.security, icon: Shield, colorClass: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300" },
+    { href: "/settings/wallet", label: copy.wallet, icon: CreditCard, colorClass: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300" },
   ]
 
   return (
-    <aside className={cn(visibilityClass, "h-full min-h-0 w-60 shrink-0 border-r bg-background", className)}>
+    <aside className={cn(visibilityClass, "h-full min-h-0 w-56 shrink-0 border-r bg-background", className)}>
       <div className="shrink-0 px-4 pb-3 pt-5 text-sm font-semibold">{copy.title}</div>
       <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
         {items.map((item) => {
@@ -135,21 +134,23 @@ function SettingsSidebar({ pathname, copy, onLogout, className, onNavigate }: {
               key={item.href}
               to={item.href}
               onClick={onNavigate}
-              className={cn("flex h-10 items-center gap-3 rounded-md px-3 text-sm transition-colors hover:bg-muted", active && "bg-accent font-medium text-accent-foreground")}
+              className={cn("flex h-11 items-center gap-3 rounded-2xl px-3 text-sm transition-colors hover:bg-muted", active && "bg-primary font-medium text-primary-foreground shadow-sm")}
             >
-              <Icon size={17} className="shrink-0" />
+              <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-xl", active ? "bg-primary-foreground/15 text-primary-foreground" : item.colorClass)}>
+                <Icon size={16} />
+              </span>
               <span className="truncate">{item.label}</span>
             </Link>
           )
         })}
       </nav>
       <div className="mt-auto shrink-0 space-y-1 border-t p-3">
-        <Link to="/chat" onClick={onNavigate} className="flex h-10 items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <MessageSquare size={17} />
+        <Link to="/chat" onClick={onNavigate} className="flex h-10 items-center gap-3 rounded-2xl px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-300"><MessageSquare size={16} /></span>
           <span>{copy.chat}</span>
         </Link>
-        <button type="button" onClick={onLogout} className="flex h-10 w-full items-center gap-3 rounded-md px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
-          <LogOut size={17} />
+        <button type="button" onClick={onLogout} className="flex h-10 w-full items-center gap-3 rounded-2xl px-3 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground">
+          <span className="flex size-7 shrink-0 items-center justify-center rounded-xl bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300"><LogOut size={16} /></span>
           <span>{copy.signOut}</span>
         </button>
       </div>

@@ -16,6 +16,7 @@ interface CurrentUser {
 
 interface MenuItem {
   icon: LucideIcon
+  colorClass?: string
   labelKey?: TranslationKey
   label?: string
   path: string
@@ -28,35 +29,36 @@ interface MenuItem {
 interface SystemSubItem {
   path: string
   labelKey: TranslationKey
+  colorClass: string
 }
 
 const systemSubItems: SystemSubItem[] = [
-  { path: "/dashboard/admin/general", labelKey: "nav.systemGeneral" },
-  { path: "/dashboard/admin/theme", labelKey: "nav.systemTheme" },
-  { path: "/dashboard/admin/auth", labelKey: "nav.systemAuth" },
-  { path: "/dashboard/admin/content", labelKey: "nav.systemContent" },
-  { path: "/dashboard/admin/operations", labelKey: "nav.systemOperations" },
-  { path: "/dashboard/admin/advanced-chat", labelKey: "nav.systemAdvancedChat" },
+  { path: "/dashboard/admin/general", labelKey: "nav.systemGeneral", colorClass: "bg-blue-500" },
+  { path: "/dashboard/admin/theme", labelKey: "nav.systemTheme", colorClass: "bg-fuchsia-500" },
+  { path: "/dashboard/admin/auth", labelKey: "nav.systemAuth", colorClass: "bg-emerald-500" },
+  { path: "/dashboard/admin/content", labelKey: "nav.systemContent", colorClass: "bg-cyan-500" },
+  { path: "/dashboard/admin/operations", labelKey: "nav.systemOperations", colorClass: "bg-amber-500" },
+  { path: "/dashboard/admin/advanced-chat", labelKey: "nav.systemAdvancedChat", colorClass: "bg-violet-500" },
 ]
 
 const userMenuItems: MenuItem[] = [
-  { icon: LayoutDashboard, labelKey: "nav.dashboard", path: "/dashboard", settingKey: "sidebar_dashboard_enabled" },
-  { icon: BarChart3, labelKey: "nav.dataBoard", path: "/dashboard/data-board", settingKey: "sidebar_data_board_enabled" },
-  { icon: History, labelKey: "nav.details", path: "/dashboard/logs", settingKey: "sidebar_usage_enabled" },
-  { icon: KeyRound, labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
-  { icon: MessageSquare, labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
-  { icon: ClipboardList, label: "任务", path: "/dashboard/tasks", enterpriseOnly: true },
+  { icon: LayoutDashboard, colorClass: "bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-300", labelKey: "nav.dashboard", path: "/dashboard", settingKey: "sidebar_dashboard_enabled" },
+  { icon: BarChart3, colorClass: "bg-violet-500/15 text-violet-600 dark:bg-violet-400/15 dark:text-violet-300", labelKey: "nav.dataBoard", path: "/dashboard/data-board", settingKey: "sidebar_data_board_enabled" },
+  { icon: History, colorClass: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300", labelKey: "nav.details", path: "/dashboard/logs", settingKey: "sidebar_usage_enabled" },
+  { icon: KeyRound, colorClass: "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300", labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
+  { icon: MessageSquare, colorClass: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300", labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
+  { icon: ClipboardList, colorClass: "bg-orange-500/15 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300", label: "任务", path: "/dashboard/tasks", enterpriseOnly: true },
 ]
 
 const adminMenuItems: MenuItem[] = [
-  { icon: BarChart3, labelKey: "nav.adminOverview", path: "/dashboard/admin-overview", settingKey: "sidebar_admin_overview_enabled" },
-  { icon: ScrollText, labelKey: "nav.auditLogs", path: "/dashboard/admin-logs", settingKey: "sidebar_admin_overview_enabled" },
-  { icon: Shield, labelKey: "nav.system", path: "/dashboard/admin/general", settingKey: "sidebar_system_enabled", children: systemSubItems },
-  { icon: Building2, label: "企业管理", path: "/dashboard/enterprise", enterpriseOnly: true },
-  { icon: Database, labelKey: "nav.channels", path: "/dashboard/channels", settingKey: "sidebar_channels_enabled" },
-  { icon: Boxes, labelKey: "nav.models", path: "/dashboard/models", settingKey: "sidebar_models_enabled" },
-  { icon: Users, labelKey: "nav.users", path: "/dashboard/users", settingKey: "sidebar_users_enabled" },
-  { icon: Puzzle, labelKey: "nav.plugins", path: "/dashboard/plugins" },
+  { icon: BarChart3, colorClass: "bg-fuchsia-500/15 text-fuchsia-600 dark:bg-fuchsia-400/15 dark:text-fuchsia-300", labelKey: "nav.adminOverview", path: "/dashboard/admin-overview", settingKey: "sidebar_admin_overview_enabled" },
+  { icon: ScrollText, colorClass: "bg-slate-500/15 text-slate-600 dark:bg-slate-400/15 dark:text-slate-300", labelKey: "nav.auditLogs", path: "/dashboard/admin-logs", settingKey: "sidebar_admin_overview_enabled" },
+  { icon: Shield, colorClass: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300", labelKey: "nav.system", path: "/dashboard/admin/general", settingKey: "sidebar_system_enabled", children: systemSubItems },
+  { icon: Building2, colorClass: "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-300", label: "企业管理", path: "/dashboard/enterprise", enterpriseOnly: true },
+  { icon: Database, colorClass: "bg-teal-500/15 text-teal-600 dark:bg-teal-400/15 dark:text-teal-300", labelKey: "nav.channels", path: "/dashboard/channels", settingKey: "sidebar_channels_enabled" },
+  { icon: Boxes, colorClass: "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-300", labelKey: "nav.models", path: "/dashboard/models", settingKey: "sidebar_models_enabled" },
+  { icon: Users, colorClass: "bg-lime-500/15 text-lime-700 dark:bg-lime-400/15 dark:text-lime-300", labelKey: "nav.users", path: "/dashboard/users", settingKey: "sidebar_users_enabled" },
+  { icon: Puzzle, colorClass: "bg-purple-500/15 text-purple-600 dark:bg-purple-400/15 dark:text-purple-300", labelKey: "nav.plugins", path: "/dashboard/plugins" },
 ]
 
 export function Sidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
@@ -101,7 +103,7 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
   const pluginItems = pluginSidebarItems(pluginExtensions)
 
   return (
-    <div className={cn("flex h-full w-64 flex-col border-r bg-card", className)}>
+    <div className={cn("flex h-full w-56 flex-col border-r bg-card", className)}>
       <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
         <div className="flex flex-col gap-1">
           {visibleUserItems.map((item) => (
@@ -153,11 +155,13 @@ function SidebarLink({
         to={item.path}
         onClick={onNavigate}
         className={cn(
-          "flex items-center gap-3 px-4 py-2 rounded-md transition-colors text-sm font-medium",
-          active ? "bg-primary text-primary-foreground" : "hover:bg-muted"
+          "flex items-center gap-3 rounded-2xl px-3 py-2 transition-colors text-sm font-medium",
+          active ? "bg-primary text-primary-foreground shadow-sm" : "hover:bg-muted"
         )}
         >
-        <item.icon size={18} />
+        <span className={cn("flex size-7 shrink-0 items-center justify-center rounded-xl transition-colors", active ? "bg-primary-foreground/15 text-primary-foreground" : item.colorClass || "bg-muted text-muted-foreground")}>
+          <item.icon size={16} />
+        </span>
         <span className="flex-1">{label}</span>
         {item.children && <ChevronDown size={14} className={cn("transition-transform", isExpanded && "rotate-180")} />}
       </Link>
@@ -171,10 +175,11 @@ function SidebarLink({
                 to={child.path}
                 onClick={onNavigate}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm transition-colors",
+                  "flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm transition-colors",
                   childActive ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >
+                <span className={cn("size-1.5 shrink-0 rounded-full", child.colorClass)} />
                 {t(child.labelKey)}
               </Link>
             )
@@ -210,7 +215,7 @@ function pluginSidebarItems(data: unknown): MenuItem[] {
       const declaredPath = stringValue(raw.path)
       const path = normalizePluginSidebarPath(plugin.id, declaredPath)
       if (!path) continue
-      items.push({ icon: Puzzle, label, path })
+      items.push({ icon: Puzzle, colorClass: "bg-purple-500/15 text-purple-600 dark:bg-purple-400/15 dark:text-purple-300", label, path })
     }
   }
   return items

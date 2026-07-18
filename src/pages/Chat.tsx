@@ -3195,7 +3195,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const sessionsSidebar = (
     <aside
-      className="flex h-full w-80 max-w-[85vw] flex-col bg-background text-foreground"
+      className="flex h-full w-72 max-w-[85vw] flex-col bg-background text-foreground"
       onContextMenu={(event) => {
         if (event.defaultPrevented) {
           return
@@ -3370,17 +3370,15 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     typeof document === "undefined"
       ? null
       : createPortal(
-          isSessionsSidebarOpen && (
-            <div className={cn("fixed inset-x-0 bottom-0 z-40 xl:hidden", isDesktop ? "top-[6.25rem]" : "top-16")}>
+          <div className={cn("fixed inset-x-0 bottom-0 z-40 transition-opacity duration-200 xl:hidden", isDesktop ? "top-[6.25rem]" : "top-16", isSessionsSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!isSessionsSidebarOpen}>
               <button
                 type="button"
-                className="absolute inset-0 bg-black/50"
+                className="absolute inset-0 bg-black/35 backdrop-blur-sm transition-opacity duration-200"
                 aria-label={copy.closeSessions}
                 onClick={() => setIsSessionsSidebarOpen(false)}
               />
-              <div className="relative z-50 ml-auto h-full w-80 max-w-[85vw]">{sessionsSidebar}</div>
-            </div>
-          ),
+              <div className={cn("relative z-50 ml-auto h-full w-72 max-w-[85vw] transition-transform duration-200 ease-out", isSessionsSidebarOpen ? "translate-x-0" : "translate-x-full")}>{sessionsSidebar}</div>
+          </div>,
           document.body
         )
   const messageSelectionContextMenuPortal = messageSelectionMenu && typeof document !== "undefined" && (() => {
@@ -3448,7 +3446,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       {sessionsSidebarPortal}
       {messageSelectionContextMenuPortal}
       <div className={cn(
-        "min-w-0 flex-1",
+        "min-w-0 flex-1 transition-[filter] duration-200",
+        isSessionsSidebarOpen && "max-xl:blur-sm",
         isAdvanced ? "flex min-h-0 flex-col overflow-hidden p-4 sm:p-6 lg:p-8 xl:relative xl:z-10 xl:mx-auto xl:mb-4 xl:overflow-visible xl:rounded-xl xl:border xl:border-border xl:bg-card xl:p-0" : "space-y-5",
         isAdvanced && (isDesktopSessionsSidebarVisible ? "xl:max-w-[1180px]" : "xl:max-w-none")
       )}>
@@ -4644,7 +4643,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
       </div>
       <div className={cn(
         "relative z-0 hidden h-full shrink-0 overflow-hidden transition-[width,opacity] duration-200 ease-out xl:flex",
-        isDesktopSessionsSidebarVisible ? "w-80 opacity-100" : "w-0 pointer-events-none opacity-0"
+        isDesktopSessionsSidebarVisible ? "w-72 opacity-100" : "w-0 pointer-events-none opacity-0"
       )}>
         {sessionsSidebar}
       </div>
