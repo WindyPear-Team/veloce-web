@@ -319,6 +319,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@date-fns/tz@npm:^1.4.1":
+  version: 1.5.0
+  resolution: "@date-fns/tz@npm:1.5.0"
+  checksum: 10c0/4ef25eedd55924938fa81b23b949a3425201597e2007f5323db54d50fc19283eca5e2a7963c3d82c99b3adf273e9ea9bc7adfd1c9076e15badd99c593a984ffa
+  languageName: node
+  linkType: hard
+
 "@dotenvx/dotenvx@npm:^1.48.4":
   version: 1.75.1
   resolution: "@dotenvx/dotenvx@npm:1.75.1"
@@ -3599,6 +3606,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"date-fns@npm:^4.1.0, date-fns@npm:^4.4.0":
+  version: 4.4.0
+  resolution: "date-fns@npm:4.4.0"
+  checksum: 10c0/988f0a13db183f5dfc85c36bbb6847a9c135a9225888bbea4005876ec15539a8613c21a07370a4e7ea543918d5a1cafb423c528b42cdbbde5fdfddb178126b21
+  languageName: node
+  linkType: hard
+
 "debounce-fn@npm:^4.0.0":
   version: 4.0.0
   resolution: "debounce-fn@npm:4.0.0"
@@ -5902,6 +5916,22 @@ __metadata:
   languageName: node
   linkType: hard
 
+"react-day-picker@npm:^10.0.1":
+  version: 10.0.1
+  resolution: "react-day-picker@npm:10.0.1"
+  dependencies:
+    "@date-fns/tz": "npm:^1.4.1"
+    date-fns: "npm:^4.1.0"
+  peerDependencies:
+    "@types/react": ">=16.8.0"
+    react: ">=16.8.0"
+  peerDependenciesMeta:
+    "@types/react":
+      optional: true
+  checksum: 10c0/2ca2690f5e8c22b0fd24079b68959110ec199ec7d5ac74f26cfe6dad3cadf7d781458a9a654673dd47009e4fbb8548711ec0ae048e41dd3cf1d4ede16dadad55
+  languageName: node
+  linkType: hard
+
 "react-dom@npm:^19.2.6":
   version: 19.2.6
   resolution: "react-dom@npm:19.2.6"
@@ -6927,6 +6957,7 @@ __metadata:
     axios: "npm:^1.16.1"
     class-variance-authority: "npm:^0.7.1"
     clsx: "npm:^2.1.1"
+    date-fns: "npm:^4.4.0"
     eslint: "npm:^10.3.0"
     eslint-plugin-react-hooks: "npm:^7.1.1"
     eslint-plugin-react-refresh: "npm:^0.5.2"
@@ -6935,6 +6966,7 @@ __metadata:
     postcss: "npm:^8.5.15"
     radix-ui: "npm:^1.6.2"
     react: "npm:^19.2.6"
+    react-day-picker: "npm:^10.0.1"
     react-dom: "npm:^19.2.6"
     react-router-dom: "npm:^7.15.1"
     recharts: "npm:^3.8.1"

@@ -4,7 +4,7 @@ import type { ReactNode } from "react"
 import { useQuery } from "@tanstack/react-query"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { PageTab, PageTabs } from "@/components/layout/PageTabs"
 import { TabTransition } from "@/components/layout/TabTransition"
@@ -475,11 +475,11 @@ function DetailFilters({
     <div className="flex flex-col gap-3 rounded-md border bg-card p-3 md:flex-row md:items-end">
       <label className="min-w-40 flex-1 space-y-1 text-sm">
         <span className="text-muted-foreground">{copy.startDate}</span>
-        <Input type="date" value={startDate} onChange={(event) => onStartDateChange(event.target.value)} />
+        <DatePicker value={startDate} onValueChange={onStartDateChange} />
       </label>
       <label className="min-w-40 flex-1 space-y-1 text-sm">
         <span className="text-muted-foreground">{copy.endDate}</span>
-        <Input type="date" value={endDate} onChange={(event) => onEndDateChange(event.target.value)} />
+        <DatePicker value={endDate} onValueChange={onEndDateChange} />
       </label>
       {extra}
       <Button variant="outline" onClick={onReset}>{copy.resetFilters}</Button>

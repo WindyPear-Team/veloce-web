@@ -5,6 +5,7 @@ import { Activity, Filter } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DatePicker } from "@/components/ui/date-picker"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Table,
@@ -121,8 +122,8 @@ export default function AdminAuditLogs() {
                 <SelectItem value="system">{copy.typeSystem}</SelectItem>
               </SelectContent></Select>
             </label>
-            <FilterInput label={copy.startDate} value={startDate} type="date" onChange={(value) => { setStartDate(value); setPage(1) }} />
-            <FilterInput label={copy.endDate} value={endDate} type="date" onChange={(value) => { setEndDate(value); setPage(1) }} />
+            <DateFilterInput label={copy.startDate} value={startDate} onChange={(value) => { setStartDate(value); setPage(1) }} />
+            <DateFilterInput label={copy.endDate} value={endDate} onChange={(value) => { setEndDate(value); setPage(1) }} />
             <FilterInput label={copy.statusCode} value={statusCode} type="number" placeholder="500" onChange={(value) => { setStatusCode(value); setPage(1) }} />
             <FilterInput label={copy.action} value={action} placeholder="login" onChange={(value) => { setAction(value); setPage(1) }} />
             <FilterInput label={copy.path} value={path} placeholder="/api/settings" onChange={(value) => { setPath(value); setPage(1) }} />
@@ -214,6 +215,15 @@ function FilterInput({ label, value, placeholder, type = "text", onChange }: { l
     <label className="space-y-1 text-sm">
       <span className="text-muted-foreground">{label}</span>
       <Input type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  )
+}
+
+function DateFilterInput({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="space-y-1 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <DatePicker value={value} onValueChange={onChange} />
     </label>
   )
 }

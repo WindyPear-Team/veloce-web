@@ -2,6 +2,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Camera, KeyRound, UserCircle } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
+import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import api, { apiURL } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -351,6 +352,16 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
                   <Field label={t("common.role")} value={user?.is_admin ? t("common.admin") : t("common.user")} />
                 </>
               )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>{t("common.language")}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="text-sm text-muted-foreground">{t("settings.languageSubtitle")}</div>
+              <LanguageSwitcher placement="bottom" />
             </CardContent>
           </Card>
 

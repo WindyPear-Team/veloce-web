@@ -385,6 +385,7 @@ const modelStoreKey = "windypear.chat.model.v1"
 const endpointStoreKey = "windypear.chat.endpoint.v1"
 const apiKeyStoreKey = "windypear.chat.api_key_id.v1"
 const selectedAgentStoreKey = "windypear.advanced_chat.selected_agent.v1"
+const recentAgentStoreKey = "windypear.advanced_chat.recent_agents.v1"
 const sessionFoldersStorageKey = "windypear.chat.session_folders.v1"
 const sessionFolderAssignmentsStorageKey = "windypear.chat.session_folder_assignments.v1"
 const defaultAgentID = "default"
@@ -457,6 +458,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const agentGroupCopy = useMemo(() => (language === "zh" ? zhAgentGroupCopy : enAgentGroupCopy), [language])
   const approvalModeCopy = useMemo(() => (language === "zh" ? zhConnectorApprovalModeCopy : enConnectorApprovalModeCopy), [language])
   const newSessionGreeting = greetingForHour(language)
+  const recentAgentsLabel = language === "zh" ? "最近助理" : language === "ja" ? "最近のアシスタント" : "Recent assistants"
   const gitCopy = useMemo(() => (language === "zh" ? zhGitWorkspaceCopy : enGitWorkspaceCopy), [language])
   const workspacePickerCopy = useMemo(() => (language === "zh" ? zhWorkspacePickerCopy : enWorkspacePickerCopy), [language])
   const taskChangeCopy = useMemo(() => (language === "zh" ? zhTaskChangeCopy : enTaskChangeCopy), [language])
@@ -476,6 +478,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [selectedAPIKeyID, setSelectedAPIKeyID] = useState(() => Number(localStorage.getItem(storeKeys.apiKey) || 0))
   const [selectedUserChannelID, setSelectedUserChannelID] = useState(() => Number(localStorage.getItem(storeKeys.userChannel) || 0))
   const [selectedAgentID, setSelectedAgentID] = useState(() => (isAdvanced ? localStorage.getItem(selectedAgentStoreKey) || "" : ""))
+  const [recentAgentIDs, setRecentAgentIDs] = useState(() => (isAdvanced ? readRecentAgentIDs() : []))
   const [desktopInstanceID, setDesktopInstanceID] = useState("")
   const [isConfigOpen, setIsConfigOpen] = useState(false)
   const [isAgentWorkOpen, setIsAgentWorkOpen] = useState(false)
@@ -703,6 +706,25 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     () => welcomeSuggestionsFor(language, currentSession?.id || draftSession.id),
     [currentSession?.id, draftSession.id, language]
   )
+  const recentAgents = useMemo(() => {
+    if (!isAdvanced) {
+      return []
+    }
+    const agentIDsFromSessions = [...displaySessions]
+      .filter((session) => session.messages.length > 0 && Boolean(session.agent_id))
+      .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at))
+      .map((session) => session.agent_id || "")
+    const seen = new Set<string>()
+    return [...recentAgentIDs, ...agentIDsFromSessions]
+      .filter((agentID) => {
+        if (!agentID || seen.has(agentID)) return false
+        seen.add(agentID)
+        return true
+      })
+      .map((agentID) => agents.find((agent) => agent.id === agentID))
+      .filter((agent): agent is ChatAgent => Boolean(agent))
+      .slice(0, 5)
+  }, [agents, displaySessions, isAdvanced, recentAgentIDs])
 
   useEffect(() => {
     if (!isDesktopTarget()) {
@@ -1640,6 +1662,11 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const setSessionAgent = (agentID: string) => {
     const nextAgentID = agentID || defaultAgentID
     setSelectedAgentID(nextAgentID)
+    setRecentAgentIDs((current) => {
+      const next = [nextAgentID, ...current.filter((id) => id !== nextAgentID)].slice(0, 5)
+      localStorage.setItem(recentAgentStoreKey, JSON.stringify(next))
+      return next
+    })
     const agent = agents.find((item) => item.id === nextAgentID)
     const nextModel = agent?.default_model || modelName || modelOptions[0] || ""
     if (nextModel) {
@@ -3758,8 +3785,31 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                     <Sparkles className="mb-3 h-7 w-7 text-primary" />
                     <div className="text-lg font-semibold text-foreground">{newSessionGreeting}</div>
                     <div className="mt-1 text-sm text-muted-foreground">{language === "zh" ? "输入消息开始对话" : "Send a message to begin"}</div>
+                    {recentAgents.length > 0 && (
+                      <div className="mt-6 w-full max-w-xl text-left">
+                        <div className="mb-2 text-xs font-medium text-muted-foreground">{recentAgentsLabel}</div>
+                        <div className="flex gap-1 overflow-x-auto pb-1">
+                          {recentAgents.map((agent) => {
+                            const selected = agent.id === (currentSession?.agent_id || defaultAgentID)
+                            return (
+                              <Button
+                                key={agent.id}
+                                type="button"
+                                variant="ghost"
+                                className={cn("h-9 shrink-0 gap-2 rounded-2xl px-2.5", selected && "bg-muted text-foreground")}
+                                aria-pressed={selected}
+                                onClick={() => setSessionAgent(agent.id)}
+                              >
+                                <span className="flex size-5 items-center justify-center rounded-lg bg-primary/10 text-primary"><Bot size={13} /></span>
+                                <span className="max-w-32 truncate text-sm">{agent.name || agent.id}</span>
+                              </Button>
+                            )
+                          })}
+                        </div>
+                      </div>
+                    )}
                     <div className="mt-6 grid w-full max-w-xl grid-cols-2 gap-2 text-left sm:grid-cols-3">
-                      {welcomeSuggestions.map((suggestion, index) => {
+                      {welcomeSuggestions.slice(0, recentAgents.length > 0 ? 3 : 6).map((suggestion, index) => {
                         const Icon = [Folder, Search, FileText, GitBranch, Sparkles, Server][index % 6]
                         return (
                           <button
@@ -5803,6 +5853,17 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
     }]
   }
   return []
+}
+
+function readRecentAgentIDs() {
+  try {
+    const value = JSON.parse(localStorage.getItem(recentAgentStoreKey) || "[]")
+    return Array.isArray(value)
+      ? value.filter((agentID): agentID is string => typeof agentID === "string" && Boolean(agentID)).slice(0, 5)
+      : []
+  } catch {
+    return []
+  }
 }
 
 function readSessionFolders(): SessionFolder[] {
