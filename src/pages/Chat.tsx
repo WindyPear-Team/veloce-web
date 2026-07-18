@@ -11,6 +11,7 @@ import { useI18n, type TranslationKey } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
@@ -2792,43 +2793,24 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const composerModeControl = (compact = false) => {
-    const open = composerControlMenu === "mode"
     const chatLocked = Boolean((currentSession?.messages.length || 0) > 0 || isActiveRunRunning)
     return (
-      <div className="relative min-w-0">
-        <Button
-          type="button"
-          variant={compact ? "ghost" : "outline"}
-          className={compact ? "h-7 w-auto justify-start px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"}
-          onClick={() => setComposerControlMenu((current) => current === "mode" ? "" : "mode")}
-        >
-          <span className="truncate">{runModeLabel(activeRunMode, copy, agentGroupCopy)}</span>
-          {!compact && <ArrowDown className="h-3.5 w-3.5 rotate-180" />}
-        </Button>
-        {open && (
-          <div className="absolute bottom-full left-0 z-30 mb-2 w-40 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant={compact ? "ghost" : "outline"} className={compact ? "h-7 w-auto justify-start px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"}>
+            <span className="truncate">{runModeLabel(activeRunMode, copy, agentGroupCopy)}</span>
+            {!compact && <ArrowDown className="h-3.5 w-3.5 rotate-180" />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" className="w-40">
+          <DropdownMenuRadioGroup value={activeRunMode} onValueChange={(value) => setSessionRunMode(value as ChatRunMode)}>
             {(["chat", "assistant", "agent_group"] as const).map((mode) => {
               const disabled = (mode === "chat" && chatLocked) || ((mode === "assistant" || mode === "agent_group") && !assistantModeEnabled)
-              return (
-                <button
-                  key={mode}
-                  type="button"
-                  className={cn(
-                    "flex h-9 w-full items-center justify-between rounded px-2 text-left text-sm hover:bg-muted",
-                    activeRunMode === mode && "bg-primary/10 text-primary",
-                    disabled && "pointer-events-none opacity-40"
-                  )}
-                  disabled={disabled}
-                  onClick={() => setSessionRunMode(mode)}
-                >
-                  <span>{runModeLabel(mode, copy, agentGroupCopy)}</span>
-                  {activeRunMode === mode && <Check size={14} />}
-                </button>
-              )
+              return <DropdownMenuRadioItem key={mode} value={mode} disabled={disabled}>{runModeLabel(mode, copy, agentGroupCopy)}</DropdownMenuRadioItem>
             })}
-          </div>
-        )}
-      </div>
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
     )
   }
 
@@ -2836,47 +2818,30 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     if (!isAdvanced || activeRunMode === "agent_group") {
       return null
     }
-    const open = composerControlMenu === "agent"
     const label = selectedAgent?.name || copy.selectAgent
     return (
-      <div className="relative min-w-0">
-        <Button
-          type="button"
-          variant={compact ? "ghost" : "outline"}
-          className={compact ? "h-7 max-w-32 justify-start gap-1 px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"}
-          onClick={() => setComposerControlMenu((current) => current === "agent" ? "" : "agent")}
-          title={label}
-        >
-          <Bot size={14} className="shrink-0" />
-          <span className="truncate">{label}</span>
-          {!compact && <ArrowDown className="h-3.5 w-3.5 shrink-0 rotate-180" />}
-        </Button>
-        {open && (
-          <div className="absolute bottom-full left-0 z-30 mb-2 max-h-56 w-52 overflow-y-auto rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-            {agents.length === 0 ? (
-              <div className="px-2 py-4 text-center text-xs text-muted-foreground">{copy.noAgents}</div>
-            ) : (
-              agents.map((agent) => {
-                const selected = agent.id === (currentSession?.agent_id || defaultAgentID)
-                return (
-                  <button
-                    key={agent.id}
-                    type="button"
-                    className={cn("flex min-h-9 w-full items-center justify-between gap-2 rounded px-2 text-left text-sm hover:bg-muted", selected && "bg-primary/10 text-primary")}
-                    onClick={() => {
-                      setSessionAgent(agent.id)
-                      setComposerControlMenu("")
-                    }}
-                  >
-                    <span className="min-w-0 truncate">{agent.name || agent.id}</span>
-                    {selected && <Check size={14} className="shrink-0" />}
-                  </button>
-                )
-              })
-            )}
-          </div>
-        )}
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant={compact ? "ghost" : "outline"} className={compact ? "h-7 max-w-32 justify-start gap-1 px-2 text-xs" : "h-8 w-full justify-between gap-2 px-2 text-xs"} title={label}>
+            <Bot size={14} className="shrink-0" />
+            <span className="truncate">{label}</span>
+            {!compact && <ArrowDown className="h-3.5 w-3.5 shrink-0 rotate-180" />}
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="start" className="max-h-56 w-52">
+          {agents.length === 0 ? (
+            <div className="px-2 py-4 text-center text-xs text-muted-foreground">{copy.noAgents}</div>
+          ) : (
+            <DropdownMenuRadioGroup value={currentSession?.agent_id || defaultAgentID} onValueChange={setSessionAgent}>
+              {agents.map((agent) => (
+                <DropdownMenuRadioItem key={agent.id} value={agent.id} className="min-h-9">
+                  <span className="truncate">{agent.name || agent.id}</span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          )}
+        </DropdownMenuContent>
+      </DropdownMenu>
     )
   }
 
@@ -3050,41 +3015,27 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   }
 
   const composerAgentGroupControl = () => {
-    const open = composerControlMenu === "agent_group"
     return (
-      <div className="relative min-w-0">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-8 w-full justify-between gap-2 px-2 text-xs"
-          disabled={isFetchingAgentGroups}
-          onClick={() => setComposerControlMenu((current) => current === "agent_group" ? "" : "agent_group")}
-        >
-          <span className="truncate">{currentAgentGroup?.name || agentGroupCopy.selectGroup}</span>
-          <ArrowDown className="h-3.5 w-3.5 rotate-180" />
-        </Button>
-        {open && (
-          <div className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
-            {isFetchingAgentGroups ? (
-              <div className="px-2 py-3 text-center text-xs text-muted-foreground">{agentGroupCopy.loadingGroups}</div>
-            ) : agentGroups.length === 0 ? (
-              <div className="px-2 py-3 text-center text-xs text-muted-foreground">{agentGroupCopy.noGroups}</div>
-            ) : (
-              agentGroups.map((group) => (
-                <button
-                  key={group.id}
-                  type="button"
-                  className="flex min-h-10 w-full items-center justify-between gap-2 rounded px-2 text-left text-sm hover:bg-muted"
-                  onClick={() => setSessionAgentGroup(group.id)}
-                >
-                  <span className="min-w-0 truncate">{group.name}</span>
-                  <span className="shrink-0 text-[11px] text-muted-foreground">{agentGroupChiefCount(group)} chief</span>
-                </button>
-              ))
-            )}
-          </div>
-        )}
-      </div>
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button type="button" variant="outline" className="h-8 w-full justify-between gap-2 px-2 text-xs" disabled={isFetchingAgentGroups}>
+            <span className="truncate">{currentAgentGroup?.name || agentGroupCopy.selectGroup}</span>
+            <ArrowDown className="h-3.5 w-3.5 rotate-180" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent side="top" align="end" className="w-64">
+          {isFetchingAgentGroups ? (
+            <div className="px-2 py-3 text-center text-xs text-muted-foreground">{agentGroupCopy.loadingGroups}</div>
+          ) : agentGroups.length === 0 ? (
+            <div className="px-2 py-3 text-center text-xs text-muted-foreground">{agentGroupCopy.noGroups}</div>
+          ) : agentGroups.map((group) => (
+            <DropdownMenuItem key={group.id} onSelect={() => setSessionAgentGroup(group.id)} className="min-h-10 justify-between">
+              <span className="min-w-0 truncate">{group.name}</span>
+              <span className="shrink-0 text-[11px] text-muted-foreground">{agentGroupChiefCount(group)} chief</span>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
     )
   }
 

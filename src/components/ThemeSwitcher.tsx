@@ -1,11 +1,10 @@
-import { Check, Monitor, Moon, Sun } from "lucide-react"
+import { Monitor, Moon, Sun } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { DropdownMenu, DropdownMenuContent, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { useI18n } from "@/lib/i18n"
 import { useTheme } from "@/lib/theme"
 import type { ThemeMode } from "@/lib/theme"
-import { cn } from "@/lib/utils"
 
 interface ThemeOption {
   value: ThemeMode
@@ -21,77 +20,30 @@ const options: ThemeOption[] = [
 export function ThemeSwitcher() {
   const { language } = useI18n()
   const { mode, resolvedTheme, setMode } = useTheme()
-  const [open, setOpen] = useState(false)
-  const rootRef = useRef<HTMLDivElement>(null)
   const labels = themeLabels(language)
   const CurrentIcon = mode === "system" ? Monitor : resolvedTheme === "dark" ? Moon : Sun
 
-  useEffect(() => {
-    if (!open) {
-      return
-    }
-
-    const handlePointerDown = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) {
-        setOpen(false)
-      }
-    }
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") {
-        setOpen(false)
-      }
-    }
-
-    document.addEventListener("pointerdown", handlePointerDown)
-    document.addEventListener("keydown", handleKeyDown)
-    return () => {
-      document.removeEventListener("pointerdown", handlePointerDown)
-      document.removeEventListener("keydown", handleKeyDown)
-    }
-  }, [open])
-
   return (
-    <div ref={rootRef} className="relative">
-      <Button
-        variant="outline"
-        size="icon"
-        title={labels.title}
-        aria-label={labels.title}
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={() => setOpen((current) => !current)}
-      >
-        <CurrentIcon size={18} />
-      </Button>
-      {open && (
-        <div className="absolute right-0 top-full z-50 mt-2 w-44 rounded-md border bg-popover p-1 text-popover-foreground shadow-lg">
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="icon" title={labels.title} aria-label={labels.title}>
+          <CurrentIcon size={18} />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-44">
+        <DropdownMenuRadioGroup value={mode} onValueChange={(value) => setMode(value as ThemeMode)}>
           {options.map((option) => {
             const Icon = option.icon
-            const selected = mode === option.value
             return (
-              <button
-                key={option.value}
-                type="button"
-                role="menuitemradio"
-                aria-checked={selected}
-                className={cn(
-                  "flex h-9 w-full items-center gap-2 rounded-sm px-2 text-left text-sm transition-colors hover:bg-accent hover:text-accent-foreground",
-                  selected && "bg-accent text-accent-foreground"
-                )}
-                onClick={() => {
-                  setMode(option.value)
-                  setOpen(false)
-                }}
-              >
-                <Icon size={16} className="shrink-0" />
-                <span className="flex-1">{labels[option.value]}</span>
-                {selected && <Check size={15} className="shrink-0" />}
-              </button>
+              <DropdownMenuRadioItem key={option.value} value={option.value} className="gap-2">
+                <Icon size={16} />
+                {labels[option.value]}
+              </DropdownMenuRadioItem>
             )
           })}
-        </div>
-      )}
-    </div>
+        </DropdownMenuRadioGroup>
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 

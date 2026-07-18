@@ -99,7 +99,7 @@ export function Layout() {
             </Button>
           )}
           <ThemeSwitcher />
-          <LanguageSwitcher compact menuClassName="left-auto right-0" />
+          <LanguageSwitcher compact />
           <AnnouncementButton />
           <UserAvatar user={user} />
         </div>
