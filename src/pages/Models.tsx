@@ -650,12 +650,12 @@ function PriceSyncPreviewDialog({
 
   return (
     <Dialog open={Boolean(preview)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-h-[85vh] max-w-4xl overflow-hidden">
+      <DialogContent className="flex max-h-[85vh] max-w-4xl flex-col overflow-hidden">
         <DialogHeader>
           <DialogTitle>{copy.syncPreviewTitle}</DialogTitle>
         </DialogHeader>
         {preview && (
-          <div className="min-h-0 space-y-4">
+          <div className="flex min-h-0 flex-1 flex-col gap-4">
             <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-muted-foreground">
               <span>{preview.channel_name} · {preview.source}</span>
               <label className="flex items-center gap-2">
@@ -663,7 +663,7 @@ function PriceSyncPreviewDialog({
                 {copy.selectAll}
               </label>
             </div>
-            <div className="max-h-[52vh] overflow-auto rounded-md border">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -712,7 +712,7 @@ function PriceSyncPreviewDialog({
             </div>
           </div>
         )}
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
           <Button onClick={onSubmit} disabled={selectedModelNames.length === 0 || isSaving}>
             {copy.submitSelected}
