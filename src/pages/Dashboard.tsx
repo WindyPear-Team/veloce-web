@@ -4,6 +4,7 @@ import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot
 import api from "@/lib/api"
 import { DASHBOARD_PAGE_KEY, defaultDashboardComponents } from "@/lib/page-layouts"
 import { useI18n } from "@/lib/i18n"
+import { DashboardSetupGuide } from "@/components/onboarding/SetupGuides"
 
 interface CurrentUser {
   username?: string
@@ -27,6 +28,8 @@ export default function Dashboard() {
           {t("dashboard.signedInAs")} {user?.username || t("common.user")}
         </div>
       </div>
+
+      <DashboardSetupGuide />
 
       <PageTitleSlot />
       <PageComponentSlots pageKey={DASHBOARD_PAGE_KEY} slotKey="main" defaultItems={defaultDashboardComponents} />

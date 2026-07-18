@@ -6,6 +6,7 @@ import { createPortal } from "react-dom"
 import { Link, useLocation, useNavigate } from "react-router-dom"
 import { Activity, ArrowDown, ArrowUp, Bot, Check, ChevronDown, ChevronLeft, ChevronRight, Copy, FileDiff, FileText, Folder, FolderOpen, FolderPlus, GitBranch, GitCompareArrows, Hand, Menu, MessageSquarePlus, Monitor, MoreHorizontal, PanelRightClose, PanelRightOpen, Paperclip, Pencil, Plus, Quote, RefreshCw, Search, Send, Server, Settings, ShieldCheck, Sparkles, Trash2, Upload, User, X } from "lucide-react"
 import api, { apiURL, getAuthToken, isDesktopTarget } from "@/lib/api"
+import { ChatSetupGuide } from "@/components/onboarding/SetupGuides"
 import { useI18n, type TranslationKey } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
@@ -3464,6 +3465,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
           >
             <Menu size={16} />
           </Button>
+          {isAdvanced && <ChatSetupGuide />}
           {isAdvanced && canOpenWorkspaceInVSCode && (
             <Button
               variant="outline"

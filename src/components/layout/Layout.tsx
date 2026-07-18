@@ -6,6 +6,8 @@ import { useState } from "react"
 import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
+import { LanguageSwitcher } from "@/components/LanguageSwitcher"
+import { AnnouncementButton } from "@/components/AnnouncementButton"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
 import api, { apiURL } from "@/lib/api"
@@ -97,6 +99,8 @@ export function Layout() {
             </Button>
           )}
           <ThemeSwitcher />
+          <LanguageSwitcher compact menuClassName="left-auto right-0" />
+          <AnnouncementButton />
           <UserAvatar user={user} />
         </div>
       </header>

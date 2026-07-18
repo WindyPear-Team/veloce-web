@@ -2,7 +2,6 @@ import { BarChart3, Boxes, Building2, ChevronDown, ClipboardList, Database, Hist
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
-import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { TranslationKey } from "@/lib/i18n"
@@ -128,9 +127,6 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
           )}
         </div>
       </nav>
-      <div className="shrink-0 border-t p-4">
-        <LanguageSwitcher placement="top" />
-      </div>
     </div>
   )
 }
@@ -166,7 +162,7 @@ function SidebarLink({
         {item.children && <ChevronDown size={14} className={cn("transition-transform", isExpanded && "rotate-180")} />}
       </Link>
       {isExpanded && item.children && (
-        <div className="ml-7 mt-1 flex flex-col gap-1 border-l pl-3">
+        <div className="mt-1 flex flex-col items-center gap-1">
           {item.children.map((child) => {
             const childActive = currentPath === child.path
             return (
@@ -175,7 +171,7 @@ function SidebarLink({
                 to={child.path}
                 onClick={onNavigate}
                 className={cn(
-                  "flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm transition-colors",
+                  "flex w-full items-center justify-center gap-2 rounded-xl px-3 py-1.5 text-sm transition-colors",
                   childActive ? "bg-muted font-medium text-foreground" : "text-muted-foreground hover:bg-muted hover:text-foreground"
                 )}
               >

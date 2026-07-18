@@ -1,5 +1,6 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useState } from "react"
+import { useEffect, useState } from "react"
+import { useSearchParams } from "react-router-dom"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Copy, Plus, RotateCcw, RotateCw, Save, Trash } from "lucide-react"
 import api from "@/lib/api"
@@ -67,6 +68,7 @@ interface APIKeyPayload {
 }
 
 export default function APIKeys() {
+  const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const { t } = useI18n()
   const { success, error } = useToast()
@@ -189,6 +191,13 @@ export default function APIKeys() {
     setNewRawKey("")
     setIsCreateOpen(true)
   }
+
+  useEffect(() => {
+    if (searchParams.get("create") === "1") {
+      openCreateDialog()
+      setSearchParams({}, { replace: true })
+    }
+  }, [searchParams, setSearchParams])
 
   const closeCreateDialog = () => {
     setIsCreateOpen(false)

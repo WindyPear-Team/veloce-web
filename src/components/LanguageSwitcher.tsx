@@ -1,8 +1,9 @@
-import { Check, ChevronDown, Globe2 } from "lucide-react"
+import { Check, ChevronDown, Globe2, Languages } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import type { Language } from "@/lib/i18n"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
 
 interface LanguageOption {
   value: Language
@@ -22,12 +23,14 @@ export function LanguageSwitcher({
   menuClassName,
   placement = "bottom",
   showLabel = true,
+  compact = false,
 }: {
   className?: string
   triggerClassName?: string
   menuClassName?: string
   placement?: "top" | "bottom"
   showLabel?: boolean
+  compact?: boolean
 }) {
   const { language, setLanguage, t } = useI18n()
   const [open, setOpen] = useState(false)
@@ -65,28 +68,38 @@ export function LanguageSwitcher({
 
   return (
     <div ref={rootRef} className={cn("relative", className)}>
-      <button
+      <Button
         type="button"
+        variant="outline"
+        size={compact ? "icon" : "default"}
         aria-haspopup="menu"
         aria-expanded={open}
         className={cn(
-          "flex h-10 w-full items-center justify-between gap-2 rounded-md border bg-background px-3 text-sm transition-colors hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          compact
+            ? ""
+            : "h-10 w-full justify-between rounded-2xl px-3",
           triggerClassName
         )}
         onClick={() => setOpen((current) => !current)}
       >
-        <span className="flex min-w-0 items-center gap-2">
-          <Globe2 size={16} className="shrink-0 text-muted-foreground" />
-          {showLabel && (
-            <span className="min-w-0 truncate">
-              <span className="text-muted-foreground">{t("language.current")}: </span>
-              <span className="font-medium">{t(currentOption.labelKey)}</span>
+        {compact ? (
+          <Languages size={17} />
+        ) : (
+          <>
+            <span className="flex min-w-0 items-center gap-2">
+              <Globe2 size={16} className="shrink-0 text-muted-foreground" />
+              {showLabel && (
+                <span className="min-w-0 truncate">
+                  <span className="text-muted-foreground">{t("language.current")}: </span>
+                  <span className="font-medium">{t(currentOption.labelKey)}</span>
+                </span>
+              )}
+              {!showLabel && <span className="font-medium">{t(currentOption.labelKey)}</span>}
             </span>
-          )}
-          {!showLabel && <span className="font-medium">{t(currentOption.labelKey)}</span>}
-        </span>
-        <ChevronDown size={16} className={cn("shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
-      </button>
+            <ChevronDown size={16} className={cn("shrink-0 text-muted-foreground transition-transform", open && "rotate-180")} />
+          </>
+        )}
+      </Button>
 
       {open && (
         <div

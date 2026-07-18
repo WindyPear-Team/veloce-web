@@ -2,7 +2,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Camera, KeyRound, UserCircle } from "lucide-react"
 import { useEffect, useMemo, useRef, useState } from "react"
-import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import api, { apiURL } from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -12,6 +11,7 @@ import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
 import { passkeyCredentialToJSON, passkeySupported, preparePasskeyCreationOptions } from "@/lib/passkey"
+import { resetOnboardingGuide } from "@/components/onboarding/SetupGuides"
 
 interface Group {
   id: number
@@ -298,6 +298,12 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
     <div className="space-y-6">
       <h1 className="text-2xl font-semibold">{sectionTitle}</h1>
 
+      {section === "profile" && (
+        <div className="flex justify-end">
+          <Button type="button" variant="outline" onClick={resetOnboardingGuide}>重新回顾设置向导</Button>
+        </div>
+      )}
+
       {section === "profile" && <PageTitleSlot />}
       <div className="grid gap-4 lg:grid-cols-2">
         {section === "profile" && <>
@@ -348,15 +354,6 @@ export default function Settings({ section = "profile" }: { section?: SettingsSe
             </CardContent>
           </Card>
 
-          <Card>
-            <CardHeader>
-              <CardTitle>{t("common.language")}</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="text-sm text-muted-foreground">{t("settings.languageSubtitle")}</div>
-              <LanguageSwitcher placement="bottom" />
-            </CardContent>
-          </Card>
           <PageInlineSlot className="lg:col-span-2" slotKey="primary" />
         </>}
 

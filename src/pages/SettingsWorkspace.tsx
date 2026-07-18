@@ -5,6 +5,8 @@ import { useEffect, useState } from "react"
 import Settings, { type SettingsSection } from "./Settings"
 import Wallet from "./Wallet"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
+import { LanguageSwitcher } from "@/components/LanguageSwitcher"
+import { AnnouncementButton } from "@/components/AnnouncementButton"
 import { PageTransition } from "@/components/layout/PageTransition"
 import { Button } from "@/components/ui/button"
 import api, { apiURL, isDesktopTarget } from "@/lib/api"
@@ -76,6 +78,8 @@ export default function SettingsWorkspace() {
         </div>
         <div className="flex items-center gap-2">
           <ThemeSwitcher />
+          <LanguageSwitcher compact menuClassName="left-auto right-0" />
+          <AnnouncementButton />
           <button type="button" className="flex h-9 w-9 items-center justify-center overflow-hidden rounded-full border bg-muted text-sm font-semibold" title={user?.username || user?.email || copy.account}>
             {user?.avatar_url ? <img src={apiURL(user.avatar_url)} alt="" className="h-full w-full object-cover" /> : avatarInitials(user?.username || user?.email || "") || <UserCircle size={20} />}
           </button>

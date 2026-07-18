@@ -29,6 +29,7 @@ import Models from "./Models"
 import UsersPage from "./Users"
 import { LanguageSwitcher } from "@/components/LanguageSwitcher"
 import { ThemeSwitcher } from "@/components/ThemeSwitcher"
+import { AnnouncementButton } from "@/components/AnnouncementButton"
 import { Button } from "@/components/ui/button"
 import { PageComponentSlots } from "@/components/layout/PageComponentSlots"
 import { PageLayoutEditBar, PageLayoutEditorProvider } from "@/components/layout/PageLayoutEditor"
@@ -177,6 +178,8 @@ export default function AdvancedChat() {
             </Button>
           )}
           <ThemeSwitcher />
+          <LanguageSwitcher compact menuClassName="left-auto right-0" />
+          <AnnouncementButton />
           <UserAvatar user={user} />
         </div>
       </header>}
@@ -476,9 +479,6 @@ function AdvancedChatSidebar({
           )}
         </div>
       </nav>
-      <div className="shrink-0 border-t p-4">
-        <LanguageSwitcher placement="top" />
-      </div>
     </aside>
   )
 }
