@@ -225,6 +225,18 @@ interface AnnouncementDraft {
   sort_order: string
 }
 
+interface AutoUpdateStatus {
+  enabled: boolean
+  interval_hours: string
+  current_version: string
+  latest_version: string
+  update_available: boolean
+  platform: string
+  supported: boolean
+  last_checked_at: string
+  last_error: string
+}
+
 interface SystemSettings extends PublicSettings {
 
   token_api_enabled: boolean
@@ -267,6 +279,8 @@ interface SystemSettings extends PublicSettings {
   payment_openpayment_key: string
   payment_openpayment_notify_url: string
   payment_openpayment_return_url: string
+  auto_update_enabled: boolean
+  auto_update_interval_hours: string
 }
 
 type SystemTab =
@@ -285,6 +299,7 @@ type SystemTab =
   | "statusMonitor"
   | "reliability"
   | "logCleanup"
+  | "updates"
   | "groups"
   | "metaModels"
   | "advancedChatAssistant"
@@ -300,7 +315,7 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   theme: ["theme", "themeSettings"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
-  operations: ["statusMonitor", "reliability", "logCleanup", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
+  operations: ["statusMonitor", "reliability", "logCleanup", "updates", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
   advancedChat: ["advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP"],
   subscriptions: ["subscriptionPlans"],
   redeemCodes: ["redeemCodes"],
@@ -360,6 +375,8 @@ const defaultSystemSettings: SystemSettings = {
   payment_openpayment_key: "",
   payment_openpayment_notify_url: "",
   payment_openpayment_return_url: "",
+  auto_update_enabled: false,
+  auto_update_interval_hours: "24",
 }
 
 const defaultThemeColorValues = Object.fromEntries(
@@ -507,6 +524,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       return Array.isArray(res.data) ? res.data : []
     },
   })
+  const { data: autoUpdateStatus } = useQuery<AutoUpdateStatus>({
+    queryKey: ["auto-update-status"],
+    queryFn: async () => (await api.get("/updates")).data,
+  })
 
   useEffect(() => {
     if (settings) {
@@ -538,6 +559,15 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       queryClient.invalidateQueries({ queryKey: ["public-settings"] })
     },
     onError: () => error(t("system.settingsSaveFailed")),
+  })
+
+  const checkForUpdate = useMutation({
+    mutationFn: async () => (await api.post("/updates/check")).data as AutoUpdateStatus,
+    onSuccess: (status) => {
+      queryClient.setQueryData(["auto-update-status"], status)
+      success(status.update_available ? copy.autoUpdateAvailable : copy.autoUpdateUpToDate)
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.autoUpdateCheckFailed)),
   })
 
   const saveGroup = useMutation({
@@ -1408,6 +1438,36 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
+      {activeTab === "updates" && (
+        <SettingsPanel title={copy.autoUpdate}>
+          <div className="space-y-5">
+            <SectionTitle title={copy.autoUpdate} description={copy.autoUpdateDescription} />
+            <div className="grid gap-3 lg:grid-cols-2">
+              <ToggleField label={copy.autoUpdateEnabled} checked={form.auto_update_enabled} onChange={(checked) => updateField("auto_update_enabled", checked)} />
+              <TextField label={copy.autoUpdateIntervalHours} value={form.auto_update_interval_hours} placeholder="24" type="number" onChange={(value) => updateField("auto_update_interval_hours", value)} />
+            </div>
+            <div className="rounded-md border bg-muted/30 p-4 text-sm">
+              <div className="grid gap-2 sm:grid-cols-2">
+                <div>{copy.autoUpdateCurrentVersion}: <span className="font-mono">{autoUpdateStatus?.current_version || "-"}</span></div>
+                <div>{copy.autoUpdateLatestVersion}: <span className="font-mono">{autoUpdateStatus?.latest_version || "-"}</span></div>
+                <div>{copy.autoUpdatePlatform}: <span className="font-mono">{autoUpdateStatus?.platform || "-"}</span></div>
+                <div>{copy.autoUpdateLastChecked}: {formatAutoUpdateTime(autoUpdateStatus?.last_checked_at)}</div>
+              </div>
+              {!autoUpdateStatus?.supported && <p className="mt-3 text-xs text-muted-foreground">{copy.autoUpdateUnsupported}</p>}
+              {autoUpdateStatus?.last_error && <p className="mt-3 text-xs text-destructive">{copy.autoUpdateLastError}: {autoUpdateStatus.last_error}</p>}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button variant="outline" className="gap-2" disabled={checkForUpdate.isPending} onClick={() => checkForUpdate.mutate()}>
+                <RefreshCw size={16} className={checkForUpdate.isPending ? "animate-spin" : ""} />
+                {copy.autoUpdateCheckNow}
+              </Button>
+              {autoUpdateStatus?.update_available && <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{copy.autoUpdateAvailable}</span>}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">{copy.autoUpdateHint}</p>
+          </div>
+        </SettingsPanel>
+      )}
+
       {activeTab === "groups" && (
         <SettingsPanel title={copy.groups}>
           <div className="space-y-5">
@@ -1823,6 +1883,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "statusMonitor", label: copy.statusMonitor, icon: Activity },
     { id: "reliability", label: copy.reliability, icon: RefreshCw },
     { id: "logCleanup", label: copy.logCleanup, icon: Trash2 },
+    { id: "updates", label: copy.autoUpdate, icon: RefreshCw },
     { id: "groups", label: copy.groups, icon: Layers },
     { id: "metaModels", label: copy.metaModels, icon: Layers },
     { id: "advancedChatAssistant", label: copy.advancedChatAssistant, icon: Bot },
@@ -3154,6 +3215,12 @@ function formatHours(value: number) {
   return `${value}h`
 }
 
+function formatAutoUpdateTime(value?: string) {
+  if (!value) return "-"
+  const parsed = new Date(value)
+  return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
+}
+
 function filterAndSortRedeemCodes(
   codes: RedeemCode[],
   filters: { search: string; status: string; groupID: string; sort: string }
@@ -3609,6 +3676,21 @@ const zhCopy = {
   logRetentionTokenDays: "计费调用日志保留天数",
   logRetentionCleanupIntervalHours: "清理间隔（小时）",
   logCleanupHint: "保留天数填 0 表示不自动清理。计费调用日志会影响调用明细和统计趋势，缩短前请确认合规和对账要求。",
+  autoUpdate: "自动更新",
+  autoUpdateDescription: "从 WindyPear-Team/veloce 的最新正式 Release 检查并安装与当前系统和架构完全匹配的社区版程序包。",
+  autoUpdateEnabled: "启用自动更新",
+  autoUpdateIntervalHours: "检查间隔（小时，1–168）",
+  autoUpdateCurrentVersion: "当前版本",
+  autoUpdateLatestVersion: "最新版本",
+  autoUpdatePlatform: "当前平台",
+  autoUpdateLastChecked: "上次检查",
+  autoUpdateLastError: "最近错误",
+  autoUpdateCheckNow: "立即检查",
+  autoUpdateAvailable: "发现可用更新；启用后会在下一次检查时自动安装并重启。",
+  autoUpdateUpToDate: "当前已是最新版本。",
+  autoUpdateCheckFailed: "检查更新失败",
+  autoUpdateUnsupported: "当前不是带发布版本号的官方二进制，不能自动更新。请安装官方 Release 包。",
+  autoUpdateHint: "下载前会校验 GitHub Release 提供的 SHA-256；归档包必须只包含一个根目录二进制文件。更新成功后服务会短暂重启，原二进制保留为 .previous 备份。",
   statusUp: "正常",
   statusDown: "故障",
   statusPending: "等待",
@@ -3993,6 +4075,21 @@ const enCopy: SystemCopy = {
   logRetentionTokenDays: "Billing call log retention days",
   logRetentionCleanupIntervalHours: "Cleanup interval (hours)",
   logCleanupHint: "Set retention days to 0 to keep logs indefinitely. Billing call log cleanup affects call details and usage trend statistics.",
+  autoUpdate: "Automatic Updates",
+  autoUpdateDescription: "Check and install the current OS/architecture community package from the latest stable WindyPear-Team/veloce release.",
+  autoUpdateEnabled: "Enable automatic updates",
+  autoUpdateIntervalHours: "Check interval (hours, 1–168)",
+  autoUpdateCurrentVersion: "Current version",
+  autoUpdateLatestVersion: "Latest version",
+  autoUpdatePlatform: "Platform",
+  autoUpdateLastChecked: "Last checked",
+  autoUpdateLastError: "Last error",
+  autoUpdateCheckNow: "Check now",
+  autoUpdateAvailable: "An update is available. Once enabled, it will install and restart on the next scheduled check.",
+  autoUpdateUpToDate: "You are up to date.",
+  autoUpdateCheckFailed: "Failed to check for updates",
+  autoUpdateUnsupported: "This is not an official release binary with a version, so it cannot update itself. Install an official release package.",
+  autoUpdateHint: "The download is verified against the SHA-256 digest from the GitHub release. The archive must contain exactly one root binary. On success, the service briefly restarts and keeps the prior binary as a .previous backup.",
   statusUp: "Up",
   statusDown: "Down",
   statusPending: "Pending",
