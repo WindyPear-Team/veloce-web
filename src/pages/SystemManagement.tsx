@@ -22,6 +22,7 @@ import {
   ShieldCheck,
   ToggleLeft,
   Trash2,
+  Upload,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import type { AxiosError } from "axios"
@@ -237,6 +238,15 @@ interface AutoUpdateStatus {
   last_error: string
 }
 
+type ConfigurationSection = "system_settings" | "channels" | "model_data" | "model_prices"
+
+const configurationSections: Array<{ id: ConfigurationSection; label: "configurationSystemSettings" | "configurationChannels" | "configurationModels" | "configurationPrices" }> = [
+  { id: "system_settings", label: "configurationSystemSettings" },
+  { id: "channels", label: "configurationChannels" },
+  { id: "model_data", label: "configurationModels" },
+  { id: "model_prices", label: "configurationPrices" },
+]
+
 interface SystemSettings extends PublicSettings {
 
   token_api_enabled: boolean
@@ -301,6 +311,7 @@ type SystemTab =
   | "statusMonitor"
   | "reliability"
   | "logCleanup"
+  | "configuration"
   | "updates"
   | "groups"
   | "metaModels"
@@ -317,7 +328,7 @@ const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
   theme: ["theme", "themeSettings"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
-  operations: ["statusMonitor", "reliability", "logCleanup", "updates", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
+  operations: ["statusMonitor", "reliability", "logCleanup", "configuration", "updates", "payment", "groups", "metaModels", "subscriptionPlans", "redeemCodes"],
   advancedChat: ["advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP"],
   subscriptions: ["subscriptionPlans"],
   redeemCodes: ["redeemCodes"],
@@ -470,6 +481,8 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const [isStatusMonitorDialogOpen, setIsStatusMonitorDialogOpen] = useState(false)
   const [announcementDraft, setAnnouncementDraft] = useState<AnnouncementDraft>(defaultAnnouncementDraft)
   const [isAnnouncementDialogOpen, setIsAnnouncementDialogOpen] = useState(false)
+  const [selectedConfigurationSections, setSelectedConfigurationSections] = useState<ConfigurationSection[]>(configurationSections.map((section) => section.id))
+  const [configurationImportFile, setConfigurationImportFile] = useState<File | null>(null)
   const { success, error } = useToast()
 
   const { data: settings } = useQuery<SystemSettings>({
@@ -578,6 +591,36 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     mutationFn: async () => (await api.delete("/logs")).data as { deleted: number },
     onSuccess: (result) => success(copy.logsDeleted.replace("{count}", String(result.deleted))),
     onError: () => error(copy.logsDeleteFailed),
+  })
+
+  const exportConfiguration = useMutation({
+    mutationFn: async (sections: ConfigurationSection[]) => {
+      const response = await api.post("/settings/export", { sections }, { responseType: "blob" })
+      const filename = exportFilename(response.headers["content-disposition"]) || `flai-configuration-${new Date().toISOString().slice(0, 10)}.json`
+      downloadBlob(response.data as Blob, filename)
+    },
+    onSuccess: () => success(copy.configurationExported),
+    onError: (err) => error(apiErrorMessage(err, copy.configurationExportFailed)),
+  })
+
+  const importConfiguration = useMutation({
+    mutationFn: async (file: File) => {
+      let payload: unknown
+      try {
+        payload = JSON.parse(await file.text())
+      } catch {
+        throw new Error(copy.configurationInvalidFile)
+      }
+      return (await api.post("/settings/import", payload)).data as { imported_sections: string[] }
+    },
+    onSuccess: () => {
+      setConfigurationImportFile(null)
+      success(copy.configurationImported)
+      for (const key of ["system-settings", "public-settings", "channels", "models", "user-channels", "meta-models"]) {
+        queryClient.invalidateQueries({ queryKey: [key] })
+      }
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.configurationImportFailed)),
   })
 
   const saveGroup = useMutation({
@@ -1455,6 +1498,46 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         </SettingsPanel>
       )}
 
+      {activeTab === "configuration" && (
+        <SettingsPanel title={copy.configurationBackup}>
+          <div className="space-y-5">
+            <SectionTitle title={copy.configurationBackup} description={copy.configurationBackupDescription} />
+            <div className="grid gap-3 sm:grid-cols-2">
+              {configurationSections.map((section) => (
+                <label key={section.id} className="flex items-center gap-3 rounded-md border p-3 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={selectedConfigurationSections.includes(section.id)}
+                    onChange={(event) => setSelectedConfigurationSections((current) => event.target.checked ? [...current, section.id] : current.filter((value) => value !== section.id))}
+                  />
+                  <span>{copy[section.label]}</span>
+                </label>
+              ))}
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Button className="gap-2" disabled={selectedConfigurationSections.length === 0 || exportConfiguration.isPending} onClick={() => exportConfiguration.mutate(selectedConfigurationSections)}>
+                <Download size={16} />
+                {copy.configurationExport}
+              </Button>
+            </div>
+            <div className="rounded-md border p-4">
+              <p className="text-sm font-medium">{copy.configurationImport}</p>
+              <p className="mt-1 text-xs leading-5 text-muted-foreground">{copy.configurationImportDescription}</p>
+              <div className="mt-4 flex flex-wrap items-center gap-3">
+                <Input className="max-w-sm" type="file" accept="application/json,.json" onChange={(event) => setConfigurationImportFile(event.target.files?.[0] || null)} />
+                <Button variant="destructive" className="gap-2" disabled={!configurationImportFile || importConfiguration.isPending} onClick={() => {
+                  if (configurationImportFile && window.confirm(copy.configurationImportConfirm)) importConfiguration.mutate(configurationImportFile)
+                }}>
+                  <Upload size={16} />
+                  {copy.configurationImport}
+                </Button>
+              </div>
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">{copy.configurationBackupHint}</p>
+          </div>
+        </SettingsPanel>
+      )}
+
       {activeTab === "updates" && (
         <SettingsPanel title={copy.autoUpdate}>
           <div className="space-y-5">
@@ -1900,6 +1983,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "statusMonitor", label: copy.statusMonitor, icon: Activity },
     { id: "reliability", label: copy.reliability, icon: RefreshCw },
     { id: "logCleanup", label: copy.logCleanup, icon: Trash2 },
+    { id: "configuration", label: copy.configurationBackup, icon: Download },
     { id: "updates", label: copy.autoUpdate, icon: RefreshCw },
     { id: "groups", label: copy.groups, icon: Layers },
     { id: "metaModels", label: copy.metaModels, icon: Layers },
@@ -3330,6 +3414,22 @@ function downloadRedeemCodesTxt(codes: RedeemCode[], copy: SystemCopy, filename:
   URL.revokeObjectURL(url)
 }
 
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob)
+  const anchor = document.createElement("a")
+  anchor.href = url
+  anchor.download = filename
+  document.body.appendChild(anchor)
+  anchor.click()
+  anchor.remove()
+  URL.revokeObjectURL(url)
+}
+
+function exportFilename(contentDisposition: string | undefined): string | null {
+  const match = /filename="?([^";]+)"?/i.exec(contentDisposition || "")
+  return match?.[1] || null
+}
+
 function redeemCodeText(code: RedeemCode, copy: SystemCopy) {
   return [
     `${copy.redeemCode}: ${code.code}`,
@@ -3701,6 +3801,22 @@ const zhCopy = {
   logsDeleteConfirm: "确定删除所有日志吗？此操作不可恢复。",
   logsDeleted: "已删除 {count} 条日志",
   logsDeleteFailed: "删除日志失败",
+  configurationBackup: "配置备份与恢复",
+  configurationBackupDescription: "将当前系统配置导出为 JSON，或导入此前导出的配置文件。",
+  configurationSystemSettings: "全部系统设置",
+  configurationChannels: "渠道信息（含渠道密钥）",
+  configurationModels: "模型数据",
+  configurationPrices: "模型价格与渠道模型映射",
+  configurationExport: "导出 JSON",
+  configurationExported: "配置已导出",
+  configurationExportFailed: "导出配置失败",
+  configurationImport: "导入配置",
+  configurationImportDescription: "导入会覆盖同名的设置、渠道和模型配置；不会删除未包含的数据。",
+  configurationImportConfirm: "确定导入此配置文件吗？同名配置会被覆盖。",
+  configurationImported: "配置已导入",
+  configurationImportFailed: "导入配置失败",
+  configurationInvalidFile: "请选择有效的 JSON 配置文件",
+  configurationBackupHint: "此功能只处理系统设置、渠道、模型和价格数据；不会导入用户、API Key、余额、订单、日志或其他业务数据。渠道信息可能包含密钥，请妥善保管导出的文件。",
   autoUpdate: "自动更新",
   autoUpdateDescription: "从 WindyPear-Team/veloce 的最新正式 Release 检查并安装与当前系统和架构完全匹配的社区版程序包。",
   autoUpdateEnabled: "启用自动更新",
@@ -4108,6 +4224,22 @@ const enCopy: SystemCopy = {
   logsDeleteConfirm: "Delete all logs? This cannot be undone.",
   logsDeleted: "Deleted {count} log records",
   logsDeleteFailed: "Failed to delete logs",
+  configurationBackup: "Configuration Backup & Restore",
+  configurationBackupDescription: "Export the current system configuration as JSON or restore a previously exported file.",
+  configurationSystemSettings: "All system settings",
+  configurationChannels: "Channel information (including API keys)",
+  configurationModels: "Model data",
+  configurationPrices: "Model pricing and channel mappings",
+  configurationExport: "Export JSON",
+  configurationExported: "Configuration exported",
+  configurationExportFailed: "Failed to export configuration",
+  configurationImport: "Import configuration",
+  configurationImportDescription: "Importing overwrites matching settings, channels, and models; records not in the file are retained.",
+  configurationImportConfirm: "Import this configuration file? Matching configuration will be overwritten.",
+  configurationImported: "Configuration imported",
+  configurationImportFailed: "Failed to import configuration",
+  configurationInvalidFile: "Choose a valid JSON configuration file",
+  configurationBackupHint: "Only system settings, channels, models, and pricing are included. Users, API keys, balances, orders, logs, and other business data are never imported. Channel exports can contain secrets; store the file safely.",
   autoUpdate: "Automatic Updates",
   autoUpdateDescription: "Check and install the current OS/architecture community package from the latest stable WindyPear-Team/veloce release.",
   autoUpdateEnabled: "Enable automatic updates",
