@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { DateTimePicker } from "@/components/ui/date-picker"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import api from "@/lib/api"
@@ -157,11 +158,11 @@ export default function DataBoard() {
           <div className="grid gap-4 lg:grid-cols-4">
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.startTime}</span>
-              <Input type="datetime-local" value={filters.startTime} onChange={(event) => updateFilter("startTime", event.target.value)} />
+              <DateTimePicker value={filters.startTime} onValueChange={(value) => updateFilter("startTime", value)} />
             </label>
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.endTime}</span>
-              <Input type="datetime-local" value={filters.endTime} onChange={(event) => updateFilter("endTime", event.target.value)} />
+              <DateTimePicker value={filters.endTime} onValueChange={(value) => updateFilter("endTime", value)} />
             </label>
             <label className="space-y-2 text-sm">
               <span className="font-medium">{copy.granularity}</span>

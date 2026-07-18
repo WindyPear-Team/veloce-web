@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { DateTimePicker } from "@/components/ui/date-picker"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 
 interface CatalogItem {
   id: number
@@ -120,6 +122,7 @@ export default function AdvancedChatScheduledTasks() {
   const copy = language === "zh" ? zhCopy : language === "ja" ? jaCopy : enCopy
   const queryClient = useQueryClient()
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const [form, setForm] = useState<TaskForm>(defaultForm)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -280,7 +283,7 @@ export default function AdvancedChatScheduledTasks() {
   }
 
   const deleteTask = async (task: ScheduledTask) => {
-    if (!window.confirm(copy.deleteConfirm.replace("{name}", task.name))) {
+    if (!await confirm({ description: copy.deleteConfirm.replace("{name}", task.name) })) {
       return
     }
     setDeletingID(task.id)
@@ -297,6 +300,7 @@ export default function AdvancedChatScheduledTasks() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{copy.title}</h1>
@@ -382,7 +386,7 @@ export default function AdvancedChatScheduledTasks() {
                   <SelectItem value="interval">{copy.interval}</SelectItem>
                 </SelectContent></Select>
               </Field>
-              {form.schedule_type === "once" && <Field label={copy.runAt}><Input type="datetime-local" value={form.run_at} onChange={(event) => setForm({ ...form, run_at: event.target.value })} /></Field>}
+              {form.schedule_type === "once" && <Field label={copy.runAt}><DateTimePicker value={form.run_at} onValueChange={(value) => setForm({ ...form, run_at: value })} /></Field>}
               {form.schedule_type === "interval" && <Field label={copy.intervalSeconds}><Input type="number" min={60} value={form.interval_seconds} onChange={(event) => setForm({ ...form, interval_seconds: Number(event.target.value) || 60 })} /></Field>}
               <Field label={copy.timeout}><Input type="number" min={30} value={form.timeout_seconds} onChange={(event) => setForm({ ...form, timeout_seconds: Number(event.target.value) || 300 })} /></Field>
             </div>

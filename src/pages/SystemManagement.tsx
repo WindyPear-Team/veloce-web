@@ -31,6 +31,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { DateTimePicker } from "@/components/ui/date-picker"
 import { Textarea } from "@/components/ui/textarea"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { PageTab, PageTabs } from "@/components/layout/PageTabs"
@@ -2612,7 +2613,7 @@ function RedeemCodeDialog({
           />
           <label className="block space-y-2 text-sm">
             <span className="font-medium">{copy.expiresAt}</span>
-            <Input type="datetime-local" value={draft.expires_at} onChange={(event) => onDraftChange({ ...draft, expires_at: event.target.value })} />
+            <DateTimePicker value={draft.expires_at} onValueChange={(value) => onDraftChange({ ...draft, expires_at: value })} />
           </label>
           <label className="block space-y-2 text-sm">
             <span className="font-medium">{copy.groupGrant}</span>

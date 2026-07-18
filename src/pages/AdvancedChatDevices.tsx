@@ -10,6 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import { cn } from "@/lib/utils"
 import { withPublicSettingsDefaults, type PublicSettings } from "@/lib/public-settings"
 
@@ -70,6 +71,7 @@ export default function AdvancedChatDevices() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const [deviceName, setDeviceName] = useState(copy.defaultDeviceName)
   const [deviceMode, setDeviceMode] = useState<ConnectorDeviceMode>("platform")
   const [listenPort, setListenPort] = useState(8080)
@@ -221,7 +223,7 @@ export default function AdvancedChatDevices() {
   }
 
   const deleteDevice = async (device: ConnectorDevice) => {
-    if (!window.confirm(copy.deleteConfirm.replace("{name}", device.name))) {
+    if (!await confirm({ description: copy.deleteConfirm.replace("{name}", device.name) })) {
       return
     }
     setDeletingDeviceID(device.id)
@@ -268,6 +270,7 @@ export default function AdvancedChatDevices() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{copy.title}</h1>

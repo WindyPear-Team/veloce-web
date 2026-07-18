@@ -8,6 +8,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
 
@@ -64,6 +65,7 @@ export default function AgentGroups() {
   const copy = language === "zh" ? zhCopy : language === "ja" ? jaCopy : enCopy
   const queryClient = useQueryClient()
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const [selectedDeviceID, setSelectedDeviceID] = useState("")
   const [activeGroupID, setActiveGroupID] = useState("")
   const [isEditorOpen, setIsEditorOpen] = useState(false)
@@ -204,7 +206,7 @@ export default function AgentGroups() {
   }
 
   const deleteGroup = async (group: AgentGroup) => {
-    if (!selectedDeviceID || !window.confirm(copy.deleteConfirm.replace("{name}", group.name))) {
+    if (!selectedDeviceID || !await confirm({ description: copy.deleteConfirm.replace("{name}", group.name) })) {
       return
     }
     setDeletingID(group.id)
@@ -221,6 +223,7 @@ export default function AgentGroups() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{copy.title}</h1>

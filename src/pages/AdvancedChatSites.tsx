@@ -6,6 +6,7 @@ import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import { cn } from "@/lib/utils"
 
 interface StaticSite {
@@ -33,6 +34,7 @@ export default function AdvancedChatSites() {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : language === "ja" ? jaCopy : enCopy
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const queryClient = useQueryClient()
   const [pendingSiteID, setPendingSiteID] = useState("")
 
@@ -79,8 +81,8 @@ export default function AdvancedChatSites() {
     onSettled: () => setPendingSiteID(""),
   })
 
-  const remove = (site: StaticSite) => {
-    if (!window.confirm(copy.deleteConfirm.replace("{domain}", site.domain_name))) {
+  const remove = async (site: StaticSite) => {
+    if (!await confirm({ description: copy.deleteConfirm.replace("{domain}", site.domain_name) })) {
       return
     }
     deleteSite.mutate(site)
@@ -88,6 +90,7 @@ export default function AdvancedChatSites() {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{copy.title}</h1>

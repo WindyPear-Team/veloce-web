@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -528,6 +529,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
   const [messageSelectionMenu, setMessageSelectionMenu] = useState<{ text: string; x: number; y: number } | null>(null)
   const [isMessageSelectionSearchOpen, setIsMessageSelectionSearchOpen] = useState(false)
   const [regeneratingTitleSessionID, setRegeneratingTitleSessionID] = useState("")
+  const [renamingSession, setRenamingSession] = useState<ChatSession | null>(null)
+  const [renamedTitle, setRenamedTitle] = useState("")
   const [isSending, setIsSending] = useState(false)
   const [isStreamActive, setIsStreamActive] = useState(false)
   const [isStopping, setIsStopping] = useState(false)
@@ -1547,15 +1550,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
   const renameSessionTitle = (session: ChatSession) => {
     setSessionMenu(null)
-    const nextTitle = window.prompt(copy.customTitlePrompt, session.title || copy.untitledSession)
-    if (nextTitle === null) {
-      return
-    }
-    const title = nextTitle.trim()
+    setRenamingSession(session)
+    setRenamedTitle(session.title || copy.untitledSession)
+  }
+
+  const saveSessionTitle = () => {
+    const title = renamedTitle.trim()
     if (!title) {
       return
     }
-    updateSession(session.id, (current) => ({ ...current, title }), { persist: true })
+    if (renamingSession) {
+      updateSession(renamingSession.id, (current) => ({ ...current, title }), { persist: true })
+    }
+    setRenamingSession(null)
   }
 
   const regenerateSessionTitle = async (session: ChatSession) => {
@@ -3424,6 +3431,16 @@ export default function Chat({ variant = "basic" }: ChatProps) {
     <div className={cn("flex min-w-0", isAdvanced && "h-full min-h-0")}>
       {sessionsSidebarPortal}
       {messageSelectionContextMenuPortal}
+      <Dialog open={Boolean(renamingSession)} onOpenChange={(open) => { if (!open) setRenamingSession(null) }}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{copy.customTitlePrompt}</DialogTitle></DialogHeader>
+          <Input autoFocus value={renamedTitle} onChange={(event) => setRenamedTitle(event.target.value)} onKeyDown={(event) => { if (event.key === "Enter") saveSessionTitle() }} />
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRenamingSession(null)}>{language === "zh" ? "取消" : "Cancel"}</Button>
+            <Button onClick={saveSessionTitle} disabled={!renamedTitle.trim()}>{language === "zh" ? "保存" : "Save"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <div className={cn(
         "min-w-0 flex-1 transition-[filter] duration-200",
         isSessionsSidebarOpen && "max-xl:blur-sm",

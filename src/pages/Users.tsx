@@ -23,6 +23,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import EnterprisePeopleManagement from "@/pages/EnterprisePeopleManagement"
 import type { PublicSettings } from "@/lib/public-settings"
 
@@ -62,6 +63,7 @@ export default function Users() {
   const queryClient = useQueryClient()
   const [editingUser, setEditingUser] = useState<UserDraft | null>(null)
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const { data: settings } = useQuery<Partial<PublicSettings>>({ queryKey: ["public-settings"], queryFn: async () => (await api.get("/public/settings")).data })
   const enterpriseMode = String(settings?.system_mode || "").toLowerCase() === "enterprise"
 
@@ -115,6 +117,7 @@ export default function Users() {
   if (enterpriseMode) return <EnterprisePeopleManagement />
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div>
         <h1 className="text-3xl font-bold">{t("users.title")}</h1>
       </div>
@@ -163,8 +166,8 @@ export default function Users() {
                       className="text-red-500 hover:text-red-600"
                       title={t("common.delete")}
                       disabled={deleteUser.isPending}
-                      onClick={() => {
-                        if (window.confirm(copy.confirmDelete.replace("{name}", user.username || user.email))) {
+                      onClick={async () => {
+                        if (await confirm({ description: copy.confirmDelete.replace("{name}", user.username || user.email) })) {
                           deleteUser.mutate(user.id)
                         }
                       }}

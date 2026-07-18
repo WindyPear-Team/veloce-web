@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { PublicSettings } from "@/lib/public-settings"
 import { isPersonalMode, withPublicSettingsDefaults } from "@/lib/public-settings"
 
@@ -70,8 +71,9 @@ interface APIKeyPayload {
 export default function APIKeys() {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
-  const { t } = useI18n()
+  const { language, t } = useI18n()
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const [isCreateOpen, setIsCreateOpen] = useState(false)
   const [newRawKey, setNewRawKey] = useState("")
   const [newName, setNewName] = useState("")
@@ -209,8 +211,14 @@ export default function APIKeys() {
     setNewQuotaLimit("")
   }
 
+  const confirmDeleteAPIKey = async (id: number, name: string) => {
+    const description = language === "zh" ? `确定要删除令牌“${name || "API key"}”吗？此操作无法撤销。` : `Delete API key “${name || "API key"}”? This cannot be undone.`
+    if (await confirm({ description })) deleteAPIKey.mutate(id)
+  }
+
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex items-start justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold">{t("settings.apiKeys")}</h1>
@@ -237,7 +245,7 @@ export default function APIKeys() {
                 apiKey={apiKey}
                 catalog={catalog}
                 onSave={(id, payload) => updateAPIKey.mutate({ id, payload })}
-                onDelete={(id) => deleteAPIKey.mutate(id)}
+                onDelete={confirmDeleteAPIKey}
                 onRotate={(id) => rotateAPIKey.mutate(id)}
                 onResetUsage={(id) => resetAPIKeyUsage.mutate(id)}
                 onCopy={copyValue}
@@ -333,7 +341,7 @@ function APIKeyRow({
   apiKey: APIKey
   catalog: UserChannelCatalog[]
   onSave: (id: number, payload: APIKeyPayload) => void
-  onDelete: (id: number) => void
+  onDelete: (id: number, name: string) => void
   onRotate: (id: number) => void
   onResetUsage: (id: number) => void
   onCopy: (value: string) => void
@@ -392,7 +400,7 @@ function APIKeyRow({
             <RotateCcw size={14} />
             {t("settings.resetUsage")}
           </Button>
-          <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600" onClick={() => onDelete(apiKey.id)}>
+          <Button variant="outline" size="sm" className="text-red-500 hover:text-red-600" onClick={() => onDelete(apiKey.id, apiKey.name)}>
             <Trash size={14} />
           </Button>
         </div>

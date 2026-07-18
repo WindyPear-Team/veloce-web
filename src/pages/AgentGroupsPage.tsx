@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
+import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import { useI18n } from "@/lib/i18n"
 
 interface ChatAgent {
@@ -109,13 +110,14 @@ function AgentGroupList({ data }: { data: AgentGroupsData }) {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const { success, error } = useToast()
+  const { confirm, confirmDialog } = useConfirmDialog()
   const [deletingID, setDeletingID] = useState("")
   const { copy, groups, isFetchingGroups, refetchGroups } = data
 
   const newGroupHref = "/chat/agent-groups/new"
 
   const deleteGroup = async (group: AgentGroup) => {
-    if (!window.confirm(copy.deleteConfirm.replace("{name}", group.name))) {
+    if (!await confirm({ description: copy.deleteConfirm.replace("{name}", group.name) })) {
       return
     }
     setDeletingID(group.id)
@@ -132,6 +134,7 @@ function AgentGroupList({ data }: { data: AgentGroupsData }) {
 
   return (
     <div className="space-y-6">
+      {confirmDialog}
       <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div>
           <h1 className="text-3xl font-bold">{copy.title}</h1>
