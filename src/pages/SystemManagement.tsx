@@ -23,6 +23,7 @@ import {
   ToggleLeft,
   Trash2,
   Upload,
+  Server,
 } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import type { AxiosError } from "axios"
@@ -293,6 +294,14 @@ interface SystemSettings extends PublicSettings {
   auto_update_interval_hours: string
   log_storage_mode: string
   log_retention_days: string
+  redis_enabled: boolean
+  redis_address: string
+  redis_username: string
+  redis_password: string
+  redis_password_set: boolean
+  redis_password_clear: boolean
+  redis_database: string
+  redis_tls_enabled: boolean
 }
 
 type SystemTab =
@@ -303,6 +312,7 @@ type SystemTab =
   | "payment"
   | "checkIn"
   | "security"
+  | "redis"
   | "auth"
   | "email"
   | "content"
@@ -324,7 +334,7 @@ type SystemTab =
 type SystemSection = "general" | "theme" | "auth" | "content" | "operations" | "advancedChat" | "subscriptions" | "redeemCodes"
 
 const systemSectionTabs: Record<SystemSection, SystemTab[]> = {
-  general: ["basic", "billing", "checkIn", "security"],
+  general: ["basic", "billing", "checkIn", "security", "redis"],
   theme: ["theme", "themeSettings"],
   auth: ["auth", "email"],
   content: ["content", "topNavigation", "navigation"],
@@ -392,6 +402,14 @@ const defaultSystemSettings: SystemSettings = {
   auto_update_interval_hours: "24",
   log_storage_mode: "single",
   log_retention_days: "30",
+  redis_enabled: false,
+  redis_address: "127.0.0.1:6379",
+  redis_username: "",
+  redis_password: "",
+  redis_password_set: false,
+  redis_password_clear: false,
+  redis_database: "0",
+  redis_tls_enabled: false,
 }
 
 const defaultThemeColorValues = Object.fromEntries(
@@ -1123,6 +1141,33 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             </div>
             <TextareaField label={copy.sensitiveWords} value={form.sensitive_words} placeholder={copy.sensitiveWordsPlaceholder} onChange={(value) => updateField("sensitive_words", value)} />
             <TextareaField label={copy.ssrfAllowedHosts} value={form.ssrf_allowed_hosts} placeholder={copy.ssrfAllowedHostsPlaceholder} onChange={(value) => updateField("ssrf_allowed_hosts", value)} />
+          </div>
+        </SettingsPanel>
+      )}
+
+      {activeTab === "redis" && (
+        <SettingsPanel title={copy.redis}>
+          <div className="space-y-5">
+            <SectionTitle title={copy.redis} description={copy.redisDescription} />
+            <div className="grid gap-4 lg:grid-cols-2">
+              <ToggleField label={copy.redisEnabled} checked={form.redis_enabled} onChange={(checked) => updateField("redis_enabled", checked)} />
+              <ToggleField label={copy.redisTLSEnabled} checked={form.redis_tls_enabled} onChange={(checked) => updateField("redis_tls_enabled", checked)} />
+              <TextField label={copy.redisAddress} value={form.redis_address} placeholder="127.0.0.1:6379" onChange={(value) => updateField("redis_address", value)} />
+              <TextField label={copy.redisDatabase} value={form.redis_database} placeholder="0" type="number" onChange={(value) => updateField("redis_database", value)} />
+              <TextField label={copy.redisUsername} value={form.redis_username} placeholder={copy.redisUsernamePlaceholder} onChange={(value) => updateField("redis_username", value)} />
+              <TextField
+                label={copy.redisPassword}
+                value={form.redis_password}
+                placeholder={form.redis_password_set ? copy.redisPasswordReplacePlaceholder : copy.redisPasswordPlaceholder}
+                type="password"
+                onChange={(value) => {
+                  updateField("redis_password", value)
+                  if (value) updateField("redis_password_clear", false)
+                }}
+              />
+              {form.redis_password_set && <ToggleField label={copy.redisPasswordClear} checked={form.redis_password_clear} onChange={(checked) => updateField("redis_password_clear", checked)} />}
+            </div>
+            <p className="text-xs leading-5 text-muted-foreground">{copy.redisHint}</p>
           </div>
         </SettingsPanel>
       )}
@@ -1975,6 +2020,7 @@ function systemTabs(copy: SystemCopy): Array<{ id: SystemTab; label: string; ico
     { id: "payment", label: copy.paymentInterface, icon: CreditCard },
     { id: "checkIn", label: copy.checkInSettings, icon: CalendarCheck },
     { id: "security", label: copy.security, icon: ShieldCheck },
+    { id: "redis", label: copy.redis, icon: Server },
     { id: "auth", label: copy.auth, icon: KeyRound },
     { id: "email", label: copy.email, icon: Mail },
     { id: "content", label: copy.content, icon: FileText },
@@ -3703,6 +3749,19 @@ const zhCopy = {
   openPaymentGatewayHint: "OPS 模式会读取 /.well-known/openpayment-configuation（规范中的 configuation 拼写是固定路径），并按发现配置中的端点、字段别名、支付方式和签名规则发起支付。发现配置地址留空时会根据 Base URL 自动生成。",
   generatedFromBaseURL: "由 Base URL 自动生成",
   security: "安全策略",
+  redis: "Redis",
+  redisDescription: "配置可选的 Redis 缓存连接。",
+  redisEnabled: "启用 Redis",
+  redisAddress: "Redis 地址",
+  redisUsername: "Redis 用户名",
+  redisUsernamePlaceholder: "留空表示不使用用户名",
+  redisPassword: "Redis 密码",
+  redisPasswordPlaceholder: "留空表示不使用密码",
+  redisPasswordReplacePlaceholder: "留空保留已保存的密码",
+  redisPasswordClear: "清除已保存的 Redis 密码",
+  redisDatabase: "Redis 数据库编号",
+  redisTLSEnabled: "启用 TLS",
+  redisHint: "保存后将在服务下次启动时生效。REDIS_URL 或 REDIS_* 环境变量会覆盖这里的连接配置。",
   rateLimitEnabled: "启用网关速率限制",
   rateLimitRPM: "每分钟请求数",
   rateLimitBurst: "突发额度",
@@ -4126,6 +4185,19 @@ const enCopy: SystemCopy = {
   openPaymentGatewayHint: "OPS mode reads /.well-known/openpayment-configuation. The configuation spelling is part of the spec. Leave discovery URL empty to generate it from the platform base URL.",
   generatedFromBaseURL: "Generated from Base URL",
   security: "Security Policy",
+  redis: "Redis",
+  redisDescription: "Configure the optional Redis cache connection.",
+  redisEnabled: "Enable Redis",
+  redisAddress: "Redis address",
+  redisUsername: "Redis username",
+  redisUsernamePlaceholder: "Leave empty to omit the username",
+  redisPassword: "Redis password",
+  redisPasswordPlaceholder: "Leave empty to omit the password",
+  redisPasswordReplacePlaceholder: "Leave empty to keep the saved password",
+  redisPasswordClear: "Clear the saved Redis password",
+  redisDatabase: "Redis database number",
+  redisTLSEnabled: "Enable TLS",
+  redisHint: "Saved settings apply on the next service start. REDIS_URL or REDIS_* environment variables override this connection configuration.",
   rateLimitEnabled: "Enable gateway rate limiting",
   rateLimitRPM: "Requests per minute",
   rateLimitBurst: "Burst allowance",
