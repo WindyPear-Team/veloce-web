@@ -51,6 +51,14 @@ interface PaymentConfig {
   min_recharge_amount: string
   recharge_presets: string[]
   methods: string[]
+  channels: PaymentChannel[]
+}
+
+interface PaymentChannel {
+  id: string
+  name: string
+  provider: string
+  methods: string[]
 }
 
 interface PaymentOrder {
@@ -72,6 +80,7 @@ export default function Wallet() {
   const [checkInStatusText, setCheckInStatusText] = useState("")
   const [rechargeAmount, setRechargeAmount] = useState("")
   const [paymentMethod, setPaymentMethod] = useState("alipay")
+  const [paymentChannel, setPaymentChannel] = useState("")
   const [paymentStatus, setPaymentStatus] = useState("")
 
   const { data: user } = useQuery<CurrentUser>({
@@ -121,6 +130,12 @@ export default function Wallet() {
       setPaymentMethod(methods[0])
     }
   }, [paymentConfig?.methods, paymentMethod])
+  const availablePaymentChannels = (paymentConfig?.channels || []).filter((channel) => channel.methods.some((method) => method.toLowerCase() === paymentMethod.toLowerCase()))
+  useEffect(() => {
+    if (availablePaymentChannels.length > 0 && !availablePaymentChannels.some((channel) => channel.id === paymentChannel)) {
+      setPaymentChannel(availablePaymentChannels[0].id)
+    }
+  }, [availablePaymentChannels, paymentChannel])
   const redeemBalance = useMutation({
     mutationFn: async () => {
       const res = await api.post("/user/redeem-code", { code: redeemCode })
@@ -154,7 +169,8 @@ export default function Wallet() {
   const createPaymentOrder = useMutation({
     mutationFn: async () => {
       const method = paymentMethod || paymentConfig?.methods?.[0] || "alipay"
-      const res = await api.post("/user/payment/orders", { amount: rechargeAmount, method })
+      const channelID = paymentChannel || availablePaymentChannels[0]?.id || ""
+      const res = await api.post("/user/payment/orders", { amount: rechargeAmount, method, channel_id: channelID })
       return res.data as PaymentOrder
     },
     onSuccess: (result) => {
@@ -215,15 +231,18 @@ export default function Wallet() {
                   </Button>
                 ))}
               </div>
-              <div className="grid gap-2 sm:grid-cols-[1fr_160px]">
+              <div className="grid gap-2 sm:grid-cols-[1fr_160px_180px]">
                 <Input value={rechargeAmount} type="number" min="0" placeholder={copy.rechargeAmountPlaceholder} onChange={(event) => setRechargeAmount(event.target.value)} />
-                <Select value={String((paymentMethod) || "__shadcn_empty__")} onValueChange={(value) => setPaymentMethod((value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
+                <Select value={String((paymentMethod) || "__shadcn_empty__")} onValueChange={(value) => { setPaymentMethod(value === "__shadcn_empty__" ? "" : value); setPaymentChannel("") }}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                   {(paymentConfig?.methods || parseJSONList(publicSettings.payment_methods)).map((method) => (
                     <SelectItem key={method} value={String(method)}>{paymentMethodLabel(method, copy)}</SelectItem>
                   ))}
                 </SelectContent></Select>
+                <Select value={String(paymentChannel || "__shadcn_empty__")} onValueChange={(value) => setPaymentChannel(value === "__shadcn_empty__" ? "" : value)} disabled={availablePaymentChannels.length === 0}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue placeholder={copy.paymentChannel} /></SelectTrigger><SelectContent>
+                  {availablePaymentChannels.map((channel) => <SelectItem key={channel.id} value={channel.id}>{channel.name}</SelectItem>)}
+                </SelectContent></Select>
               </div>
-              <Button className="w-full gap-2" disabled={!canCreatePaymentOrder(rechargeAmount, paymentConfig, publicSettings) || createPaymentOrder.isPending} onClick={() => createPaymentOrder.mutate()}>
+              <Button className="w-full gap-2" disabled={!canCreatePaymentOrder(rechargeAmount, paymentConfig, publicSettings) || !paymentChannel || createPaymentOrder.isPending} onClick={() => createPaymentOrder.mutate()}>
                 <CreditCard size={16} />
                 {copy.createPaymentOrder}
               </Button>
@@ -366,6 +385,12 @@ function paymentMethodLabel(method: string, copy: typeof zhWalletCopy) {
       return copy.alipay
     case "wxpay":
       return copy.wxpay
+    case "wechatpay":
+      return copy.wxpay
+    case "paypal":
+      return "PayPal"
+    case "stripe":
+      return "Stripe"
     default:
       return method
   }
@@ -384,6 +409,7 @@ const zhWalletCopy = {
   createPaymentOrder: "创建支付订单",
   paymentOrderCreated: "订单 {order} 已创建，充值 {amount}。正在跳转到支付页面...",
   paymentOrderFailed: "创建支付订单失败",
+  paymentChannel: "支付通道",
   dailyCheckIn: "每日签到",
   currentStreak: "当前连续签到",
   todayReward: "今日奖励",
@@ -435,6 +461,7 @@ const enWalletCopy: typeof zhWalletCopy = {
   createPaymentOrder: "Create payment order",
   paymentOrderCreated: "Order {order} created for {amount}. Redirecting to payment...",
   paymentOrderFailed: "Failed to create payment order",
+  paymentChannel: "Payment channel",
   dailyCheckIn: "Daily check-in",
   currentStreak: "Current streak",
   todayReward: "Today's reward",

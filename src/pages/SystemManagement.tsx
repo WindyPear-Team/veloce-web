@@ -279,6 +279,7 @@ interface SystemSettings extends PublicSettings {
   checkin_streak_cycle_days: string
   checkin_streak_rewards: string
   payment_gateway_provider: string
+  payment_channels: string
   payment_yipay_gateway_url: string
   payment_yipay_pid: string
   payment_yipay_key: string
@@ -404,6 +405,7 @@ const defaultSystemSettings: SystemSettings = {
   checkin_streak_cycle_days: "7",
   checkin_streak_rewards: "{}",
   payment_gateway_provider: "yipay",
+  payment_channels: "[]",
   payment_yipay_gateway_url: "",
   payment_yipay_pid: "",
   payment_yipay_key: "",
@@ -1098,80 +1100,14 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         <SettingsPanel title={copy.paymentInterface}>
           <div className="space-y-4">
             <SectionTitle title={copy.paymentSettings} description={copy.paymentSettingsDescription} />
+            <PaymentChannelsEditor value={form.payment_channels} legacyChannel={legacyPaymentChannel(form)} onChange={(value) => updateField("payment_channels", value)} />
             <div className="grid gap-4 lg:grid-cols-2">
               <ToggleField label={copy.paymentEnabled} checked={form.payment_enabled} onChange={(checked) => updateField("payment_enabled", checked)} />
               <TextField label={copy.currencyDisplayName} value={form.payment_currency_display_name} placeholder="$" onChange={(value) => updateField("payment_currency_display_name", value)} />
               <TextField label={copy.usdToRMBRate} value={form.payment_usd_to_rmb_rate} placeholder="7.20" type="number" onChange={(value) => updateField("payment_usd_to_rmb_rate", value)} />
               <TextField label={copy.minRechargeAmount} value={form.payment_min_recharge_amount} placeholder="1" type="number" onChange={(value) => updateField("payment_min_recharge_amount", value)} />
               <TextField label={copy.rechargePresets} value={jsonListToCSV(form.payment_recharge_presets)} placeholder="5,10,20,50,100" onChange={(value) => updateField("payment_recharge_presets", csvToJSONString(value))} />
-              <TextField label={copy.paymentMethods} value={jsonListToCSV(form.payment_methods)} placeholder="alipay,wxpay" onChange={(value) => updateField("payment_methods", csvToJSONString(value))} />
-              <label className="grid gap-2 text-sm">
-                <span className="font-medium">{copy.paymentGatewayProvider}</span>
-                <Select value={String((form.payment_gateway_provider || "yipay") || "__shadcn_empty__")} onValueChange={(value) => updateField("payment_gateway_provider", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
-                  <SelectItem value="yipay">{copy.paymentProviderYipay}</SelectItem>
-                  <SelectItem value="openpayment">{copy.paymentProviderOpenPayment}</SelectItem>
-                  <SelectItem value="wechatpay">WeChat Pay（官方 API v3）</SelectItem>
-                  <SelectItem value="alipay">Alipay（官方）</SelectItem>
-                  <SelectItem value="paypal">PayPal（官方）</SelectItem>
-                  <SelectItem value="stripe">Stripe（官方）</SelectItem>
-                </SelectContent></Select>
-              </label>
-              {(form.payment_gateway_provider || "yipay") === "openpayment" ? (
-                <>
-                  <TextField label={copy.openPaymentBaseURL} value={form.payment_openpayment_base_url} placeholder="https://pay.example.com" onChange={(value) => updateField("payment_openpayment_base_url", value)} />
-                  <TextField label={copy.openPaymentConfigURL} value={form.payment_openpayment_config_url} placeholder="https://pay.example.com/.well-known/openpayment-configuation" onChange={(value) => updateField("payment_openpayment_config_url", value)} />
-                  <TextField label={copy.openPaymentMerchantID} value={form.payment_openpayment_merchant_id} placeholder="1000" onChange={(value) => updateField("payment_openpayment_merchant_id", value)} />
-                  <TextField label={copy.openPaymentKey} value={form.payment_openpayment_key} placeholder={copy.openPaymentKeyPlaceholder} type="password" onChange={(value) => updateField("payment_openpayment_key", value)} />
-                  <ReadonlyField label={copy.openPaymentNotifyURL} value={callbackURLFromBaseURL(form.base_url, "/api/payment/openpayment/notify")} placeholder={copy.generatedFromBaseURL} />
-                  <ReadonlyField label={copy.openPaymentReturnURL} value={callbackURLFromBaseURL(form.base_url, "/api/payment/openpayment/return")} placeholder={copy.generatedFromBaseURL} />
-                </>
-              ) : (form.payment_gateway_provider || "yipay") === "wechatpay" ? (
-                <>
-                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="CNY" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
-                  <TextField label="微信支付商户号" value={form.payment_wechat_mch_id} onChange={(value) => updateField("payment_wechat_mch_id", value)} />
-                  <TextField label="微信 AppID" value={form.payment_wechat_app_id} onChange={(value) => updateField("payment_wechat_app_id", value)} />
-                  <TextField label="商户证书序列号" value={form.payment_wechat_serial_no} onChange={(value) => updateField("payment_wechat_serial_no", value)} />
-                  <TextField label="API v3 密钥（32 字节）" value={form.payment_wechat_api_v3_key} type="password" onChange={(value) => updateField("payment_wechat_api_v3_key", value)} />
-                  <TextareaField label="商户私钥 PEM" value={form.payment_wechat_private_key} placeholder="-----BEGIN PRIVATE KEY-----" onChange={(value) => updateField("payment_wechat_private_key", value)} />
-                  <TextareaField label="微信支付平台证书 / 公钥 PEM" value={form.payment_wechat_platform_certificate} placeholder="-----BEGIN CERTIFICATE-----" onChange={(value) => updateField("payment_wechat_platform_certificate", value)} />
-                  <ReadonlyField label="异步通知地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/wechatpay/notify")} placeholder={copy.generatedFromBaseURL} />
-                </>
-              ) : (form.payment_gateway_provider || "yipay") === "alipay" ? (
-                <>
-                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="CNY" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
-                  <TextField label="支付宝 AppID" value={form.payment_alipay_app_id} onChange={(value) => updateField("payment_alipay_app_id", value)} />
-                  <TextField label="支付宝网关地址" value={form.payment_alipay_gateway_url} onChange={(value) => updateField("payment_alipay_gateway_url", value)} />
-                  <TextareaField label="应用私钥 PEM（RSA2）" value={form.payment_alipay_private_key} placeholder="-----BEGIN PRIVATE KEY-----" onChange={(value) => updateField("payment_alipay_private_key", value)} />
-                  <TextareaField label="支付宝公钥 PEM" value={form.payment_alipay_public_key} placeholder="-----BEGIN PUBLIC KEY-----" onChange={(value) => updateField("payment_alipay_public_key", value)} />
-                  <ReadonlyField label="异步通知地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/alipay/notify")} placeholder={copy.generatedFromBaseURL} />
-                </>
-              ) : (form.payment_gateway_provider || "yipay") === "paypal" ? (
-                <>
-                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="USD" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
-                  <TextField label="PayPal Client ID" value={form.payment_paypal_client_id} onChange={(value) => updateField("payment_paypal_client_id", value)} />
-                  <TextField label="PayPal Client Secret" value={form.payment_paypal_client_secret} type="password" onChange={(value) => updateField("payment_paypal_client_secret", value)} />
-                  <TextField label="PayPal API Base URL" value={form.payment_paypal_base_url} onChange={(value) => updateField("payment_paypal_base_url", value)} />
-                  <TextField label="PayPal Webhook ID" value={form.payment_paypal_webhook_id} onChange={(value) => updateField("payment_paypal_webhook_id", value)} />
-                  <ReadonlyField label="Webhook 地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/paypal/notify")} placeholder={copy.generatedFromBaseURL} />
-                </>
-              ) : (form.payment_gateway_provider || "yipay") === "stripe" ? (
-                <>
-                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="USD" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
-                  <TextField label="Stripe Secret Key" value={form.payment_stripe_secret_key} type="password" onChange={(value) => updateField("payment_stripe_secret_key", value)} />
-                  <TextField label="Stripe Webhook Signing Secret" value={form.payment_stripe_webhook_secret} type="password" onChange={(value) => updateField("payment_stripe_webhook_secret", value)} />
-                  <ReadonlyField label="Webhook 地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/stripe/notify")} placeholder={copy.generatedFromBaseURL} />
-                </>
-              ) : (
-                <>
-                  <TextField label={copy.yipayGatewayURL} value={form.payment_yipay_gateway_url} placeholder="https://pay.example.com/submit.php" onChange={(value) => updateField("payment_yipay_gateway_url", value)} />
-                  <TextField label={copy.yipayPID} value={form.payment_yipay_pid} placeholder="1000" onChange={(value) => updateField("payment_yipay_pid", value)} />
-                  <TextField label={copy.yipayKey} value={form.payment_yipay_key} placeholder={copy.yipayKeyPlaceholder} type="password" onChange={(value) => updateField("payment_yipay_key", value)} />
-                  <TextField label={copy.yipayNotifyURL} value={form.payment_yipay_notify_url} placeholder="https://api.example.com/api/payment/yipay/notify" onChange={(value) => updateField("payment_yipay_notify_url", value)} />
-                  <TextField label={copy.yipayReturnURL} value={form.payment_yipay_return_url} placeholder="https://api.example.com/api/payment/yipay/return" onChange={(value) => updateField("payment_yipay_return_url", value)} />
-                </>
-              )}
             </div>
-            <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">{(form.payment_gateway_provider || "yipay") === "openpayment" ? copy.openPaymentGatewayHint : copy.yipayGatewayHint}</div>
           </div>
         </SettingsPanel>
       )}
@@ -2563,6 +2499,155 @@ function themeColorFields(mode: "light" | "dark", copy: SystemCopy): ThemeColorF
   ]
 }
 
+type EditablePaymentChannel = {
+  id: string
+  name: string
+  provider: "yipay" | "openpayment" | "wechatpay" | "alipay" | "paypal" | "stripe"
+  enabled: boolean
+  methods: string[]
+  currency?: string
+  config: Record<string, string>
+}
+
+const paymentChannelConfigFields: Record<EditablePaymentChannel["provider"], Array<{ key: string; label: string; secret?: boolean; multiline?: boolean }>> = {
+  yipay: [
+    { key: "gateway_url", label: "提交地址" }, { key: "pid", label: "商户 PID" }, { key: "key", label: "商户密钥", secret: true }, { key: "notify_url", label: "通知地址（可选）" }, { key: "return_url", label: "回跳地址（可选）" },
+  ],
+  openpayment: [
+    { key: "openpayment_base_url", label: "Base URL" }, { key: "openpayment_config_url", label: "发现配置地址" }, { key: "openpayment_merchant_id", label: "商户号" }, { key: "openpayment_key", label: "商户密钥", secret: true },
+  ],
+  wechatpay: [
+    { key: "wechat_mch_id", label: "商户号" }, { key: "wechat_app_id", label: "AppID" }, { key: "wechat_serial_no", label: "商户证书序列号" }, { key: "wechat_api_v3_key", label: "API v3 密钥", secret: true }, { key: "wechat_private_key", label: "商户私钥 PEM", multiline: true }, { key: "wechat_platform_certificate", label: "平台证书 / 公钥 PEM", multiline: true },
+  ],
+  alipay: [
+    { key: "alipay_app_id", label: "AppID" }, { key: "alipay_gateway_url", label: "网关地址" }, { key: "alipay_private_key", label: "应用私钥 PEM", multiline: true }, { key: "alipay_public_key", label: "支付宝公钥 PEM", multiline: true },
+  ],
+  paypal: [
+    { key: "paypal_client_id", label: "Client ID" }, { key: "paypal_client_secret", label: "Client Secret", secret: true }, { key: "paypal_base_url", label: "API Base URL" }, { key: "paypal_webhook_id", label: "Webhook ID" },
+  ],
+  stripe: [
+    { key: "stripe_secret_key", label: "Secret Key", secret: true }, { key: "stripe_webhook_secret", label: "Webhook Signing Secret", secret: true },
+  ],
+}
+
+function PaymentChannelsEditor({ value, legacyChannel, onChange }: { value: string; legacyChannel: EditablePaymentChannel; onChange: (value: string) => void }) {
+  const channels = parsePaymentChannels(value)
+  const update = (next: EditablePaymentChannel[]) => onChange(JSON.stringify(next))
+  const [draft, setDraft] = useState<EditablePaymentChannel | null>(null)
+  const editingIndex = draft ? channels.findIndex((channel) => channel.id === draft.id) : -1
+  const openCreate = () => setDraft({ id: `channel-${Date.now()}`, name: "新支付通道", provider: "yipay", enabled: true, methods: ["alipay", "wxpay"], currency: "CNY", config: {} })
+  const saveDraft = () => {
+    if (!draft || !draft.id.trim() || !draft.name.trim()) return
+    const nextChannel = { ...draft, methods: paymentChannelMethods(draft) }
+    update(editingIndex >= 0 ? channels.map((channel, index) => index === editingIndex ? nextChannel : channel) : [...channels, nextChannel])
+    setDraft(null)
+  }
+  const updateDraft = (patch: Partial<EditablePaymentChannel>) => setDraft((current) => current ? { ...current, ...patch } : current)
+  const updateDraftConfig = (key: string, nextValue: string) => setDraft((current) => current ? { ...current, config: { ...current.config, [key]: nextValue } } : current)
+
+  return (
+    <div className="space-y-3 rounded-lg border p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div><div className="font-medium">支付渠道</div><div className="text-sm text-muted-foreground">可添加多个渠道；用户会先选择支付方式，再从支持该方式的渠道中选择。</div></div>
+        <div className="flex gap-2"><Button type="button" size="sm" variant="outline" disabled={channels.length > 0} onClick={() => update([legacyChannel])}>迁移旧配置</Button><Button type="button" size="sm" onClick={openCreate}>添加渠道</Button></div>
+      </div>
+      {channels.length === 0 && <div className="text-sm text-muted-foreground">尚未添加渠道。可迁移现有默认配置，或直接添加新渠道；迁移后请保存系统设置。</div>}
+      {channels.map((channel, index) => (
+        <div key={channel.id || index} className="flex items-center justify-between gap-3 rounded-md border bg-muted/20 p-3">
+          <div><div className="font-medium">{channel.name || `通道 ${index + 1}`}</div><div className="text-sm text-muted-foreground">{channel.provider} · {paymentChannelMethods(channel).join(", ") || "未设置支付方式"} · {channel.enabled ? "已启用" : "已停用"}</div></div>
+          <div className="flex gap-2"><Button type="button" size="sm" variant="outline" onClick={() => setDraft({ ...channel, config: { ...channel.config }, methods: [...channel.methods] })}>编辑</Button><Button type="button" size="sm" variant="outline" onClick={() => update(channels.filter((_, current) => current !== index))}>删除</Button></div>
+        </div>
+      ))}
+      <Dialog open={Boolean(draft)} onOpenChange={(open) => !open && setDraft(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-3xl"><DialogHeader><DialogTitle>{editingIndex >= 0 ? "编辑支付渠道" : "添加支付渠道"}</DialogTitle></DialogHeader>
+          {draft && <div className="grid gap-4 py-2 md:grid-cols-2">
+            <TextField label="通道名称" value={draft.name} placeholder="如：支付宝官方" onChange={(nextValue) => updateDraft({ name: nextValue })} />
+            <TextField label="通道 ID" value={draft.id} placeholder="alipay-official" onChange={(nextValue) => updateDraft({ id: nextValue })} />
+            {usesCustomPaymentMethods(draft.provider) ? <TextField label="支持的支付方式" value={draft.methods.join(",")} placeholder="alipay,wxpay" onChange={(nextValue) => updateDraft({ methods: nextValue.split(",").map((item) => item.trim()).filter(Boolean) })} /> : <div className="grid gap-2 text-sm"><span className="font-medium">支付方式</span><div className="flex h-10 items-center rounded-md border bg-muted/40 px-3">{paymentChannelMethods(draft).join(", ")}</div></div>}
+            <TextField label="结算币种" value={draft.currency || ""} placeholder="CNY / USD" onChange={(nextValue) => updateDraft({ currency: nextValue.toUpperCase() })} />
+            <label className="grid gap-2 text-sm"><span className="font-medium">渠道类型</span><Select value={draft.provider} onValueChange={(nextValue) => updateDraft({ provider: nextValue as EditablePaymentChannel["provider"] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="yipay">易支付 / EPay</SelectItem><SelectItem value="openpayment">OpenPayment</SelectItem><SelectItem value="wechatpay">微信支付官方</SelectItem><SelectItem value="alipay">支付宝官方</SelectItem><SelectItem value="paypal">PayPal</SelectItem><SelectItem value="stripe">Stripe</SelectItem></SelectContent></Select></label>
+            <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.enabled} onChange={(event) => updateDraft({ enabled: event.target.checked })} /> 启用此通道</label>
+            <div className="md:col-span-2 grid gap-3 md:grid-cols-2">{paymentChannelConfigFields[draft.provider].map((field) => field.multiline ? <TextareaField key={field.key} label={field.label} value={draft.config[field.key] || ""} placeholder="" onChange={(nextValue) => updateDraftConfig(field.key, nextValue)} /> : <TextField key={field.key} label={field.label} value={draft.config[field.key] || ""} placeholder="" type={field.secret ? "password" : "text"} onChange={(nextValue) => updateDraftConfig(field.key, nextValue)} />)}</div>
+          </div>}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setDraft(null)}>取消</Button><Button type="button" onClick={saveDraft} disabled={!draft?.id.trim() || !draft?.name.trim()}>保存渠道</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function parsePaymentChannels(raw: string): EditablePaymentChannel[] {
+  try {
+    const parsed = JSON.parse(raw || "[]")
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter((item): item is EditablePaymentChannel => item && typeof item === "object").map((item) => {
+      const provider = isPaymentChannelProvider(item.provider) ? item.provider : "yipay"
+      const channel: EditablePaymentChannel = { id: String(item.id || ""), name: String(item.name || ""), provider, enabled: item.enabled !== false, methods: Array.isArray(item.methods) ? item.methods.map(String).filter(Boolean) : [], currency: typeof item.currency === "string" ? item.currency : undefined, config: item.config && typeof item.config === "object" ? Object.fromEntries(Object.entries(item.config).map(([key, fieldValue]) => [key, String(fieldValue)])) : {} }
+      return { ...channel, methods: paymentChannelMethods(channel) }
+    })
+  } catch { return [] }
+}
+
+function legacyPaymentChannel(settings: SystemSettings): EditablePaymentChannel {
+  const provider = isPaymentChannelProvider(settings.payment_gateway_provider) ? settings.payment_gateway_provider : "yipay"
+  return {
+    id: `legacy-${provider}`,
+    name: `已迁移的${provider === "yipay" ? "易支付" : provider}渠道`,
+    provider,
+    enabled: true,
+    methods: parseLegacyPaymentMethods(settings.payment_methods),
+    currency: settings.payment_official_currency,
+    config: {
+      gateway_url: settings.payment_yipay_gateway_url,
+      pid: settings.payment_yipay_pid,
+      key: settings.payment_yipay_key,
+      notify_url: settings.payment_yipay_notify_url,
+      return_url: settings.payment_yipay_return_url,
+      openpayment_base_url: settings.payment_openpayment_base_url,
+      openpayment_config_url: settings.payment_openpayment_config_url,
+      openpayment_merchant_id: settings.payment_openpayment_merchant_id,
+      openpayment_key: settings.payment_openpayment_key,
+      wechat_mch_id: settings.payment_wechat_mch_id,
+      wechat_app_id: settings.payment_wechat_app_id,
+      wechat_serial_no: settings.payment_wechat_serial_no,
+      wechat_private_key: settings.payment_wechat_private_key,
+      wechat_platform_certificate: settings.payment_wechat_platform_certificate,
+      wechat_api_v3_key: settings.payment_wechat_api_v3_key,
+      alipay_app_id: settings.payment_alipay_app_id,
+      alipay_private_key: settings.payment_alipay_private_key,
+      alipay_public_key: settings.payment_alipay_public_key,
+      alipay_gateway_url: settings.payment_alipay_gateway_url,
+      paypal_client_id: settings.payment_paypal_client_id,
+      paypal_client_secret: settings.payment_paypal_client_secret,
+      paypal_base_url: settings.payment_paypal_base_url,
+      paypal_webhook_id: settings.payment_paypal_webhook_id,
+      stripe_secret_key: settings.payment_stripe_secret_key,
+      stripe_webhook_secret: settings.payment_stripe_webhook_secret,
+    },
+  }
+}
+
+function parseLegacyPaymentMethods(raw: string): string[] {
+  try {
+    const parsed = JSON.parse(raw || "[]")
+    return Array.isArray(parsed) ? parsed.map(String).filter(Boolean) : []
+  } catch {
+    return raw.split(",").map((item) => item.trim()).filter(Boolean)
+  }
+}
+
+function usesCustomPaymentMethods(provider: EditablePaymentChannel["provider"]) {
+  return provider === "yipay" || provider === "openpayment"
+}
+
+function paymentChannelMethods(channel: EditablePaymentChannel): string[] {
+  return usesCustomPaymentMethods(channel.provider) ? channel.methods : [channel.provider]
+}
+
+function isPaymentChannelProvider(value: unknown): value is EditablePaymentChannel["provider"] {
+  return value === "yipay" || value === "openpayment" || value === "wechatpay" || value === "alipay" || value === "paypal" || value === "stripe"
+}
+
 function TextField({
   label,
   value,
@@ -2580,23 +2665,6 @@ function TextField({
     <label className="block space-y-2 text-sm">
       <span className="font-medium">{label}</span>
       <Input type={type} value={value} placeholder={placeholder} onChange={(event) => onChange(event.target.value)} />
-    </label>
-  )
-}
-
-function ReadonlyField({
-  label,
-  value,
-  placeholder,
-}: {
-  label: string
-  value: string
-  placeholder: string
-}) {
-  return (
-    <label className="block space-y-2 text-sm">
-      <span className="font-medium">{label}</span>
-      <Input value={value} placeholder={placeholder} readOnly className="bg-muted/50" />
     </label>
   )
 }
