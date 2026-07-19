@@ -290,6 +290,23 @@ interface SystemSettings extends PublicSettings {
   payment_openpayment_key: string
   payment_openpayment_notify_url: string
   payment_openpayment_return_url: string
+  payment_official_currency: string
+  payment_wechat_mch_id: string
+  payment_wechat_app_id: string
+  payment_wechat_serial_no: string
+  payment_wechat_private_key: string
+  payment_wechat_platform_certificate: string
+  payment_wechat_api_v3_key: string
+  payment_alipay_app_id: string
+  payment_alipay_private_key: string
+  payment_alipay_public_key: string
+  payment_alipay_gateway_url: string
+  payment_paypal_client_id: string
+  payment_paypal_client_secret: string
+  payment_paypal_base_url: string
+  payment_paypal_webhook_id: string
+  payment_stripe_secret_key: string
+  payment_stripe_webhook_secret: string
   auto_update_enabled: boolean
   auto_update_interval_hours: string
   log_storage_mode: string
@@ -398,6 +415,23 @@ const defaultSystemSettings: SystemSettings = {
   payment_openpayment_key: "",
   payment_openpayment_notify_url: "",
   payment_openpayment_return_url: "",
+  payment_official_currency: "CNY",
+  payment_wechat_mch_id: "",
+  payment_wechat_app_id: "",
+  payment_wechat_serial_no: "",
+  payment_wechat_private_key: "",
+  payment_wechat_platform_certificate: "",
+  payment_wechat_api_v3_key: "",
+  payment_alipay_app_id: "",
+  payment_alipay_private_key: "",
+  payment_alipay_public_key: "",
+  payment_alipay_gateway_url: "https://openapi.alipay.com/gateway.do",
+  payment_paypal_client_id: "",
+  payment_paypal_client_secret: "",
+  payment_paypal_base_url: "https://api-m.sandbox.paypal.com",
+  payment_paypal_webhook_id: "",
+  payment_stripe_secret_key: "",
+  payment_stripe_webhook_secret: "",
   auto_update_enabled: false,
   auto_update_interval_hours: "24",
   log_storage_mode: "single",
@@ -1076,6 +1110,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                 <Select value={String((form.payment_gateway_provider || "yipay") || "__shadcn_empty__")} onValueChange={(value) => updateField("payment_gateway_provider", (value === "__shadcn_empty__" ? "" : value))}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
                   <SelectItem value="yipay">{copy.paymentProviderYipay}</SelectItem>
                   <SelectItem value="openpayment">{copy.paymentProviderOpenPayment}</SelectItem>
+                  <SelectItem value="wechatpay">WeChat Pay（官方 API v3）</SelectItem>
+                  <SelectItem value="alipay">Alipay（官方）</SelectItem>
+                  <SelectItem value="paypal">PayPal（官方）</SelectItem>
+                  <SelectItem value="stripe">Stripe（官方）</SelectItem>
                 </SelectContent></Select>
               </label>
               {(form.payment_gateway_provider || "yipay") === "openpayment" ? (
@@ -1086,6 +1124,42 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                   <TextField label={copy.openPaymentKey} value={form.payment_openpayment_key} placeholder={copy.openPaymentKeyPlaceholder} type="password" onChange={(value) => updateField("payment_openpayment_key", value)} />
                   <ReadonlyField label={copy.openPaymentNotifyURL} value={callbackURLFromBaseURL(form.base_url, "/api/payment/openpayment/notify")} placeholder={copy.generatedFromBaseURL} />
                   <ReadonlyField label={copy.openPaymentReturnURL} value={callbackURLFromBaseURL(form.base_url, "/api/payment/openpayment/return")} placeholder={copy.generatedFromBaseURL} />
+                </>
+              ) : (form.payment_gateway_provider || "yipay") === "wechatpay" ? (
+                <>
+                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="CNY" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
+                  <TextField label="微信支付商户号" value={form.payment_wechat_mch_id} onChange={(value) => updateField("payment_wechat_mch_id", value)} />
+                  <TextField label="微信 AppID" value={form.payment_wechat_app_id} onChange={(value) => updateField("payment_wechat_app_id", value)} />
+                  <TextField label="商户证书序列号" value={form.payment_wechat_serial_no} onChange={(value) => updateField("payment_wechat_serial_no", value)} />
+                  <TextField label="API v3 密钥（32 字节）" value={form.payment_wechat_api_v3_key} type="password" onChange={(value) => updateField("payment_wechat_api_v3_key", value)} />
+                  <TextareaField label="商户私钥 PEM" value={form.payment_wechat_private_key} placeholder="-----BEGIN PRIVATE KEY-----" onChange={(value) => updateField("payment_wechat_private_key", value)} />
+                  <TextareaField label="微信支付平台证书 / 公钥 PEM" value={form.payment_wechat_platform_certificate} placeholder="-----BEGIN CERTIFICATE-----" onChange={(value) => updateField("payment_wechat_platform_certificate", value)} />
+                  <ReadonlyField label="异步通知地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/wechatpay/notify")} placeholder={copy.generatedFromBaseURL} />
+                </>
+              ) : (form.payment_gateway_provider || "yipay") === "alipay" ? (
+                <>
+                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="CNY" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
+                  <TextField label="支付宝 AppID" value={form.payment_alipay_app_id} onChange={(value) => updateField("payment_alipay_app_id", value)} />
+                  <TextField label="支付宝网关地址" value={form.payment_alipay_gateway_url} onChange={(value) => updateField("payment_alipay_gateway_url", value)} />
+                  <TextareaField label="应用私钥 PEM（RSA2）" value={form.payment_alipay_private_key} placeholder="-----BEGIN PRIVATE KEY-----" onChange={(value) => updateField("payment_alipay_private_key", value)} />
+                  <TextareaField label="支付宝公钥 PEM" value={form.payment_alipay_public_key} placeholder="-----BEGIN PUBLIC KEY-----" onChange={(value) => updateField("payment_alipay_public_key", value)} />
+                  <ReadonlyField label="异步通知地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/alipay/notify")} placeholder={copy.generatedFromBaseURL} />
+                </>
+              ) : (form.payment_gateway_provider || "yipay") === "paypal" ? (
+                <>
+                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="USD" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
+                  <TextField label="PayPal Client ID" value={form.payment_paypal_client_id} onChange={(value) => updateField("payment_paypal_client_id", value)} />
+                  <TextField label="PayPal Client Secret" value={form.payment_paypal_client_secret} type="password" onChange={(value) => updateField("payment_paypal_client_secret", value)} />
+                  <TextField label="PayPal API Base URL" value={form.payment_paypal_base_url} onChange={(value) => updateField("payment_paypal_base_url", value)} />
+                  <TextField label="PayPal Webhook ID" value={form.payment_paypal_webhook_id} onChange={(value) => updateField("payment_paypal_webhook_id", value)} />
+                  <ReadonlyField label="Webhook 地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/paypal/notify")} placeholder={copy.generatedFromBaseURL} />
+                </>
+              ) : (form.payment_gateway_provider || "yipay") === "stripe" ? (
+                <>
+                  <TextField label="结算币种" value={form.payment_official_currency} placeholder="USD" onChange={(value) => updateField("payment_official_currency", value.toUpperCase())} />
+                  <TextField label="Stripe Secret Key" value={form.payment_stripe_secret_key} type="password" onChange={(value) => updateField("payment_stripe_secret_key", value)} />
+                  <TextField label="Stripe Webhook Signing Secret" value={form.payment_stripe_webhook_secret} type="password" onChange={(value) => updateField("payment_stripe_webhook_secret", value)} />
+                  <ReadonlyField label="Webhook 地址" value={callbackURLFromBaseURL(form.base_url, "/api/payment/stripe/notify")} placeholder={copy.generatedFromBaseURL} />
                 </>
               ) : (
                 <>
@@ -2498,7 +2572,7 @@ function TextField({
 }: {
   label: string
   value: string
-  placeholder: string
+  placeholder?: string
   type?: string
   onChange: (value: string) => void
 }) {

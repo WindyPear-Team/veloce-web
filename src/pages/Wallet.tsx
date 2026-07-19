@@ -1,7 +1,7 @@
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { CalendarCheck, Copy, CreditCard, Gift, WalletCards } from "lucide-react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { Button } from "@/components/ui/button"
@@ -115,6 +115,12 @@ export default function Wallet() {
     },
     enabled: publicSettings.payment_enabled,
   })
+  useEffect(() => {
+    const methods = paymentConfig?.methods || []
+    if (methods.length > 0 && !methods.some((method) => method.toLowerCase() === paymentMethod.toLowerCase())) {
+      setPaymentMethod(methods[0])
+    }
+  }, [paymentConfig?.methods, paymentMethod])
   const redeemBalance = useMutation({
     mutationFn: async () => {
       const res = await api.post("/user/redeem-code", { code: redeemCode })
