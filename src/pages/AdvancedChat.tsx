@@ -5,6 +5,7 @@ import { useQuery } from "@tanstack/react-query"
 import { useEffect, useState } from "react"
 import Chat from "./Chat"
 import Agents from "./Agents"
+import AgentEditor from "./AgentEditor"
 import Skills from "./Skills"
 import AdvancedChatMCP from "./AdvancedChatMCP"
 import AdvancedChatFiles from "./AdvancedChatFiles"
@@ -219,6 +220,7 @@ export default function AdvancedChat() {
                 ) : (
                   <Routes>
                     <Route path="agents" element={<Agents />} />
+                    <Route path="agents/:id" element={<AgentEditor />} />
                     <Route path="community" element={<Community />} />
                     <Route path="community/:id" element={<Community />} />
                     <Route path="skills" element={<Skills />} />
@@ -283,7 +285,7 @@ function desktopPageTitle(pathname: string, language: string) {
   if (pathname.startsWith("/chat/channels")) return zh ? "消息通道" : "Message Channels"
   if (pathname === "/chat/deliveries") return zh ? "结果投递" : "Result Delivery"
   if (pathname === "/chat/scheduled-tasks") return zh ? "计划任务" : "Scheduled Tasks"
-  if (pathname === "/chat/agents") return zh ? "助理" : "Agents"
+  if (pathname === "/chat/agents" || pathname.startsWith("/chat/agents/")) return zh ? "助理" : "Agents"
   if (pathname === "/chat/skills" || pathname.startsWith("/chat/skills/")) return zh ? "技能" : "Skills"
   if (pathname === "/chat/devices" || pathname.startsWith("/chat/devices/")) return zh ? "设备" : "Devices"
   if (pathname === "/chat/sandboxes") return zh ? "云端沙箱" : "Cloud Sandboxes"

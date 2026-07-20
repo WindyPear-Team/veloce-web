@@ -272,7 +272,7 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/chat/memories") {
     return language === "zh" ? "记忆" : "Memory"
   }
-  if (normalizedPathname === "/chat/agents") {
+  if (normalizedPathname === "/chat/agents" || normalizedPathname.startsWith("/chat/agents/")) {
     return t("nav.agents")
   }
   if (normalizedPathname === "/chat/devices") {

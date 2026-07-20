@@ -29,6 +29,7 @@ interface ChatAgent {
   skill_ids: string[]
   mcp_server_ids: string[]
 	knowledge_base_ids: string[]
+  preset_messages: Array<{ role: "system" | "user" | "assistant"; content: string }>
   created_at: string
   updated_at: string
 }
@@ -182,12 +183,6 @@ export default function Agents() {
     setSkillIDs(Array.isArray(agent.skill_ids) ? agent.skill_ids : [])
     setMCPServerIDs(Array.isArray(agent.mcp_server_ids) ? agent.mcp_server_ids : [])
 		setKnowledgeBaseIDs(Array.isArray(agent.knowledge_base_ids) ? agent.knowledge_base_ids : [])
-  }
-
-  const openEditDialog = (agent: ChatAgent) => {
-    setEditForm(agent)
-    setAgentFormTab("basic")
-    setIsEditOpen(true)
   }
 
   const clearEdit = () => {
@@ -367,7 +362,7 @@ export default function Agents() {
                   agent.id === activeAgent?.id && "border-primary bg-primary/5 hover:bg-primary/5"
                 )}
               >
-                <button type="button" className="min-w-0 w-full text-left" onClick={() => openEditDialog(agent)}>
+                <Link to={`/chat/agents/${encodeURIComponent(agent.id)}`} className="min-w-0 w-full text-left">
                   <div className="flex min-w-0 items-center gap-2">
                     <Bot className="h-4 w-4 shrink-0 text-muted-foreground" />
                     <span className="truncate text-sm font-medium">{agent.name}</span>
@@ -395,7 +390,7 @@ export default function Agents() {
 						))}
                     </div>
                   )}
-                </button>
+                </Link>
                 <div className="flex items-center gap-1">
                   <Button asChild variant="ghost" size="sm" title={t("chat.chatWithAgent")}>
                     <Link to={`/chat?agent_id=${encodeURIComponent(agent.id)}`}>
@@ -836,9 +831,27 @@ function normalizeAgent(value: unknown): ChatAgent | null {
     skill_ids: stringArray(value.skill_ids),
     mcp_server_ids: stringArray(value.mcp_server_ids),
 		knowledge_base_ids: stringArray(value.knowledge_base_ids),
+    preset_messages: normalizePresetMessages(value.preset_messages),
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
+}
+
+function normalizePresetMessages(value: unknown): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+  if (!Array.isArray(value)) {
+    return []
+  }
+  return value.flatMap((item) => {
+    if (!isRecord(item)) {
+      return []
+    }
+    const role = stringFromUnknown(item.role)
+    const content = stringFromUnknown(item.content)
+    if ((role !== "system" && role !== "user" && role !== "assistant") || !content) {
+      return []
+    }
+    return [{ role, content }]
+  })
 }
 
 function normalizeKnowledgeBases(value: unknown): KnowledgeBase[] { const source = isRecord(value) && Array.isArray(value.knowledge_bases) ? value.knowledge_bases : []; return source.map((item) => { if (!isRecord(item) || typeof item.id !== "string") return null; return { id: item.id, name: typeof item.name === "string" ? item.name : item.id, description: typeof item.description === "string" ? item.description : "", vectorized: item.vectorized === true } }).filter((item): item is KnowledgeBase => Boolean(item)) }
