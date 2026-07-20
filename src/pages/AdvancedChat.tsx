@@ -21,6 +21,7 @@ import AgentGroupsPage from "./AgentGroupsPage"
 import AgentTasks from "./AgentTasks"
 import EnterpriseTasks from "./EnterpriseTasks"
 import PersonalCompany from "./PersonalCompany"
+import Community from "./Community"
 import SystemManagement from "./SystemManagement"
 import AdminOverview from "./AdminOverview"
 import AdminAuditLogs from "./AdminAuditLogs"
@@ -59,6 +60,7 @@ interface AdvancedChatSidebarItem {
 
 const advancedChatSidebarIconTones: Record<string, string> = {
   "/chat": "bg-blue-500/15 text-blue-600 dark:bg-blue-400/15 dark:text-blue-300",
+  "/chat/community": "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300",
   "/chat/tasks": "bg-orange-500/15 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300",
   "/chat/files": "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300",
   "/chat/knowledge": "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300",
@@ -217,6 +219,8 @@ export default function AdvancedChat() {
                 ) : (
                   <Routes>
                     <Route path="agents" element={<Agents />} />
+                    <Route path="community" element={<Community />} />
+                    <Route path="community/:id" element={<Community />} />
                     <Route path="skills" element={<Skills />} />
                     <Route path="skills/:id" element={<Skills />} />
                     <Route path="mcp" element={<AdvancedChatMCP />} />
@@ -270,6 +274,7 @@ export default function AdvancedChat() {
 function desktopPageTitle(pathname: string, language: string) {
   const zh = language === "zh"
   if (pathname === "/chat" || pathname.startsWith("/chat/session/")) return zh ? "聊天" : "Chat"
+  if (pathname === "/chat/community" || pathname.startsWith("/chat/community/")) return zh ? "社区" : "Community"
   if (pathname === "/chat/images") return zh ? "图像" : "Images"
   if (pathname === "/chat/videos") return zh ? "视频" : "Videos"
   if (pathname === "/chat/files") return zh ? "文件库" : "Files"
@@ -328,6 +333,7 @@ function AdvancedChatSidebar({
     active: location.pathname === "/chat" || location.pathname.startsWith("/chat/session/"),
   }
   const directItems: AdvancedChatSidebarItem[] = [
+    { href: "/chat/community", label: language === "zh" ? "社区" : language === "ja" ? "コミュニティ" : "Community", icon: Users, active: location.pathname === "/chat/community" || location.pathname.startsWith("/chat/community/") },
     ...(enterpriseMode ? [{ href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" }] : []),
     { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
     { href: "/chat/knowledge", label: knowledgeLabel, icon: Database, active: location.pathname === "/chat/knowledge" },
