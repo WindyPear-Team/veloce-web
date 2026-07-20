@@ -222,6 +222,7 @@ export default function AdvancedChat() {
                     <Route path="agents" element={<Agents />} />
                     <Route path="agents/:id" element={<AgentEditor />} />
                     <Route path="community" element={<Community />} />
+                    <Route path="community/knowledge-bases/:knowledgeBaseID" element={<Community />} />
                     <Route path="community/:id" element={<Community />} />
                     <Route path="skills" element={<Skills />} />
                     <Route path="skills/:id" element={<Skills />} />

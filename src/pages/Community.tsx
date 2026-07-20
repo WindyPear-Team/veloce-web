@@ -1,12 +1,13 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { ArrowLeft, Download, Search, Sparkles, UserRound } from "lucide-react"
+import { ArrowLeft, BookOpen, Download, FileText, Search, Sparkles, UserRound } from "lucide-react"
 import { useState } from "react"
-import { Link, useNavigate, useParams } from "react-router-dom"
+import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import api from "@/lib/api"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useToast } from "@/components/ui/toast"
 
 interface CommunityCharacter {
@@ -17,19 +18,51 @@ interface CommunityCharacter {
   author: string
   author_level?: number
   prompt?: string
+  preset_messages?: Array<{ role: "system" | "user" | "assistant"; content: string }>
   featured: boolean
   created_at: string
 }
 
-interface CommunityCharactersResponse {
-  items?: unknown
+interface CommunityKnowledgeBase {
+  id: string
+  name: string
+  description: string
+  owner: string
+  file_count: number
+  chunk_count: number
+  created_at: string
+  updated_at: string
 }
 
+interface CommunityCharactersResponse { items?: unknown }
+interface CommunityKnowledgeBasesResponse { items?: unknown }
+
 const communityCharactersQueryKey = (query: string) => ["community-characters", query] as const
+const communityKnowledgeBasesQueryKey = ["community-knowledge-bases"] as const
 
 export default function Community() {
-  const { id } = useParams()
-  return id ? <CommunityCharacterDetail id={id} /> : <CommunityCharacterList />
+  const { id, knowledgeBaseID } = useParams()
+  if (knowledgeBaseID) return <CommunityKnowledgeBaseDetail id={knowledgeBaseID} />
+  return id ? <CommunityCharacterDetail id={id} /> : <CommunityBrowse />
+}
+
+function CommunityBrowse() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeTab = searchParams.get("tab") === "knowledge" ? "knowledge" : "characters"
+
+  const changeTab = (tab: string) => {
+    setSearchParams(tab === "knowledge" ? { tab: "knowledge" } : {})
+  }
+
+  return (
+    <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
+        <div className="space-y-1"><h1 className="text-2xl font-semibold">社区</h1><p className="text-sm text-muted-foreground">探索可导入的 AI 角色和知识库。</p></div>
+        <TabsList><TabsTrigger value="characters">角色</TabsTrigger><TabsTrigger value="knowledge">知识库</TabsTrigger></TabsList>
+      </div>
+      {activeTab === "characters" ? <CommunityCharacterList /> : <CommunityKnowledgeBaseList />}
+    </Tabs>
+  )
 }
 
 function CommunityCharacterList() {
@@ -42,11 +75,7 @@ function CommunityCharacterList() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1"><h1 className="text-2xl font-semibold">社区</h1><p className="text-sm text-muted-foreground">探索最新发布的 AI 角色。</p></div>
-        <div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索角色" className="h-9 pl-9" /></div>
-      </div>
-
+      <div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索角色" className="h-9 pl-9" /></div>
       {charactersQuery.isError ? <CommunityState title="社区暂时不可用" description="无法获取角色列表，请稍后重试。" /> : charactersQuery.isLoading ? <CommunityState title="正在加载角色" description="" /> : characters.length === 0 ? <CommunityState title={query ? "没有匹配的角色" : "暂时还没有公开角色"} description={query ? "换一个关键词试试。" : "稍后再来看看。"} /> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{characters.map((character) => <CommunityCharacterCard key={character.id} character={character} />)}</div>}
     </div>
   )
@@ -58,6 +87,33 @@ function CommunityCharacterCard({ character }: { character: CommunityCharacter }
       <Card className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-muted/30">
         <CardHeader className="gap-4"><CharacterCover character={character} /><div className="min-w-0 space-y-2"><div className="flex items-center gap-2"><CardTitle className="truncate text-base">{character.name}</CardTitle>{character.featured && <Badge variant="secondary" className="gap-1"><Sparkles size={12} />精选</Badge>}</div><CardDescription className="line-clamp-2 min-h-10">{character.summary || "这位创作者还没有留下简介。"}</CardDescription></div></CardHeader>
         <CardFooter className="justify-between text-xs text-muted-foreground"><span className="truncate">{character.author || "匿名创作者"}</span><span>{formatDate(character.created_at)}</span></CardFooter>
+      </Card>
+    </Link>
+  )
+}
+
+function CommunityKnowledgeBaseList() {
+  const [query, setQuery] = useState("")
+  const knowledgeBasesQuery = useQuery<CommunityKnowledgeBase[]>({
+    queryKey: communityKnowledgeBasesQueryKey,
+    queryFn: async () => normalizeKnowledgeBaseList((await api.get("/community/knowledge-bases")).data),
+  })
+  const knowledgeBases = (knowledgeBasesQuery.data || []).filter((base) => !query.trim() || `${base.name} ${base.description} ${base.owner}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
+
+  return (
+    <div className="space-y-6">
+      <div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索知识库" className="h-9 pl-9" /></div>
+      {knowledgeBasesQuery.isError ? <CommunityState title="社区暂时不可用" description="无法获取知识库列表，请稍后重试。" /> : knowledgeBasesQuery.isLoading ? <CommunityState title="正在加载知识库" description="" /> : knowledgeBases.length === 0 ? <CommunityState title={query ? "没有匹配的知识库" : "暂时还没有公开知识库"} description={query ? "换一个关键词试试。" : "稍后再来看看。"} /> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{knowledgeBases.map((knowledgeBase) => <CommunityKnowledgeBaseCard key={knowledgeBase.id} knowledgeBase={knowledgeBase} />)}</div>}
+    </div>
+  )
+}
+
+function CommunityKnowledgeBaseCard({ knowledgeBase }: { knowledgeBase: CommunityKnowledgeBase }) {
+  return (
+    <Link to={`/chat/community/knowledge-bases/${encodeURIComponent(knowledgeBase.id)}`} className="group block">
+      <Card className="h-full transition-colors group-hover:border-primary/50 group-hover:bg-muted/30">
+        <CardHeader className="gap-3"><div className="flex items-center gap-2"><BookOpen className="size-5 text-primary" /><CardTitle className="truncate text-base">{knowledgeBase.name}</CardTitle></div><CardDescription className="line-clamp-3 min-h-14">{knowledgeBase.description || "这份知识库还没有留下简介。"}</CardDescription></CardHeader>
+        <CardFooter className="justify-between gap-3 text-xs text-muted-foreground"><span className="truncate">{knowledgeBase.owner || "匿名创作者"}</span><span>{knowledgeBase.file_count} 个文件</span></CardFooter>
       </Card>
     </Link>
   )
@@ -82,88 +138,58 @@ function CommunityCharacterDetail({ id }: { id: string }) {
     if (!character?.prompt || isImporting) return
     setIsImporting(true)
     try {
-      const response = await api.post("/user/advanced-chat/agents", {
-        name: character.name,
-        prompt: character.prompt,
-        default_model: "",
-        user_channel_id: 0,
-        stream: false,
-        skill_ids: [],
-        mcp_server_ids: [],
-        knowledge_base_ids: [],
-      })
+      const response = await api.post("/user/advanced-chat/agents", { name: character.name, prompt: character.prompt, default_model: "", user_channel_id: 0, stream: false, skill_ids: [], mcp_server_ids: [], knowledge_base_ids: [], preset_messages: character.preset_messages || [] })
       const agentID = stringValue(response.data?.id)
       if (!agentID) throw new Error("代理创建结果无效")
       queryClient.removeQueries({ queryKey: ["advanced-chat-agents"] })
       success("角色已导入代理")
       navigate(`/chat?agent_id=${encodeURIComponent(agentID)}`)
-    } catch (err) {
-      error(apiErrorMessage(err, "导入角色失败"))
-    } finally {
-      setIsImporting(false)
-    }
+    } catch (err) { error(apiErrorMessage(err, "导入角色失败")) } finally { setIsImporting(false) }
   }
 
   if (characterQuery.isLoading) return <CommunityState title="正在加载角色" description="" />
-  if (characterQuery.isError || !character) return <div className="space-y-4"><Button variant="ghost" className="gap-2" onClick={() => navigate("/chat/community")}><ArrowLeft size={16} />返回社区</Button><CommunityState title="无法打开角色" description="该角色可能已下架，或社区暂时不可用。" /></div>
-
-  return (
-    <div className="mx-auto max-w-3xl space-y-6">
-      <Button variant="ghost" className="gap-2" onClick={() => navigate("/chat/community")}><ArrowLeft size={16} />返回社区</Button>
-      <Card>
-        <CardHeader className="gap-5 sm:flex-row sm:items-start"><CharacterCover character={character} large /><div className="min-w-0 flex-1 space-y-3"><div className="flex flex-wrap items-center gap-2"><CardTitle className="text-2xl">{character.name}</CardTitle>{character.featured && <Badge className="gap-1"><Sparkles size={12} />精选</Badge>}</div><CardDescription className="whitespace-pre-wrap leading-6">{character.summary || "这位创作者还没有留下简介。"}</CardDescription><div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={14} />{character.author || "匿名创作者"}</span>{character.author_level ? <Badge variant="outline">Lv.{character.author_level}</Badge> : null}<span>{formatDate(character.created_at)}</span></div></div></CardHeader>
-        <CardContent className="space-y-3"><h2 className="text-sm font-medium">角色提示词</h2><pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-4 font-sans text-sm leading-6 text-foreground">{character.prompt || "提示词暂不可用。"}</pre></CardContent>
-        <CardFooter><Button className="gap-2" disabled={!character.prompt || isImporting} onClick={importCharacter}><Download size={16} />{isImporting ? "正在导入" : "导入角色"}</Button></CardFooter>
-      </Card>
-    </div>
-  )
+  if (characterQuery.isError || !character) return <div className="space-y-4"><BackToCommunity /><CommunityState title="无法打开角色" description="该角色可能已下架，或社区暂时不可用。" /></div>
+  return <div className="mx-auto max-w-3xl space-y-6"><BackToCommunity /><Card><CardHeader className="gap-5 sm:flex-row sm:items-start"><CharacterCover character={character} large /><div className="min-w-0 flex-1 space-y-3"><div className="flex flex-wrap items-center gap-2"><CardTitle className="text-2xl">{character.name}</CardTitle>{character.featured && <Badge className="gap-1"><Sparkles size={12} />精选</Badge>}</div><CardDescription className="whitespace-pre-wrap leading-6">{character.summary || "这位创作者还没有留下简介。"}</CardDescription><div className="flex flex-wrap items-center gap-2 text-sm text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={14} />{character.author || "匿名创作者"}</span>{character.author_level ? <Badge variant="outline">Lv.{character.author_level}</Badge> : null}<span>{formatDate(character.created_at)}</span></div></div></CardHeader><CardContent className="space-y-3"><h2 className="text-sm font-medium">角色提示词</h2><pre className="max-h-80 overflow-auto whitespace-pre-wrap rounded-md border bg-muted/40 p-4 font-sans text-sm leading-6 text-foreground">{character.prompt || "提示词暂不可用。"}</pre></CardContent><CardFooter><Button className="gap-2" disabled={!character.prompt || isImporting} onClick={importCharacter}><Download size={16} />{isImporting ? "正在导入" : "导入角色"}</Button></CardFooter></Card></div>
 }
 
-function CharacterCover({ character, large = false }: { character: CommunityCharacter; large?: boolean }) {
-  const sizeClass = large ? "size-32 text-4xl" : "aspect-[16/9] w-full text-3xl"
-  if (character.image_url) return <img src={character.image_url} alt={`${character.name} 封面`} className={`${sizeClass} shrink-0 rounded-md border object-cover`} />
-  return <div className={`${sizeClass} flex shrink-0 items-center justify-center rounded-md border bg-muted font-semibold text-muted-foreground`}>{character.name.slice(0, 1).toUpperCase() || "角"}</div>
-}
-
-function CommunityState({ title, description }: { title: string; description: string }) {
-  return <div className="flex min-h-48 flex-col items-center justify-center rounded-md border border-dashed px-4 text-center"><p className="font-medium">{title}</p>{description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}</div>
-}
-
-function normalizeCharacterList(value: unknown): CommunityCharacter[] {
-  const response = isRecord(value) ? value as CommunityCharactersResponse : {}
-  return Array.isArray(response.items) ? response.items.map(normalizeCharacter).filter((item): item is CommunityCharacter => Boolean(item)) : []
-}
-
-function normalizeCharacter(value: unknown): CommunityCharacter | null {
-  if (!isRecord(value)) return null
-  const id = stringValue(value.id)
-  const name = stringValue(value.name)
-  if (!id || !name) return null
-  return { id, name, summary: stringValue(value.summary), image_url: stringValue(value.image_url), author: stringValue(value.author), author_level: numberValue(value.author_level), prompt: stringValue(value.prompt) || undefined, featured: value.featured === true, created_at: stringValue(value.created_at) }
-}
-
-function formatDate(value: string) {
-  const date = new Date(value)
-  return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN")
-}
-
-function stringValue(value: unknown) {
-  return typeof value === "string" ? value : typeof value === "number" ? String(value) : ""
-}
-
-function numberValue(value: unknown) {
-  const number = Number(value)
-  return Number.isFinite(number) && number > 0 ? number : undefined
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null
-}
-
-function apiErrorMessage(err: unknown, fallback: string) {
-  if (isRecord(err) && isRecord(err.response) && isRecord(err.response.data)) {
-    const message = stringValue(err.response.data.error) || stringValue(err.response.data.message)
-    if (message) return message
+function CommunityKnowledgeBaseDetail({ id }: { id: string }) {
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const { error, success } = useToast()
+  const [isImporting, setIsImporting] = useState(false)
+  const knowledgeBaseQuery = useQuery<CommunityKnowledgeBase>({ queryKey: ["community-knowledge-base", id], queryFn: async () => {
+    const knowledgeBase = normalizeKnowledgeBase((await api.get(`/community/knowledge-bases/${encodeURIComponent(id)}`)).data)
+    if (!knowledgeBase) throw new Error("知识库数据无效")
+    return knowledgeBase
+  } })
+  const knowledgeBase = knowledgeBaseQuery.data
+  const importKnowledgeBase = async () => {
+    if (!knowledgeBase || isImporting) return
+    setIsImporting(true)
+    try {
+      await api.post(`/user/advanced-chat/community/knowledge-bases/${encodeURIComponent(knowledgeBase.id)}/import`)
+      await queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] })
+      success("知识库已导入，请配置模型后向量化")
+      navigate("/chat/knowledge")
+    } catch (err) { error(apiErrorMessage(err, "导入知识库失败")) } finally { setIsImporting(false) }
   }
-  return err instanceof Error && err.message ? err.message : fallback
+
+  if (knowledgeBaseQuery.isLoading) return <CommunityState title="正在加载知识库" description="" />
+  if (knowledgeBaseQuery.isError || !knowledgeBase) return <div className="space-y-4"><BackToCommunity tab="knowledge" /><CommunityState title="无法打开知识库" description="该知识库可能已下架，或社区暂时不可用。" /></div>
+  return <div className="mx-auto max-w-3xl space-y-6"><BackToCommunity tab="knowledge" /><Card><CardHeader className="gap-4"><div className="flex items-start gap-3"><BookOpen className="mt-1 size-6 shrink-0 text-primary" /><div className="min-w-0 space-y-2"><CardTitle className="text-2xl">{knowledgeBase.name}</CardTitle><CardDescription className="whitespace-pre-wrap leading-6">{knowledgeBase.description || "这份知识库还没有留下简介。"}</CardDescription></div></div><div className="flex flex-wrap gap-3 text-sm text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={14} />{knowledgeBase.owner || "匿名创作者"}</span><span className="inline-flex items-center gap-1"><FileText size={14} />{knowledgeBase.file_count} 个文件</span><span>{knowledgeBase.chunk_count} 个切片</span><span>{formatDate(knowledgeBase.updated_at || knowledgeBase.created_at)}</span></div></CardHeader><CardContent className="text-sm text-muted-foreground">导入后将生成一份仅属于你的知识库，并保留原始文本文件。选择嵌入模型并向量化后即可在代理中使用。</CardContent><CardFooter><Button className="gap-2" disabled={isImporting} onClick={importKnowledgeBase}><Download size={16} />{isImporting ? "正在导入" : "导入知识库"}</Button></CardFooter></Card></div>
 }
+
+function BackToCommunity({ tab }: { tab?: "knowledge" }) { const navigate = useNavigate(); return <Button variant="ghost" className="gap-2" onClick={() => navigate(tab === "knowledge" ? "/chat/community?tab=knowledge" : "/chat/community")}><ArrowLeft size={16} />返回社区</Button> }
+function CharacterCover({ character, large = false }: { character: CommunityCharacter; large?: boolean }) { const sizeClass = large ? "size-32 text-4xl" : "aspect-[16/9] w-full text-3xl"; if (character.image_url) return <img src={character.image_url} alt={`${character.name} 封面`} className={`${sizeClass} shrink-0 rounded-md border object-cover`} />; return <div className={`${sizeClass} flex shrink-0 items-center justify-center rounded-md border bg-muted font-semibold text-muted-foreground`}>{character.name.slice(0, 1).toUpperCase() || "角"}</div> }
+function CommunityState({ title, description }: { title: string; description: string }) { return <div className="flex min-h-48 flex-col items-center justify-center rounded-md border border-dashed px-4 text-center"><p className="font-medium">{title}</p>{description && <p className="mt-1 text-sm text-muted-foreground">{description}</p>}</div> }
+function normalizeCharacterList(value: unknown): CommunityCharacter[] { const response = isRecord(value) ? value as CommunityCharactersResponse : {}; return Array.isArray(response.items) ? response.items.map(normalizeCharacter).filter((item): item is CommunityCharacter => Boolean(item)) : [] }
+function normalizeCharacter(value: unknown): CommunityCharacter | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, summary: stringValue(value.summary), image_url: stringValue(value.image_url), author: stringValue(value.author), author_level: numberValue(value.author_level), prompt: stringValue(value.prompt) || undefined, preset_messages: normalizePresetMessages(value.preset_messages), featured: value.featured === true, created_at: stringValue(value.created_at) } }
+function normalizeKnowledgeBaseList(value: unknown): CommunityKnowledgeBase[] { const response = isRecord(value) ? value as CommunityKnowledgeBasesResponse : {}; return Array.isArray(response.items) ? response.items.map(normalizeKnowledgeBase).filter((item): item is CommunityKnowledgeBase => Boolean(item)) : [] }
+function normalizeKnowledgeBase(value: unknown): CommunityKnowledgeBase | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, description: stringValue(value.description), owner: stringValue(value.owner), file_count: nonNegativeNumber(value.file_count), chunk_count: nonNegativeNumber(value.chunk_count), created_at: stringValue(value.created_at), updated_at: stringValue(value.updated_at) } }
+function normalizePresetMessages(value: unknown): Array<{ role: "system" | "user" | "assistant"; content: string }> { if (!Array.isArray(value)) return []; return value.flatMap((item) => { if (!isRecord(item)) return []; const role = stringValue(item.role); const content = stringValue(item.content); if (!content || (role !== "system" && role !== "user" && role !== "assistant")) return []; return [{ role, content }] }) }
+function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN") }
+function stringValue(value: unknown) { return typeof value === "string" ? value : typeof value === "number" ? String(value) : "" }
+function numberValue(value: unknown) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : undefined }
+function nonNegativeNumber(value: unknown) { const number = Number(value); return Number.isFinite(number) && number >= 0 ? number : 0 }
+function isRecord(value: unknown): value is Record<string, unknown> { return typeof value === "object" && value !== null }
+function apiErrorMessage(err: unknown, fallback: string) { if (isRecord(err) && isRecord(err.response) && isRecord(err.response.data)) { const message = stringValue(err.response.data.error) || stringValue(err.response.data.message); if (message) return message }; return err instanceof Error && err.message ? err.message : fallback }
