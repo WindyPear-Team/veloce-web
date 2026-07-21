@@ -21,6 +21,7 @@ import { withPublicSettingsDefaults } from "@/lib/public-settings"
 interface PriceTier {
   min_tokens: number
   price: string | number
+  condition?: string
 }
 
 interface PublicModel {
@@ -34,9 +35,11 @@ interface PublicModel {
   input_price: string | number
   output_price: string | number
   cached_input_price: string | number
+  cache_write_input_price: string | number
   input_price_tiers: PriceTier[]
   output_price_tiers: PriceTier[]
   cached_input_price_tiers: PriceTier[]
+  cache_write_input_price_tiers: PriceTier[]
   user_channels: PublicModelUserChannel[]
   referenced_models?: PublicModel[]
 }
@@ -49,12 +52,15 @@ interface PublicModelUserChannel {
   input_price: string | number
   output_price: string | number
   cached_input_price: string | number
+  cache_write_input_price: string | number
   effective_input_price: string | number
   effective_output_price: string | number
   effective_cached_input_price: string | number
+  effective_cache_write_input_price: string | number
   effective_input_price_tiers: PriceTier[]
   effective_output_price_tiers: PriceTier[]
   effective_cached_input_price_tiers: PriceTier[]
+  effective_cache_write_input_price_tiers: PriceTier[]
 }
 
 interface ModelView extends PublicModel {
@@ -190,10 +196,11 @@ export default function ModelCatalog() {
                         {showsMetaModelDetails(item) && <MetaModelBadge copy={copy} mode={item.meta_billing_mode} />}
                       </div>
                     </div>
-                    <div className="grid grid-cols-3 gap-2 text-sm sm:min-w-80">
+                    <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-[26rem] sm:grid-cols-4">
                       <PriceBox label={copy.inputPrice} value={item.input_price} tiers={item.input_price_tiers} />
                       <PriceBox label={copy.outputPrice} value={item.output_price} tiers={item.output_price_tiers} />
                       <PriceBox label={copy.cachedInputPrice} value={item.cached_input_price} tiers={item.cached_input_price_tiers} />
+                      <PriceBox label={copy.cacheWriteInputPrice} value={item.cache_write_input_price} tiers={item.cache_write_input_price_tiers} />
                     </div>
                   </div>
                 </CardHeader>
@@ -243,10 +250,11 @@ function ModelDetailDialog({
 
               <section className="space-y-3">
                 <div className="text-sm font-medium">{detailCopy(copy).basePricing}</div>
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div className="grid gap-2 sm:grid-cols-4">
                   <PriceBox label={copy.inputPrice} value={model.input_price} tiers={model.input_price_tiers} showTiers />
                   <PriceBox label={copy.outputPrice} value={model.output_price} tiers={model.output_price_tiers} showTiers />
                   <PriceBox label={copy.cachedInputPrice} value={model.cached_input_price} tiers={model.cached_input_price_tiers} showTiers />
+                  <PriceBox label={copy.cacheWriteInputPrice} value={model.cache_write_input_price} tiers={model.cache_write_input_price_tiers} showTiers />
                 </div>
               </section>
 
@@ -269,16 +277,17 @@ function ModelDetailDialog({
               <section className="space-y-3">
                 <div className="text-sm font-medium">{detailCopy(copy).channelPricing}</div>
                 <div className="overflow-x-auto">
-                  <div className="min-w-[840px] rounded-md border">
-                    <div className="grid grid-cols-[1fr_110px_150px_150px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
+                  <div className="min-w-[990px] rounded-md border">
+                    <div className="grid grid-cols-[1fr_110px_150px_150px_150px_150px] border-b bg-muted/50 px-3 py-2 text-xs font-medium text-muted-foreground">
                       <div>{copy.userChannel}</div>
                       <div>{copy.multiplier}</div>
                       <div>{copy.effectiveInput}</div>
                       <div>{copy.effectiveOutput}</div>
                       <div>{copy.effectiveCachedInput}</div>
+                      <div>{copy.effectiveCacheWriteInput}</div>
                     </div>
                     {model.visible_user_channels.map((channel) => (
-                      <div key={channel.id} className="grid grid-cols-[1fr_110px_150px_150px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
+                      <div key={channel.id} className="grid grid-cols-[1fr_110px_150px_150px_150px_150px] items-center border-b px-3 py-3 text-sm last:border-b-0">
                         <div className="min-w-0">
                           <div className="truncate font-medium">{channel.name}</div>
                           {channel.description && (
@@ -289,6 +298,7 @@ function ModelDetailDialog({
                         <PriceText value={channel.effective_input_price} tiers={channel.effective_input_price_tiers} />
                         <PriceText value={channel.effective_output_price} tiers={channel.effective_output_price_tiers} />
                         <PriceText value={channel.effective_cached_input_price} tiers={channel.effective_cached_input_price_tiers} />
+                        <PriceText value={channel.effective_cache_write_input_price} tiers={channel.effective_cache_write_input_price_tiers} />
                       </div>
                     ))}
                   </div>
@@ -345,10 +355,11 @@ function ReferencedModelPricing({ model, copy }: { model: PublicModel; copy: typ
           <div className="break-all font-mono text-sm font-medium">{model.model_name}</div>
           <Provider providerName={model.provider_name} iconURL={model.provider_icon_url} />
         </div>
-        <div className="grid grid-cols-3 gap-2 text-sm sm:min-w-80">
+        <div className="grid grid-cols-2 gap-2 text-sm sm:min-w-[26rem] sm:grid-cols-4">
           <PriceBox label={copy.inputPrice} value={model.input_price} tiers={model.input_price_tiers} showTiers />
           <PriceBox label={copy.outputPrice} value={model.output_price} tiers={model.output_price_tiers} showTiers />
           <PriceBox label={copy.cachedInputPrice} value={model.cached_input_price} tiers={model.cached_input_price_tiers} showTiers />
+          <PriceBox label={copy.cacheWriteInputPrice} value={model.cache_write_input_price} tiers={model.cache_write_input_price_tiers} showTiers />
         </div>
       </div>
     </div>
@@ -385,13 +396,14 @@ function PriceText({ value, tiers }: { value: string | number; tiers?: PriceTier
 }
 
 function TierSummary({ tiers }: { tiers?: PriceTier[] }) {
+  const { language } = useI18n()
   const normalized = normalizePriceTiers(tiers || [])
   if (normalized.length === 0) {
     return null
   }
   return (
     <div className="mt-1 text-xs text-muted-foreground">
-      {normalized.map((tier) => `${formatTokenCount(tier.min_tokens)}: ${formatPrice(tier.price)}`).join(" / ")}
+      {normalized.map((tier) => `${tierConditionLabel(tier.condition, language)} ${formatTokenCount(tier.min_tokens)}: ${formatPrice(tier.price)}`).join(" / ")}
     </div>
   )
 }
@@ -538,16 +550,53 @@ function trimNumber(value: number) {
 }
 
 function normalizePriceTiers(tiers: PriceTier[]) {
-  const byMinTokens = new Map<number, PriceTier>()
+  const byMinTokens = new Map<string, PriceTier>()
   for (const tier of tiers || []) {
     const minTokens = Math.max(0, Math.floor(Number(tier.min_tokens || 0)))
     const price = Number(tier.price || 0)
     if (!Number.isFinite(minTokens) || !Number.isFinite(price) || price < 0) {
       continue
     }
-    byMinTokens.set(minTokens, { min_tokens: minTokens, price })
+    const condition = normalizeTierCondition(tier.condition || "")
+    byMinTokens.set(`${condition}:${minTokens}`, { min_tokens: minTokens, price, condition })
   }
-  return Array.from(byMinTokens.values()).sort((a, b) => a.min_tokens - b.min_tokens)
+  return Array.from(byMinTokens.values()).sort((a, b) => tierConditionSort(a.condition) - tierConditionSort(b.condition) || a.min_tokens - b.min_tokens)
+}
+
+function normalizeTierCondition(condition: string) {
+  switch ((condition || "").trim()) {
+    case "full_input_tokens":
+    case "full_request_tokens":
+    case "billable_input_tokens":
+    case "billable_output_tokens":
+      return condition
+    default:
+      return ""
+  }
+}
+
+function tierConditionSort(condition?: string) {
+  switch (normalizeTierCondition(condition || "")) {
+    case "full_input_tokens":
+      return 1
+    case "full_request_tokens":
+      return 2
+    case "billable_input_tokens":
+      return 3
+    case "billable_output_tokens":
+      return 4
+    default:
+      return 0
+  }
+}
+
+function tierConditionLabel(condition: string | undefined, language: string) {
+  const normalized = normalizeTierCondition(condition || "")
+  if (normalized === "full_input_tokens") return language === "zh" ? "输入" : "Input"
+  if (normalized === "full_request_tokens") return language === "zh" ? "总量" : "Total"
+  if (normalized === "billable_input_tokens") return language === "zh" ? "计价输入" : "Billable input"
+  if (normalized === "billable_output_tokens") return language === "zh" ? "计价输出" : "Billable output"
+  return ""
 }
 
 function formatMultiplier(value: string | number) {
@@ -573,12 +622,14 @@ const zhCopy = {
   sortOutputDesc: "输出价格从高到低",
   inputPrice: "输入价格",
   outputPrice: "输出价格",
-  cachedInputPrice: "缓存输入价格",
+  cachedInputPrice: "缓存命中价格",
+  cacheWriteInputPrice: "缓存写入价格",
   userChannel: "用户渠道",
   multiplier: "倍率",
   effectiveInput: "计费输入价",
   effectiveOutput: "计费输出价",
   effectiveCachedInput: "缓存命中价",
+  effectiveCacheWriteInput: "缓存写入价",
   metaModel: "元模型",
   billingActual: "实际调用计费",
   billingMeta: "独立计费",
@@ -605,12 +656,14 @@ const enCopy: typeof zhCopy = {
   sortOutputDesc: "Output price high to low",
   inputPrice: "Input price",
   outputPrice: "Output price",
-  cachedInputPrice: "Cached input",
+  cachedInputPrice: "Cache hit price",
+  cacheWriteInputPrice: "Cache write price",
   userChannel: "User channel",
   multiplier: "Multiplier",
   effectiveInput: "Effective input",
   effectiveOutput: "Effective output",
   effectiveCachedInput: "Cached input",
+  effectiveCacheWriteInput: "Cache write price",
   metaModel: "Meta model",
   billingActual: "Actual billing",
   billingMeta: "Meta billing",
