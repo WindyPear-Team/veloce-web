@@ -674,12 +674,13 @@ function PriceSyncPreviewDialog({
                     <TableHead>{t("admin.inputPrice")}</TableHead>
                     <TableHead>{t("admin.outputPrice")}</TableHead>
                     <TableHead>{copy.cachedInputPrice}</TableHead>
+                    <TableHead>{copy.cacheWriteInputPrice}</TableHead>
                     <TableHead>{copy.syncStatus}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {models.length === 0 ? (
-                    <EmptyRow colSpan={8} text={copy.noSyncModels} />
+                    <EmptyRow colSpan={9} text={copy.noSyncModels} />
                   ) : (
                     models.map((item) => (
                       <TableRow key={item.model_name}>
@@ -702,6 +703,9 @@ function PriceSyncPreviewDialog({
                         </TableCell>
                         <TableCell>
                           <PriceWithTiers value={item.cached_input_price} tiers={item.cached_input_price_tiers} />
+                        </TableCell>
+                        <TableCell>
+                          <PriceWithTiers value={item.cache_write_input_price ?? 0} tiers={item.cache_write_input_price_tiers} />
                         </TableCell>
                         <TableCell>{item.exists ? copy.exists : copy.newModel}</TableCell>
                       </TableRow>
@@ -1191,6 +1195,7 @@ function normalizeVideoBillingConfig(config?: VideoBillingConfig): VideoBillingC
 function normalizeTierCondition(condition: string) {
   switch ((condition || "").trim()) {
     case "full_input_tokens":
+    case "full_request_tokens":
     case "billable_input_tokens":
     case "billable_output_tokens":
       return condition
@@ -1203,10 +1208,12 @@ function tierConditionSort(condition?: string) {
   switch (normalizeTierCondition(condition || "")) {
     case "full_input_tokens":
       return 1
-    case "billable_input_tokens":
+    case "full_request_tokens":
       return 2
-    case "billable_output_tokens":
+    case "billable_input_tokens":
       return 3
+    case "billable_output_tokens":
+      return 4
     default:
       return 0
   }
@@ -1216,6 +1223,7 @@ function tierConditionOptions(copy: typeof zhCopy) {
   return [
     { value: "", label: copy.tierConditionCurrent },
     { value: "full_input_tokens", label: copy.tierConditionFullInput },
+    { value: "full_request_tokens", label: copy.tierConditionFullRequest },
     { value: "billable_input_tokens", label: copy.tierConditionBillableInput },
     { value: "billable_output_tokens", label: copy.tierConditionBillableOutput },
   ]
@@ -1385,6 +1393,7 @@ const zhCopy = {
   tierPricePlaceholder: "分段价格 / 1M",
   tierConditionCurrent: "当前计价项",
   tierConditionFullInput: "完整输入长度",
+  tierConditionFullRequest: "完整请求总 token",
   tierConditionBillableInput: "计价输入 token",
   tierConditionBillableOutput: "计价输出 token",
   deleteTier: "删除分段",
@@ -1464,6 +1473,7 @@ const enCopy: typeof zhCopy = {
   tierPricePlaceholder: "Tier price / 1M",
   tierConditionCurrent: "Current item",
   tierConditionFullInput: "Full input length",
+  tierConditionFullRequest: "Full request tokens",
   tierConditionBillableInput: "Billable input tokens",
   tierConditionBillableOutput: "Billable output tokens",
   deleteTier: "Delete tier",
