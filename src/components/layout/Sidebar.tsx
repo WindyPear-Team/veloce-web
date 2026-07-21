@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Building2, ChevronDown, ClipboardList, Database, History, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Shield, Users } from "lucide-react"
+import { BarChart3, Boxes, Building2, ChevronDown, ChevronRight, ClipboardList, Database, History, Home, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Shield, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -40,6 +40,17 @@ const systemSubItems: SystemSubItem[] = [
   { path: "/dashboard/admin/operations", labelKey: "nav.systemOperations", colorClass: "bg-amber-500" },
   { path: "/dashboard/admin/advanced-chat", labelKey: "nav.systemAdvancedChat", colorClass: "bg-violet-500" },
   { path: "/dashboard/admin/sandboxes", label: "云端沙箱", colorClass: "bg-sky-500" },
+]
+
+const desktopSystemSubItems: SystemSubItem[] = systemSubItems.map((item) => ({
+  ...item,
+  path: item.path === "/dashboard/admin/general" ? "/dashboard" : item.path.replace("/dashboard/admin/", "/dashboard/"),
+}))
+
+const desktopManagementItems: MenuItem[] = [
+  { icon: Shield, colorClass: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300", labelKey: "nav.system", path: "/dashboard", children: desktopSystemSubItems },
+  { icon: Database, colorClass: "bg-teal-500/15 text-teal-600 dark:bg-teal-400/15 dark:text-teal-300", labelKey: "nav.channels", path: "/dashboard/channels" },
+  { icon: Boxes, colorClass: "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-300", labelKey: "nav.models", path: "/dashboard/models" },
 ]
 
 const userMenuItems: MenuItem[] = [
@@ -193,6 +204,42 @@ function isSidebarItemActive(pathname: string, item: MenuItem) {
     return pathname === item.path || item.children.some((child) => pathname === child.path) || pathname.startsWith("/dashboard/admin/")
   }
   return pathname === item.path
+}
+
+export function SystemManagementSidebar({ className, onNavigate }: { className?: string; onNavigate?: () => void }) {
+  const location = useLocation()
+  const { t } = useI18n()
+
+  return (
+    <aside className={cn("flex h-full w-56 shrink-0 flex-col border-r bg-card", className)}>
+      <nav className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="mb-3 flex items-center gap-1 border-b pb-3 text-sm">
+          <Link
+            to="/chat"
+            onClick={onNavigate}
+            className="flex h-8 w-8 items-center justify-center rounded-2xl hover:bg-muted"
+            aria-label={t("nav.chat")}
+            title={t("nav.chat")}
+          >
+            <Home size={16} />
+          </Link>
+          <ChevronRight size={14} className="text-muted-foreground" />
+          <span className="min-w-0 truncate font-medium">{t("nav.system")}</span>
+        </div>
+        <div className="flex flex-col gap-1">
+          {desktopManagementItems.map((item) => (
+            <SidebarLink
+              key={item.path}
+              item={item}
+              active={isSidebarItemActive(location.pathname, item)}
+              currentPath={location.pathname}
+              onNavigate={onNavigate}
+            />
+          ))}
+        </div>
+      </nav>
+    </aside>
+  )
 }
 
 interface PluginFrontendItem {

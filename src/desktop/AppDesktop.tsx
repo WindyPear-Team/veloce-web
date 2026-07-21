@@ -7,6 +7,7 @@ import Login from "@/pages/Login"
 import Setup from "@/pages/Setup"
 import AdvancedChat from "@/pages/AdvancedChat"
 import SettingsWorkspace from "@/pages/SettingsWorkspace"
+import DesktopDashboard from "@/desktop/DesktopDashboard"
 import api, {
   apiURL,
   getAuthToken,
@@ -86,11 +87,13 @@ function DocumentTitle() {
   useEffect(() => {
     const pageTitle = location.pathname.startsWith("/chat")
       ? t("nav.chat")
-      : location.pathname.startsWith("/settings")
-        ? language === "zh" ? "设置" : "Settings"
-        : location.pathname === "/setup"
-          ? language === "zh" ? "初始化站点" : "Initial Setup"
-          : language === "zh" ? "登录" : "Sign in"
+      : location.pathname.startsWith("/dashboard")
+        ? language === "zh" ? "系统管理" : "System Management"
+        : location.pathname.startsWith("/settings")
+          ? language === "zh" ? "设置" : "Settings"
+          : location.pathname === "/setup"
+            ? language === "zh" ? "初始化站点" : "Initial Setup"
+            : language === "zh" ? "登录" : "Sign in"
     document.title = `${pageTitle} - Veloce Desktop`
   }, [language, location.pathname, t])
 
@@ -967,6 +970,7 @@ function DesktopPageRoutes({ className }: { className: string }) {
             <Route path="/login" element={<Login />} />
             <Route path="/setup" element={<Setup />} />
             <Route path="/chat/*" element={<ProtectedRoute><AdvancedChat /></ProtectedRoute>} />
+            <Route path="/dashboard/*" element={<ProtectedRoute><DesktopDashboard /></ProtectedRoute>} />
             <Route path="/settings/*" element={<ProtectedRoute><SettingsWorkspace /></ProtectedRoute>} />
             <Route path="*" element={<Navigate to={hasAuthToken() ? "/chat" : "/login"} replace />} />
           </Routes>
