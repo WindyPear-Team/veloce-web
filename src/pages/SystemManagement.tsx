@@ -448,6 +448,40 @@ const defaultSystemSettings: SystemSettings = {
   redis_tls_enabled: false,
 }
 
+const sensitiveSystemSettingsFields = [
+  "hcaptcha_secret",
+  "smtp_password",
+  "oidc_client_secret",
+  "sensitive_words",
+  "payment_yipay_key",
+  "payment_openpayment_key",
+  "payment_wechat_private_key",
+  "payment_wechat_platform_certificate",
+  "payment_wechat_api_v3_key",
+  "payment_alipay_private_key",
+  "payment_alipay_public_key",
+  "payment_paypal_client_secret",
+  "payment_stripe_secret_key",
+  "payment_stripe_webhook_secret",
+] as const satisfies readonly (keyof SystemSettings)[]
+
+function systemSettingsUpdatePayload(form: SystemSettings, checkInStreakRewards: string, topNavItems: string) {
+  const payload: Record<string, unknown> = {
+    ...form,
+    checkin_streak_rewards: checkInStreakRewards,
+    top_nav_items: topNavItems,
+  }
+  for (const key of sensitiveSystemSettingsFields) {
+    if (typeof payload[key] === "string" && !payload[key].trim()) {
+      delete payload[key]
+    }
+  }
+  if (!form.redis_password.trim() && !form.redis_password_clear) {
+    delete payload.redis_password
+  }
+  return payload
+}
+
 const defaultThemeColorValues = Object.fromEntries(
   Object.entries(defaultPublicSettings).filter(([key]) => /^theme_(light|dark)_/.test(key)),
 ) as Pick<SystemSettings, ThemeColorFieldKey>
@@ -615,11 +649,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
 
   const saveSettings = useMutation({
     mutationFn: async (checkInStreakRewards: string) => {
-      const res = await api.put("/settings", {
-        ...form,
-        checkin_streak_rewards: checkInStreakRewards,
-        top_nav_items: serializeTopNavRows(navRows),
-      })
+      const res = await api.put("/settings", systemSettingsUpdatePayload(form, checkInStreakRewards, serializeTopNavRows(navRows)))
       return res.data
     },
     onSuccess: (savedSettings: SystemSettings) => {
@@ -1100,7 +1130,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
         <SettingsPanel title={copy.paymentInterface}>
           <div className="space-y-4">
             <SectionTitle title={copy.paymentSettings} description={copy.paymentSettingsDescription} />
-            <PaymentChannelsEditor value={form.payment_channels} legacyChannel={legacyPaymentChannel(form)} onChange={(value) => updateField("payment_channels", value)} />
+            <PaymentChannelsEditor value={form.payment_channels} legacyChannel={legacyPaymentChannel(form)} copy={copy} onChange={(value) => updateField("payment_channels", value)} />
             <div className="grid gap-4 lg:grid-cols-2">
               <ToggleField label={copy.paymentEnabled} checked={form.payment_enabled} onChange={(checked) => updateField("payment_enabled", checked)} />
               <TextField label={copy.currencyDisplayName} value={form.payment_currency_display_name} placeholder="$" onChange={(value) => updateField("payment_currency_display_name", value)} />
@@ -1149,7 +1179,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               <ToggleField label={copy.ssrfProtectionEnabled} checked={form.ssrf_protection_enabled} onChange={(checked) => updateField("ssrf_protection_enabled", checked)} />
               <ToggleField label={copy.ssrfAllowPrivateNetworks} checked={form.ssrf_allow_private_networks} onChange={(checked) => updateField("ssrf_allow_private_networks", checked)} />
             </div>
-            <TextareaField label={copy.sensitiveWords} value={form.sensitive_words} placeholder={copy.sensitiveWordsPlaceholder} onChange={(value) => updateField("sensitive_words", value)} />
+            <TextareaField label={copy.sensitiveWords} value={form.sensitive_words} placeholder={copy.sensitiveWordsReplacePlaceholder} onChange={(value) => updateField("sensitive_words", value)} />
             <TextareaField label={copy.ssrfAllowedHosts} value={form.ssrf_allowed_hosts} placeholder={copy.ssrfAllowedHostsPlaceholder} onChange={(value) => updateField("ssrf_allowed_hosts", value)} />
           </div>
         </SettingsPanel>
@@ -1203,10 +1233,10 @@ export default function SystemManagement({ section = "general", initialTab }: { 
               </SelectContent></Select>
             </label>
             <TextField label={copy.hcaptchaSiteKey} value={form.hcaptcha_site_key} placeholder={copy.hcaptchaSiteKeyPlaceholder} onChange={(value) => updateField("hcaptcha_site_key", value)} />
-            <TextField label={copy.hcaptchaSecret} value={form.hcaptcha_secret} placeholder={copy.hcaptchaSecretPlaceholder} type="password" onChange={(value) => updateField("hcaptcha_secret", value)} />
+            <TextField label={copy.hcaptchaSecret} value={form.hcaptcha_secret} placeholder={copy.sensitiveValuePlaceholder} type="password" onChange={(value) => updateField("hcaptcha_secret", value)} />
             <TextField label={copy.oidcIssuer} value={form.oidc_issuer} placeholder={copy.oidcIssuerPlaceholder} onChange={(value) => updateField("oidc_issuer", value)} />
             <TextField label={copy.oidcClientID} value={form.oidc_client_id} placeholder={copy.oidcClientIDPlaceholder} onChange={(value) => updateField("oidc_client_id", value)} />
-            <TextField label={copy.oidcClientSecret} value={form.oidc_client_secret} placeholder={copy.oidcClientSecretPlaceholder} type="password" onChange={(value) => updateField("oidc_client_secret", value)} />
+            <TextField label={copy.oidcClientSecret} value={form.oidc_client_secret} placeholder={copy.sensitiveValuePlaceholder} type="password" onChange={(value) => updateField("oidc_client_secret", value)} />
             <TextField label={copy.oidcRedirectURL} value={form.oidc_redirect_url} placeholder={copy.oidcRedirectURLPlaceholder} onChange={(value) => updateField("oidc_redirect_url", value)} />
           </div>
           <OAuthProvidersEditor
@@ -1223,7 +1253,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
             <TextField label={copy.smtpHost} value={form.smtp_host} placeholder={copy.smtpHostPlaceholder} onChange={(value) => updateField("smtp_host", value)} />
             <TextField label={copy.smtpPort} value={form.smtp_port} placeholder={copy.smtpPortPlaceholder} type="number" onChange={(value) => updateField("smtp_port", value)} />
             <TextField label={copy.smtpUsername} value={form.smtp_username} placeholder={copy.smtpUsernamePlaceholder} onChange={(value) => updateField("smtp_username", value)} />
-            <TextField label={copy.smtpPassword} value={form.smtp_password} placeholder={copy.smtpPasswordPlaceholder} type="password" onChange={(value) => updateField("smtp_password", value)} />
+            <TextField label={copy.smtpPassword} value={form.smtp_password} placeholder={copy.sensitiveValuePlaceholder} type="password" onChange={(value) => updateField("smtp_password", value)} />
             <TextField label={copy.smtpFrom} value={form.smtp_from} placeholder={copy.smtpFromPlaceholder} onChange={(value) => updateField("smtp_from", value)} />
           </div>
         </SettingsPanel>
@@ -2079,6 +2109,7 @@ const zhOAuthProviderCopy = {
   emailKey: "邮箱字段",
   nameKey: "昵称字段",
   avatarKey: "头像字段",
+  sensitiveValuePlaceholder: "已保存的值不会显示；留空保持不变",
   cancel: "取消",
   saveProvider: "保存服务商",
 }
@@ -2113,6 +2144,7 @@ const enOAuthProviderCopy: OAuthProviderCopy = {
   emailKey: "Email key",
   nameKey: "Name key",
   avatarKey: "Avatar key",
+  sensitiveValuePlaceholder: "Saved value is not shown. Leave empty to keep it.",
   cancel: "Cancel",
   saveProvider: "Save provider",
 }
@@ -2256,7 +2288,7 @@ function OAuthProviderDialog({
             <TextField label={copy.providerKey} value={draft.key} placeholder="github" onChange={(value) => updateDraft({ key: normalizeOAuthProviderKey(value) })} />
             <TextField label={copy.callbackOverride} value={draft.redirect_url} placeholder={callbackURLFromBaseURL(baseURL, `/auth/oauth/${draft.key || "github"}/callback`)} onChange={(value) => updateDraft({ redirect_url: value })} />
             <TextField label="Client ID" value={draft.client_id} placeholder="client id" onChange={(value) => updateDraft({ client_id: value })} />
-            <TextField label="Client Secret" value={draft.client_secret} placeholder="client secret" type="password" onChange={(value) => updateDraft({ client_secret: value })} />
+            <TextField label="Client Secret" value={draft.client_secret} placeholder={copy.sensitiveValuePlaceholder} type="password" onChange={(value) => updateDraft({ client_secret: value })} />
             <TextField label={copy.issuer} value={draft.issuer} placeholder="https://accounts.example.com" onChange={(value) => updateDraft({ issuer: value })} />
             <TextField label="Scope" value={draft.scope} placeholder="openid profile email" onChange={(value) => updateDraft({ scope: value })} />
             <TextField label={copy.authEndpoint} value={draft.auth_url} placeholder="https://provider.example.com/oauth/authorize" onChange={(value) => updateDraft({ auth_url: value })} />
@@ -2517,10 +2549,10 @@ const paymentChannelConfigFields: Record<EditablePaymentChannel["provider"], Arr
     { key: "openpayment_base_url", label: "Base URL" }, { key: "openpayment_config_url", label: "发现配置地址" }, { key: "openpayment_merchant_id", label: "商户号" }, { key: "openpayment_key", label: "商户密钥", secret: true },
   ],
   wechatpay: [
-    { key: "wechat_mch_id", label: "商户号" }, { key: "wechat_app_id", label: "AppID" }, { key: "wechat_serial_no", label: "商户证书序列号" }, { key: "wechat_api_v3_key", label: "API v3 密钥", secret: true }, { key: "wechat_private_key", label: "商户私钥 PEM", multiline: true }, { key: "wechat_platform_certificate", label: "平台证书 / 公钥 PEM", multiline: true },
+    { key: "wechat_mch_id", label: "商户号" }, { key: "wechat_app_id", label: "AppID" }, { key: "wechat_serial_no", label: "商户证书序列号" }, { key: "wechat_api_v3_key", label: "API v3 密钥", secret: true }, { key: "wechat_private_key", label: "商户私钥 PEM", secret: true, multiline: true }, { key: "wechat_platform_certificate", label: "平台证书 / 公钥 PEM", secret: true, multiline: true },
   ],
   alipay: [
-    { key: "alipay_app_id", label: "AppID" }, { key: "alipay_gateway_url", label: "网关地址" }, { key: "alipay_private_key", label: "应用私钥 PEM", multiline: true }, { key: "alipay_public_key", label: "支付宝公钥 PEM", multiline: true },
+    { key: "alipay_app_id", label: "AppID" }, { key: "alipay_gateway_url", label: "网关地址" }, { key: "alipay_private_key", label: "应用私钥 PEM", secret: true, multiline: true }, { key: "alipay_public_key", label: "支付宝公钥 PEM", secret: true, multiline: true },
   ],
   paypal: [
     { key: "paypal_client_id", label: "Client ID" }, { key: "paypal_client_secret", label: "Client Secret", secret: true }, { key: "paypal_base_url", label: "API Base URL" }, { key: "paypal_webhook_id", label: "Webhook ID" },
@@ -2530,7 +2562,7 @@ const paymentChannelConfigFields: Record<EditablePaymentChannel["provider"], Arr
   ],
 }
 
-function PaymentChannelsEditor({ value, legacyChannel, onChange }: { value: string; legacyChannel: EditablePaymentChannel; onChange: (value: string) => void }) {
+function PaymentChannelsEditor({ value, legacyChannel, copy, onChange }: { value: string; legacyChannel: EditablePaymentChannel; copy: SystemCopy; onChange: (value: string) => void }) {
   const channels = parsePaymentChannels(value)
   const update = (next: EditablePaymentChannel[]) => onChange(JSON.stringify(next))
   const [draft, setDraft] = useState<EditablePaymentChannel | null>(null)
@@ -2567,7 +2599,7 @@ function PaymentChannelsEditor({ value, legacyChannel, onChange }: { value: stri
             <TextField label="结算币种" value={draft.currency || ""} placeholder="CNY / USD" onChange={(nextValue) => updateDraft({ currency: nextValue.toUpperCase() })} />
             <label className="grid gap-2 text-sm"><span className="font-medium">渠道类型</span><Select value={draft.provider} onValueChange={(nextValue) => updateDraft({ provider: nextValue as EditablePaymentChannel["provider"] })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="yipay">易支付 / EPay</SelectItem><SelectItem value="openpayment">OpenPayment</SelectItem><SelectItem value="wechatpay">微信支付官方</SelectItem><SelectItem value="alipay">支付宝官方</SelectItem><SelectItem value="paypal">PayPal</SelectItem><SelectItem value="stripe">Stripe</SelectItem></SelectContent></Select></label>
             <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={draft.enabled} onChange={(event) => updateDraft({ enabled: event.target.checked })} /> 启用此通道</label>
-            <div className="md:col-span-2 grid gap-3 md:grid-cols-2">{paymentChannelConfigFields[draft.provider].map((field) => field.multiline ? <TextareaField key={field.key} label={field.label} value={draft.config[field.key] || ""} placeholder="" onChange={(nextValue) => updateDraftConfig(field.key, nextValue)} /> : <TextField key={field.key} label={field.label} value={draft.config[field.key] || ""} placeholder="" type={field.secret ? "password" : "text"} onChange={(nextValue) => updateDraftConfig(field.key, nextValue)} />)}</div>
+            <div className="md:col-span-2 grid gap-3 md:grid-cols-2">{paymentChannelConfigFields[draft.provider].map((field) => field.multiline ? <TextareaField key={field.key} label={field.label} value={draft.config[field.key] || ""} placeholder={field.secret ? copy.sensitiveValuePlaceholder : ""} onChange={(nextValue) => updateDraftConfig(field.key, nextValue)} /> : <TextField key={field.key} label={field.label} value={draft.config[field.key] || ""} placeholder={field.secret ? copy.sensitiveValuePlaceholder : ""} type={field.secret ? "password" : "text"} onChange={(nextValue) => updateDraftConfig(field.key, nextValue)} />)}</div>
           </div>}
           <DialogFooter><Button type="button" variant="outline" onClick={() => setDraft(null)}>取消</Button><Button type="button" onClick={saveDraft} disabled={!draft?.id.trim() || !draft?.name.trim()}>保存渠道</Button></DialogFooter>
         </DialogContent>
@@ -3910,6 +3942,8 @@ const zhCopy = {
   sensitiveFilterEnabled: "启用敏感词过滤",
   sensitiveWords: "敏感词列表",
   sensitiveWordsPlaceholder: "每行或用逗号分隔，例如：违规词\nsecret-key",
+  sensitiveWordsReplacePlaceholder: "已保存的规则不会显示；留空保持不变，填写将覆盖当前规则",
+  sensitiveValuePlaceholder: "已保存的值不会显示；留空保持不变",
   sensitiveFilterScope: "过滤范围",
   filterScopeRequest: "仅请求内容",
   filterScopeRequestResponse: "请求和响应内容",
@@ -4346,6 +4380,8 @@ const enCopy: SystemCopy = {
   sensitiveFilterEnabled: "Enable sensitive-word filtering",
   sensitiveWords: "Sensitive words",
   sensitiveWordsPlaceholder: "One per line or comma-separated, e.g. blocked word\nsecret-key",
+  sensitiveWordsReplacePlaceholder: "Saved rules are not shown. Leave empty to keep them, or enter a replacement.",
+  sensitiveValuePlaceholder: "Saved value is not shown. Leave empty to keep it.",
   sensitiveFilterScope: "Filter scope",
   filterScopeRequest: "Request content only",
   filterScopeRequestResponse: "Request and response content",
