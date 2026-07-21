@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { PageTab, PageTabs } from "@/components/layout/PageTabs"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/components/ui/toast"
 
 interface CommunityCharacter {
@@ -33,11 +34,14 @@ interface CommunityKnowledgeBase {
   updated_at: string
 }
 
+interface CommunityCategory { id: string; name: string; kind: "character" | "knowledge" }
+
 interface CommunityCharactersResponse { items?: unknown }
 interface CommunityKnowledgeBasesResponse { items?: unknown }
+interface CommunityCategoriesResponse { items?: unknown }
 
-const communityCharactersQueryKey = (query: string) => ["community-characters", query] as const
-const communityKnowledgeBasesQueryKey = ["community-knowledge-bases"] as const
+const communityCharactersQueryKey = (query: string, categoryID: string) => ["community-characters", query, categoryID] as const
+const communityKnowledgeBasesQueryKey = (categoryID: string) => ["community-knowledge-bases", categoryID] as const
 
 export default function Community() {
   const { id, knowledgeBaseID } = useParams()
@@ -67,15 +71,17 @@ function CommunityBrowse() {
 
 function CommunityCharacterList() {
   const [query, setQuery] = useState("")
+  const [categoryID, setCategoryID] = useState("")
+  const categoriesQuery = useQuery<CommunityCategory[]>({ queryKey: ["community-categories", "character"], queryFn: async () => normalizeCategoryList((await api.get("/community/categories", { params: { kind: "character" } })).data) })
   const charactersQuery = useQuery<CommunityCharacter[]>({
-    queryKey: communityCharactersQueryKey(query),
-    queryFn: async () => normalizeCharacterList((await api.get("/community/characters", { params: { limit: 24, offset: 0, q: query.trim() || undefined } })).data),
+    queryKey: communityCharactersQueryKey(query, categoryID),
+    queryFn: async () => normalizeCharacterList((await api.get("/community/characters", { params: { limit: 24, offset: 0, q: query.trim() || undefined, category_id: categoryID || undefined } })).data),
   })
   const characters = charactersQuery.data || []
 
   return (
     <div className="space-y-6">
-      <div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索角色" className="h-9 pl-9" /></div>
+      <div className="flex w-full gap-2 sm:w-auto"><div className="relative min-w-0 flex-1 sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索角色" className="h-9 pl-9" /></div><Select value={categoryID || "all"} onValueChange={(value) => setCategoryID(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="全部分类" /></SelectTrigger><SelectContent><SelectItem value="all">全部分类</SelectItem>{(categoriesQuery.data || []).map((category) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select></div>
       {charactersQuery.isError ? <CommunityState title="社区暂时不可用" description="无法获取角色列表，请稍后重试。" /> : charactersQuery.isLoading ? <CommunityState title="正在加载角色" description="" /> : characters.length === 0 ? <CommunityState title={query ? "没有匹配的角色" : "暂时还没有公开角色"} description={query ? "换一个关键词试试。" : "稍后再来看看。"} /> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{characters.map((character) => <CommunityCharacterCard key={character.id} character={character} />)}</div>}
     </div>
   )
@@ -94,15 +100,17 @@ function CommunityCharacterCard({ character }: { character: CommunityCharacter }
 
 function CommunityKnowledgeBaseList() {
   const [query, setQuery] = useState("")
+  const [categoryID, setCategoryID] = useState("")
+  const categoriesQuery = useQuery<CommunityCategory[]>({ queryKey: ["community-categories", "knowledge"], queryFn: async () => normalizeCategoryList((await api.get("/community/categories", { params: { kind: "knowledge" } })).data) })
   const knowledgeBasesQuery = useQuery<CommunityKnowledgeBase[]>({
-    queryKey: communityKnowledgeBasesQueryKey,
-    queryFn: async () => normalizeKnowledgeBaseList((await api.get("/community/knowledge-bases")).data),
+    queryKey: communityKnowledgeBasesQueryKey(categoryID),
+    queryFn: async () => normalizeKnowledgeBaseList((await api.get("/community/knowledge-bases", { params: { category_id: categoryID || undefined } })).data),
   })
   const knowledgeBases = (knowledgeBasesQuery.data || []).filter((base) => !query.trim() || `${base.name} ${base.description} ${base.owner}`.toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()))
 
   return (
     <div className="space-y-6">
-      <div className="relative w-full sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索知识库" className="h-9 pl-9" /></div>
+      <div className="flex w-full gap-2 sm:w-auto"><div className="relative min-w-0 flex-1 sm:w-72"><Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" /><Input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="搜索知识库" className="h-9 pl-9" /></div><Select value={categoryID || "all"} onValueChange={(value) => setCategoryID(value === "all" ? "" : value)}><SelectTrigger><SelectValue placeholder="全部分类" /></SelectTrigger><SelectContent><SelectItem value="all">全部分类</SelectItem>{(categoriesQuery.data || []).map((category) => <SelectItem key={category.id} value={category.id}>{category.name}</SelectItem>)}</SelectContent></Select></div>
       {knowledgeBasesQuery.isError ? <CommunityState title="社区暂时不可用" description="无法获取知识库列表，请稍后重试。" /> : knowledgeBasesQuery.isLoading ? <CommunityState title="正在加载知识库" description="" /> : knowledgeBases.length === 0 ? <CommunityState title={query ? "没有匹配的知识库" : "暂时还没有公开知识库"} description={query ? "换一个关键词试试。" : "稍后再来看看。"} /> : <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">{knowledgeBases.map((knowledgeBase) => <CommunityKnowledgeBaseCard key={knowledgeBase.id} knowledgeBase={knowledgeBase} />)}</div>}
     </div>
   )
@@ -185,6 +193,7 @@ function CommunityState({ title, description }: { title: string; description: st
 function normalizeCharacterList(value: unknown): CommunityCharacter[] { const response = isRecord(value) ? value as CommunityCharactersResponse : {}; return Array.isArray(response.items) ? response.items.map(normalizeCharacter).filter((item): item is CommunityCharacter => Boolean(item)) : [] }
 function normalizeCharacter(value: unknown): CommunityCharacter | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, summary: stringValue(value.summary), image_url: stringValue(value.image_url), author: stringValue(value.author), author_level: numberValue(value.author_level), prompt: stringValue(value.prompt) || undefined, preset_messages: normalizePresetMessages(value.preset_messages), featured: value.featured === true, created_at: stringValue(value.created_at) } }
 function normalizeKnowledgeBaseList(value: unknown): CommunityKnowledgeBase[] { const response = isRecord(value) ? value as CommunityKnowledgeBasesResponse : {}; return Array.isArray(response.items) ? response.items.map(normalizeKnowledgeBase).filter((item): item is CommunityKnowledgeBase => Boolean(item)) : [] }
+function normalizeCategoryList(value: unknown): CommunityCategory[] { const response = isRecord(value) ? value as CommunityCategoriesResponse : {}; return Array.isArray(response.items) ? response.items.flatMap((item) => { if (!isRecord(item)) return []; const id = stringValue(item.id); const name = stringValue(item.name); const kind = stringValue(item.kind); return id && name && (kind === "character" || kind === "knowledge") ? [{ id, name, kind }] : [] }) : [] }
 function normalizeKnowledgeBase(value: unknown): CommunityKnowledgeBase | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, description: stringValue(value.description), owner: stringValue(value.owner), file_count: nonNegativeNumber(value.file_count), created_at: stringValue(value.created_at), updated_at: stringValue(value.updated_at) } }
 function normalizePresetMessages(value: unknown): Array<{ role: "system" | "user" | "assistant"; content: string }> { if (!Array.isArray(value)) return []; return value.flatMap((item) => { if (!isRecord(item)) return []; const role = stringValue(item.role); const content = stringValue(item.content); if (!content || (role !== "system" && role !== "user" && role !== "assistant")) return []; return [{ role, content }] }) }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN") }
