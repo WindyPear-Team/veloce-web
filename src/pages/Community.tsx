@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { PageTab, PageTabs } from "@/components/layout/PageTabs"
 import { useToast } from "@/components/ui/toast"
 
 interface CommunityCharacter {
@@ -29,7 +29,6 @@ interface CommunityKnowledgeBase {
   description: string
   owner: string
   file_count: number
-  chunk_count: number
   created_at: string
   updated_at: string
 }
@@ -55,13 +54,14 @@ function CommunityBrowse() {
   }
 
   return (
-    <Tabs value={activeTab} onValueChange={changeTab} className="space-y-6">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div className="space-y-1"><h1 className="text-2xl font-semibold">社区</h1><p className="text-sm text-muted-foreground">探索可导入的 AI 角色和知识库。</p></div>
-        <TabsList><TabsTrigger value="characters">角色</TabsTrigger><TabsTrigger value="knowledge">知识库</TabsTrigger></TabsList>
-      </div>
+    <div className="space-y-6">
+      <div className="space-y-1"><h1 className="text-2xl font-semibold">社区</h1><p className="text-sm text-muted-foreground">探索可导入的 AI 角色和知识库。</p></div>
+      <PageTabs aria-label="社区导航">
+        <PageTab active={activeTab === "characters"} onClick={() => changeTab("characters")}>角色</PageTab>
+        <PageTab active={activeTab === "knowledge"} onClick={() => changeTab("knowledge")}>知识库</PageTab>
+      </PageTabs>
       {activeTab === "characters" ? <CommunityCharacterList /> : <CommunityKnowledgeBaseList />}
-    </Tabs>
+    </div>
   )
 }
 
@@ -176,7 +176,7 @@ function CommunityKnowledgeBaseDetail({ id }: { id: string }) {
 
   if (knowledgeBaseQuery.isLoading) return <CommunityState title="正在加载知识库" description="" />
   if (knowledgeBaseQuery.isError || !knowledgeBase) return <div className="space-y-4"><BackToCommunity tab="knowledge" /><CommunityState title="无法打开知识库" description="该知识库可能已下架，或社区暂时不可用。" /></div>
-  return <div className="mx-auto max-w-3xl space-y-6"><BackToCommunity tab="knowledge" /><Card><CardHeader className="gap-4"><div className="flex items-start gap-3"><BookOpen className="mt-1 size-6 shrink-0 text-primary" /><div className="min-w-0 space-y-2"><CardTitle className="text-2xl">{knowledgeBase.name}</CardTitle><CardDescription className="whitespace-pre-wrap leading-6">{knowledgeBase.description || "这份知识库还没有留下简介。"}</CardDescription></div></div><div className="flex flex-wrap gap-3 text-sm text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={14} />{knowledgeBase.owner || "匿名创作者"}</span><span className="inline-flex items-center gap-1"><FileText size={14} />{knowledgeBase.file_count} 个文件</span><span>{knowledgeBase.chunk_count} 个切片</span><span>{formatDate(knowledgeBase.updated_at || knowledgeBase.created_at)}</span></div></CardHeader><CardContent className="text-sm text-muted-foreground">导入后将生成一份仅属于你的知识库，并保留原始文本文件。选择嵌入模型并向量化后即可在代理中使用。</CardContent><CardFooter><Button className="gap-2" disabled={isImporting} onClick={importKnowledgeBase}><Download size={16} />{isImporting ? "正在导入" : "导入知识库"}</Button></CardFooter></Card></div>
+  return <div className="mx-auto max-w-3xl space-y-6"><BackToCommunity tab="knowledge" /><Card><CardHeader className="gap-4"><div className="flex items-start gap-3"><BookOpen className="mt-1 size-6 shrink-0 text-primary" /><div className="min-w-0 space-y-2"><CardTitle className="text-2xl">{knowledgeBase.name}</CardTitle><CardDescription className="whitespace-pre-wrap leading-6">{knowledgeBase.description || "这份知识库还没有留下简介。"}</CardDescription></div></div><div className="flex flex-wrap gap-3 text-sm text-muted-foreground"><span className="inline-flex items-center gap-1"><UserRound size={14} />{knowledgeBase.owner || "匿名创作者"}</span><span className="inline-flex items-center gap-1"><FileText size={14} />{knowledgeBase.file_count} 个文件</span><span>{formatDate(knowledgeBase.updated_at || knowledgeBase.created_at)}</span></div></CardHeader><CardContent className="text-sm text-muted-foreground">导入后将生成一份仅属于你的知识库，并保留原始文本文件。选择嵌入模型并向量化后即可在代理中使用。</CardContent><CardFooter><Button className="gap-2" disabled={isImporting} onClick={importKnowledgeBase}><Download size={16} />{isImporting ? "正在导入" : "导入知识库"}</Button></CardFooter></Card></div>
 }
 
 function BackToCommunity({ tab }: { tab?: "knowledge" }) { const navigate = useNavigate(); return <Button variant="ghost" className="gap-2" onClick={() => navigate(tab === "knowledge" ? "/chat/community?tab=knowledge" : "/chat/community")}><ArrowLeft size={16} />返回社区</Button> }
@@ -185,7 +185,7 @@ function CommunityState({ title, description }: { title: string; description: st
 function normalizeCharacterList(value: unknown): CommunityCharacter[] { const response = isRecord(value) ? value as CommunityCharactersResponse : {}; return Array.isArray(response.items) ? response.items.map(normalizeCharacter).filter((item): item is CommunityCharacter => Boolean(item)) : [] }
 function normalizeCharacter(value: unknown): CommunityCharacter | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, summary: stringValue(value.summary), image_url: stringValue(value.image_url), author: stringValue(value.author), author_level: numberValue(value.author_level), prompt: stringValue(value.prompt) || undefined, preset_messages: normalizePresetMessages(value.preset_messages), featured: value.featured === true, created_at: stringValue(value.created_at) } }
 function normalizeKnowledgeBaseList(value: unknown): CommunityKnowledgeBase[] { const response = isRecord(value) ? value as CommunityKnowledgeBasesResponse : {}; return Array.isArray(response.items) ? response.items.map(normalizeKnowledgeBase).filter((item): item is CommunityKnowledgeBase => Boolean(item)) : [] }
-function normalizeKnowledgeBase(value: unknown): CommunityKnowledgeBase | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, description: stringValue(value.description), owner: stringValue(value.owner), file_count: nonNegativeNumber(value.file_count), chunk_count: nonNegativeNumber(value.chunk_count), created_at: stringValue(value.created_at), updated_at: stringValue(value.updated_at) } }
+function normalizeKnowledgeBase(value: unknown): CommunityKnowledgeBase | null { if (!isRecord(value)) return null; const id = stringValue(value.id); const name = stringValue(value.name); if (!id || !name) return null; return { id, name, description: stringValue(value.description), owner: stringValue(value.owner), file_count: nonNegativeNumber(value.file_count), created_at: stringValue(value.created_at), updated_at: stringValue(value.updated_at) } }
 function normalizePresetMessages(value: unknown): Array<{ role: "system" | "user" | "assistant"; content: string }> { if (!Array.isArray(value)) return []; return value.flatMap((item) => { if (!isRecord(item)) return []; const role = stringValue(item.role); const content = stringValue(item.content); if (!content || (role !== "system" && role !== "user" && role !== "assistant")) return []; return [{ role, content }] }) }
 function formatDate(value: string) { const date = new Date(value); return Number.isNaN(date.getTime()) ? "" : date.toLocaleDateString("zh-CN") }
 function stringValue(value: unknown) { return typeof value === "string" ? value : typeof value === "number" ? String(value) : "" }
