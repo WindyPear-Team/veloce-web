@@ -191,7 +191,7 @@ export default function AdvancedChat() {
 
       <div className={cn("flex min-h-0 flex-1", isChatRoute && "bg-background")}>
         <div className="hidden lg:block lg:h-full lg:shrink-0">
-          <AdvancedChatSidebar className={isChatRoute ? "border-r-0 bg-background" : undefined} publicSettings={publicSettings} />
+          <AdvancedChatSidebar className={isChatRoute ? "border-r-0 bg-background" : undefined} publicSettings={publicSettings} user={user} />
         </div>
 
         <div className={cn("fixed inset-0 z-40 transition-opacity duration-200 lg:hidden", isDesktop ? "top-0" : "top-16", isSidebarOpen ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0")} aria-hidden={!isSidebarOpen}>
@@ -202,7 +202,7 @@ export default function AdvancedChat() {
               onClick={() => setIsSidebarOpen(false)}
             />
             <div className={cn("relative z-50 h-full w-64 max-w-[85vw] transition-transform duration-200 ease-out", isSidebarOpen ? "translate-x-0" : "-translate-x-full")}>
-              <AdvancedChatSidebar className={cn("w-full", isChatRoute && "border-r-0 bg-background")} publicSettings={publicSettings} onNavigate={() => setIsSidebarOpen(false)} />
+              <AdvancedChatSidebar className={cn("w-full", isChatRoute && "border-r-0 bg-background")} publicSettings={publicSettings} user={user} onNavigate={() => setIsSidebarOpen(false)} />
             </div>
         </div>
 
@@ -308,10 +308,12 @@ function desktopPageTitle(pathname: string, language: string) {
 function AdvancedChatSidebar({
   className,
   publicSettings,
+  user,
   onNavigate,
 }: {
   className?: string
   publicSettings: PublicSettings
+  user?: CurrentUser
   onNavigate?: () => void
 }) {
   const location = useLocation()
@@ -340,6 +342,7 @@ function AdvancedChatSidebar({
     ...(enterpriseMode ? [{ href: "/chat/tasks", label: language === "zh" ? "任务" : "Tasks", icon: ListTree, active: location.pathname === "/chat/tasks" }] : []),
     { href: "/chat/files", label: filesLabel, icon: FileText, active: location.pathname === "/chat/files" },
     { href: "/chat/knowledge", label: knowledgeLabel, icon: Database, active: location.pathname === "/chat/knowledge" },
+    ...(isDesktopTarget() && user?.is_admin ? [{ href: "/chat/admin/general", label: language === "zh" ? "系统管理" : "System Management", icon: SlidersHorizontal, active: location.pathname.startsWith("/chat/admin/") }] : []),
   ]
   const groups: AdvancedChatSidebarGroup[] = [
     {
