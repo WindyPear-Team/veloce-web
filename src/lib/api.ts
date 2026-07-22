@@ -7,6 +7,8 @@ const desktopTabServerPrefix = "veloce.desktop.tab_server.";
 
 export const isDesktopTarget = () => import.meta.env.VITE_APP_TARGET === "desktop";
 
+const configuredBackendURL = () => (import.meta.env.VITE_BACKEND_URL || "").trim().replace(/\/+$/, "");
+
 export const getDesktopTabID = () => {
   if (typeof window === "undefined") {
     return "";
@@ -127,14 +129,15 @@ export const apiURL = (pathOrURL: string) => {
   if (/^https?:\/\//i.test(pathOrURL)) {
     return pathOrURL;
   }
-  if (!isDesktopTarget()) {
-    return pathOrURL;
-  }
   const normalizedPath = pathOrURL.startsWith("/") ? pathOrURL : `/${pathOrURL}`;
-  return `${getDesktopServerURL()}${normalizedPath}`;
+  if (isDesktopTarget()) {
+    return `${getDesktopServerURL()}${normalizedPath}`;
+  }
+  const backendURL = configuredBackendURL();
+  return backendURL ? `${backendURL}${normalizedPath}` : pathOrURL;
 };
 
-const apiBaseURL = () => isDesktopTarget() ? apiURL("/api") : "/api";
+const apiBaseURL = () => apiURL("/api");
 
 const api = axios.create({
   baseURL: apiBaseURL(),
