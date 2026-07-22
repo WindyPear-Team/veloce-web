@@ -43,6 +43,30 @@ interface AuditLog {
   created_at: string
 }
 
+interface TokenLog {
+  id: number
+  user_id: number
+  api_key_id?: number
+  user_channel_id?: number
+  channel_id: number
+  model_name: string
+  input_tokens: number
+  output_tokens: number
+  cached_input_tokens: number
+  cache_write_input_tokens: number
+  cache_write_1h_input_tokens: number
+  response_time_ms: number
+  first_response_time_ms: number
+  group_multiplier: string | number
+  user_channel_multiplier: string | number
+  input_price: string | number
+  output_price: string | number
+  cached_input_price: string | number
+  pricing_formula: string
+  cost: string | number
+  created_at: string
+}
+
 interface PaginatedResult<T> {
   items: T[]
   total: number
@@ -63,6 +87,8 @@ export default function AdminAuditLogs() {
   const [path, setPath] = useState("")
   const [userID, setUserID] = useState("")
   const [statusCode, setStatusCode] = useState("")
+  const [callPage, setCallPage] = useState(1)
+  const [modelName, setModelName] = useState("")
 
   const { data = emptyPage<AuditLog>(page), isLoading } = useQuery<PaginatedResult<AuditLog>>({
     queryKey: ["audit-logs", page, logType, startDate, endDate, action, path, userID, statusCode],
@@ -84,6 +110,13 @@ export default function AdminAuditLogs() {
       return paginatedResult<AuditLog>(res.data, page)
     },
   })
+  const { data: callLogs = emptyPage<TokenLog>(callPage), isLoading: isCallLogsLoading } = useQuery<PaginatedResult<TokenLog>>({
+    queryKey: ["admin-call-logs", callPage, startDate, endDate, userID, modelName],
+    queryFn: async () => {
+      const res = await api.get("/logs", { params: cleanParams({ paginated: 1, page: callPage, page_size: pageSize, start_time: startDate, end_time: endDate, user_id: userID, model_name: modelName }) })
+      return paginatedResult<TokenLog>(res.data, callPage)
+    },
+  })
 
   const resetFilters = () => {
     setLogType("")
@@ -93,7 +126,9 @@ export default function AdminAuditLogs() {
     setPath("")
     setUserID("")
     setStatusCode("")
+    setModelName("")
     setPage(1)
+    setCallPage(1)
   }
 
   const totalPages = Math.max(1, Math.ceil(data.total / data.page_size))
@@ -192,6 +227,22 @@ export default function AdminAuditLogs() {
           </div>
         </CardContent>
       </Card>
+
+      <Card>
+        <CardHeader className="flex flex-row items-center justify-between"><CardTitle>调用明细</CardTitle><Activity className="h-5 w-5 text-muted-foreground" /></CardHeader>
+        <CardContent className="space-y-3">
+          <div className="grid gap-3 md:grid-cols-4">
+            <DateFilterInput label={copy.startDate} value={startDate} onChange={(value) => { setStartDate(value); setCallPage(1) }} />
+            <DateFilterInput label={copy.endDate} value={endDate} onChange={(value) => { setEndDate(value); setCallPage(1) }} />
+            <FilterInput label={copy.userID} value={userID} type="number" placeholder="1" onChange={(value) => { setUserID(value); setCallPage(1) }} />
+            <FilterInput label="模型" value={modelName} placeholder="gpt-4o" onChange={(value) => { setModelName(value); setCallPage(1) }} />
+          </div>
+          <div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>{copy.time}</TableHead><TableHead>{copy.user}</TableHead><TableHead>路由</TableHead><TableHead>模型</TableHead><TableHead>Token</TableHead><TableHead>价格</TableHead><TableHead>倍率</TableHead><TableHead>算式</TableHead><TableHead>FRT / 总耗时</TableHead><TableHead>费用</TableHead></TableRow></TableHeader><TableBody>
+            {isCallLogsLoading ? <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">{copy.loading}</TableCell></TableRow> : callLogs.items.length === 0 ? <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">暂无调用记录</TableCell></TableRow> : callLogs.items.map((log) => <TableRow key={log.id}><TableCell className="whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</TableCell><TableCell>#{log.user_id}</TableCell><TableCell className="whitespace-nowrap text-xs">key {log.api_key_id || "-"}<br />{log.user_channel_id || "-"} / {log.channel_id}</TableCell><TableCell>{log.model_name}</TableCell><TableCell className="whitespace-nowrap text-xs">in {log.input_tokens} · out {log.output_tokens}<br /><span className="text-muted-foreground">cache {log.cached_input_tokens || 0} / write {log.cache_write_input_tokens || 0} / 1h {log.cache_write_1h_input_tokens || 0}</span></TableCell><TableCell className="whitespace-nowrap text-xs">in {formatPrice(log.input_price)}<br />out {formatPrice(log.output_price)}<br />cache {formatPrice(log.cached_input_price)}</TableCell><TableCell className="whitespace-nowrap text-xs">组 {formatMultiplier(log.group_multiplier)}×<br />通道 {formatMultiplier(log.user_channel_multiplier)}×</TableCell><TableCell className="max-w-80 truncate text-xs" title={log.pricing_formula}>{log.pricing_formula || "-"}</TableCell><TableCell className="whitespace-nowrap text-xs">{formatLatency(log.first_response_time_ms)}<br />{formatLatency(log.response_time_ms)}</TableCell><TableCell>${log.cost}</TableCell></TableRow>)}
+          </TableBody></Table></div>
+          <div className="flex items-center justify-between text-sm text-muted-foreground"><span>{copy.total.replace("{total}", String(callLogs.total))}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" disabled={callPage <= 1} onClick={() => setCallPage((value) => value - 1)}>{copy.prev}</Button><span>{callPage} / {Math.max(1, Math.ceil(callLogs.total / callLogs.page_size))}</span><Button variant="outline" size="sm" disabled={callPage >= Math.max(1, Math.ceil(callLogs.total / callLogs.page_size))} onClick={() => setCallPage((value) => value + 1)}>{copy.next}</Button></div></div>
+        </CardContent>
+      </Card>
     </div>
   )
 }
@@ -249,6 +300,10 @@ function formatDateTime(value: string) {
   if (!value) return "-"
   return new Date(value).toLocaleString()
 }
+
+function formatPrice(value: string | number) { const amount = Number(value || 0); return Number.isFinite(amount) && amount > 0 ? `$${amount.toLocaleString("en-US", { maximumFractionDigits: 8 })}/M` : "-" }
+function formatMultiplier(value: string | number) { const amount = Number(value || 0); return Number.isFinite(amount) && amount > 0 ? amount.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "-" }
+function formatLatency(value: number) { return value > 0 ? `${value} ms` : "-" }
 
 function typeLabel(value: string, copy: typeof zhCopy) {
   switch (value) {

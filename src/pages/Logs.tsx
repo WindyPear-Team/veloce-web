@@ -30,6 +30,18 @@ interface TokenLog {
   input_tokens: number
   output_tokens: number
   cached_input_tokens: number
+	cache_write_input_tokens: number
+	cache_write_1h_input_tokens: number
+  response_time_ms: number
+  first_response_time_ms: number
+  group_multiplier: string | number
+  user_channel_multiplier: string | number
+  input_price: string | number
+  output_price: string | number
+  cached_input_price: string | number
+  cache_write_input_price: string | number
+  cache_write_1h_input_price: string | number
+  pricing_formula: string
   cost: string | number
 }
 
@@ -277,24 +289,26 @@ function CallRecordsTable({
             <TableRow>
               <TableHead>{t("common.time")}</TableHead>
               <TableHead>{t("usage.apiKey")}</TableHead>
-              <TableHead>{t("usage.userChannel")}</TableHead>
-              <TableHead>{t("usage.upstreamChannel")}</TableHead>
+              <TableHead>{t("usage.userChannel")} / {t("usage.upstreamChannel")}</TableHead>
               <TableHead>{t("common.model")}</TableHead>
               <TableHead>{t("common.tokens")}</TableHead>
-              <TableHead>{t("usage.cachedInput")}</TableHead>
+              <TableHead>{copy.pricing}</TableHead>
+              <TableHead>{copy.multipliers}</TableHead>
+              <TableHead>{copy.formula}</TableHead>
+              <TableHead>{copy.performance}</TableHead>
               <TableHead>{t("common.cost")}</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                   {t("common.loading")}
                 </TableCell>
               </TableRow>
             ) : logs.items.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="py-8 text-center text-muted-foreground">
+                <TableCell colSpan={10} className="py-8 text-center text-muted-foreground">
                   {t("usage.noUsage")}
                 </TableCell>
               </TableRow>
@@ -303,11 +317,13 @@ function CallRecordsTable({
                 <TableRow key={log.id}>
                   <TableCell>{formatDateTime(log.created_at)}</TableCell>
                   <TableCell>{log.api_key_id || "-"}</TableCell>
-                  <TableCell>{log.user_channel_id || "-"}</TableCell>
-                  <TableCell>{log.channel_id}</TableCell>
+                  <TableCell>{log.user_channel_id || "-"} / {log.channel_id}</TableCell>
                   <TableCell>{log.model_name}</TableCell>
-                  <TableCell>{log.input_tokens} / {log.output_tokens}</TableCell>
-                  <TableCell>{log.cached_input_tokens || 0}</TableCell>
+                  <TableCell className="whitespace-nowrap">in {log.input_tokens} · out {log.output_tokens}<br /><span className="text-xs text-muted-foreground">cache {log.cached_input_tokens || 0} / write {log.cache_write_input_tokens || 0} / 1h {log.cache_write_1h_input_tokens || 0}</span></TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">in {formatPrice(log.input_price)}<br />out {formatPrice(log.output_price)}<br />cache {formatPrice(log.cached_input_price)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">组 {formatDecimal(log.group_multiplier)}×<br />通道 {formatDecimal(log.user_channel_multiplier)}×</TableCell>
+                  <TableCell className="max-w-80 truncate text-xs" title={log.pricing_formula}>{log.pricing_formula || "-"}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">FRT {formatLatency(log.first_response_time_ms)}<br />总计 {formatLatency(log.response_time_ms)}</TableCell>
                   <TableCell>${log.cost}</TableCell>
                 </TableRow>
               ))
@@ -620,6 +636,20 @@ function formatDateTime(value: string) {
   return date.toLocaleString()
 }
 
+function formatPrice(value: string | number | undefined) {
+  const parsed = Number(value || 0)
+  return Number.isFinite(parsed) && parsed > 0 ? `$${parsed.toLocaleString("en-US", { maximumFractionDigits: 8 })}/M` : "-"
+}
+
+function formatDecimal(value: string | number | undefined) {
+  const parsed = Number(value || 0)
+  return Number.isFinite(parsed) && parsed > 0 ? parsed.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "-"
+}
+
+function formatLatency(value: number | undefined) {
+  return value && value > 0 ? `${value} ms` : "-"
+}
+
 const zhDetailsCopy = {
   title: "明细",
   subtitle: "集中查看调用、充值和签到等账户明细",
@@ -647,6 +677,10 @@ const zhDetailsCopy = {
   apiKeyFilter: "API Key",
   allAPIKeys: "全部 API Key",
   apiKeyFallback: "API Key",
+  pricing: "价格（$/百万 token）",
+  multipliers: "倍率",
+  formula: "计费算式",
+  performance: "性能",
   previousPage: "上一页",
   nextPage: "下一页",
   pageSummary: "第 {page} / {totalPages} 页，共 {total} 条",
@@ -686,6 +720,10 @@ const enDetailsCopy: typeof zhDetailsCopy = {
   apiKeyFilter: "API key",
   allAPIKeys: "All API keys",
   apiKeyFallback: "API key",
+  pricing: "Prices ($/M tokens)",
+  multipliers: "Multipliers",
+  formula: "Billing formula",
+  performance: "Performance",
   previousPage: "Previous",
   nextPage: "Next",
   pageSummary: "Page {page} of {totalPages}, {total} records",
