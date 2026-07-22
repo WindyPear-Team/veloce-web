@@ -465,26 +465,49 @@ const sensitiveSystemSettingsFields = [
   "payment_stripe_webhook_secret",
 ] as const satisfies readonly (keyof SystemSettings)[]
 
-function systemSettingsUpdatePayload(form: SystemSettings, checkInStreakRewards: string, topNavItems: string) {
-  const payload: Record<string, unknown> = {
-    ...form,
-    checkin_streak_rewards: checkInStreakRewards,
-    top_nav_items: topNavItems,
+const defaultThemeColorValues = Object.fromEntries(
+  Object.entries(defaultPublicSettings).filter(([key]) => /^theme_(light|dark)_/.test(key)),
+) as Pick<SystemSettings, ThemeColorFieldKey>
+
+const systemSettingsFieldsByTab: Partial<Record<SystemTab, readonly (keyof SystemSettings)[]>> = {
+  basic: ["system_mode", "site_name", "base_url", "icon_url", "home_iframe_url", "footer_text"],
+  theme: Object.keys(defaultThemeColorValues) as ThemeColorFieldKey[],
+  themeSettings: ["theme_background_image", "theme_custom_css"],
+  billing: ["pricing_endpoint_enabled", "referral_enabled", "referral_commission_rate", "group_multiplier_mode"],
+  payment: ["payment_channels", "payment_enabled", "payment_currency_display_name", "payment_usd_to_rmb_rate", "payment_min_recharge_amount", "payment_recharge_presets"],
+  checkIn: ["checkin_enabled", "checkin_daily_reward", "checkin_timezone", "checkin_streak_enabled", "checkin_streak_cycle_days", "checkin_streak_rewards", "checkin_random_enabled", "checkin_random_min", "checkin_random_max"],
+  security: ["rate_limit_enabled", "rate_limit_requests_per_minute", "rate_limit_burst", "sensitive_filter_enabled", "sensitive_filter_scope", "ssrf_protection_enabled", "ssrf_allow_private_networks", "sensitive_words", "ssrf_allowed_hosts"],
+  redis: ["redis_enabled", "redis_tls_enabled", "redis_address", "redis_database", "redis_username", "redis_password", "redis_password_clear"],
+  auth: ["oidc_enabled", "passkey_enabled", "password_login_enabled", "password_registration_enabled", "token_api_enabled", "email_verification_required", "password_hcaptcha_enabled", "registration_email_suffixes", "registration_email_routing", "auth_agreement_mode", "hcaptcha_site_key", "hcaptcha_secret", "oidc_issuer", "oidc_client_id", "oidc_client_secret", "oidc_redirect_url", "oauth_providers"],
+  email: ["smtp_host", "smtp_port", "smtp_username", "smtp_password", "smtp_from"],
+  content: ["announcement", "about_html", "privacy_policy_url", "terms_url", "privacy_policy", "terms"],
+  topNavigation: ["top_nav_enabled", "top_nav_items"],
+  navigation: ["sidebar_dashboard_enabled", "sidebar_usage_enabled", "sidebar_wallet_enabled", "sidebar_data_board_enabled", "sidebar_api_keys_enabled", "sidebar_chat_enabled", "sidebar_images_enabled", "sidebar_settings_enabled", "sidebar_system_enabled", "sidebar_admin_overview_enabled", "sidebar_channels_enabled", "sidebar_models_enabled", "sidebar_users_enabled"],
+  statusMonitor: ["status_monitor_enabled"],
+  reliability: ["reliability_auto_disable_enabled", "reliability_disable_after_failures", "reliability_auto_detect_upstream_enabled", "reliability_auto_detect_interval_seconds", "reliability_auto_detect_timeout_seconds", "reliability_auto_recover_enabled", "reliability_recovery_after_seconds"],
+  logCleanup: ["log_storage_mode", "log_retention_days"],
+  updates: ["auto_update_enabled", "auto_update_interval_hours"],
+}
+
+function systemSettingsUpdatePayload(form: SystemSettings, activeTab: SystemTab, checkInStreakRewards: string, topNavItems: string) {
+  const fields = systemSettingsFieldsByTab[activeTab] || []
+  const payload: Record<string, unknown> = Object.fromEntries(fields.map((key) => [key, form[key]]))
+  if (activeTab === "checkIn") {
+    payload.checkin_streak_rewards = checkInStreakRewards
+  }
+  if (activeTab === "topNavigation") {
+    payload.top_nav_items = topNavItems
   }
   for (const key of sensitiveSystemSettingsFields) {
     if (typeof payload[key] === "string" && !payload[key].trim()) {
       delete payload[key]
     }
   }
-  if (!form.redis_password.trim() && !form.redis_password_clear) {
+  if (activeTab === "redis" && !form.redis_password.trim() && !form.redis_password_clear) {
     delete payload.redis_password
   }
   return payload
 }
-
-const defaultThemeColorValues = Object.fromEntries(
-  Object.entries(defaultPublicSettings).filter(([key]) => /^theme_(light|dark)_/.test(key)),
-) as Pick<SystemSettings, ThemeColorFieldKey>
 
 const defaultRedeemDraft: RedeemCodeDraft = {
   code: "",
@@ -573,7 +596,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const [configurationImportFile, setConfigurationImportFile] = useState<File | null>(null)
   const { success, error } = useToast()
 
-  const { data: settings } = useQuery<SystemSettings>({
+  const { data: settings, isSuccess: hasLoadedSettings } = useQuery<SystemSettings>({
     queryKey: ["system-settings"],
     queryFn: async () => {
       const res = await api.get("/settings")
@@ -648,8 +671,8 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   }, [activeTab, allowedTabs, defaultTab])
 
   const saveSettings = useMutation({
-    mutationFn: async (checkInStreakRewards: string) => {
-      const res = await api.put("/settings", systemSettingsUpdatePayload(form, checkInStreakRewards, serializeTopNavRows(navRows)))
+    mutationFn: async ({ activeTab, checkInStreakRewards }: { activeTab: SystemTab; checkInStreakRewards: string }) => {
+      const res = await api.put("/settings", systemSettingsUpdatePayload(form, activeTab, checkInStreakRewards, serializeTopNavRows(navRows)))
       return res.data
     },
     onSuccess: (savedSettings: SystemSettings) => {
@@ -946,7 +969,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
     })
   }
 
-  const shouldShowSave = !["groups", "metaModels", "advancedChatAssistant", "advancedChatAttachments", "advancedChatMCP", "subscriptionPlans", "redeemCodes"].includes(activeTab)
+  const shouldShowSave = Boolean(systemSettingsFieldsByTab[activeTab]?.length)
   const visibleTabs = systemTabs(copy).filter((tab) => allowedTabs.includes(tab.id))
   const canCreateRedeemCode = Number(redeemDraft.amount || 0) > 0 || Boolean(redeemDraft.group_id) || Boolean(redeemDraft.subscription_plan_id)
   const canSaveSubscriptionPlan = Boolean(subscriptionPlanDraft.name.trim()) && Number(subscriptionPlanDraft.reset_amount || 0) > 0 && Number(subscriptionPlanDraft.reset_interval_days || 0) > 0
@@ -963,13 +986,19 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const allVisibleRedeemCodesSelected = visibleRedeemCodes.length > 0 && visibleRedeemCodes.every((code) => selectedRedeemCodeIDs.includes(code.id))
 
   const handleSaveSettings = () => {
-    const streakRewards = validateCheckInStreakRewards(form.checkin_streak_rewards, copy)
-    if (!streakRewards.valid) {
-      error(streakRewards.error)
-      setActiveTab("checkIn")
+    if (!hasLoadedSettings) {
       return
     }
-    saveSettings.mutate(streakRewards.value)
+    let checkInStreakRewards = form.checkin_streak_rewards
+    if (activeTab === "checkIn") {
+      const streakRewards = validateCheckInStreakRewards(form.checkin_streak_rewards, copy)
+      if (!streakRewards.valid) {
+        error(streakRewards.error)
+        return
+      }
+      checkInStreakRewards = streakRewards.value
+    }
+    saveSettings.mutate({ activeTab, checkInStreakRewards })
   }
 
   return (
@@ -980,7 +1009,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
           <div className="mt-2 text-sm text-muted-foreground">{copy.systemSubtitle}</div>
         </div>
         {shouldShowSave && (
-          <Button onClick={handleSaveSettings} disabled={saveSettings.isPending}>
+          <Button onClick={handleSaveSettings} disabled={!hasLoadedSettings || saveSettings.isPending}>
             {t("admin.save")}
           </Button>
         )}
