@@ -1,9 +1,10 @@
 import { useMutation, useQuery } from "@tanstack/react-query"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { Link } from "react-router-dom"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { HCaptcha } from "@/components/HCaptcha"
 import { Input } from "@/components/ui/input"
 import { useToast } from "@/components/ui/toast"
 import api, { apiURL, getOAuthLoginURL, isDesktopTarget, setAuthToken } from "@/lib/api"
@@ -420,47 +421,6 @@ function parseOAuthProviders(raw: string): OAuthProvider[] {
   } catch {
     return []
   }
-}
-
-function HCaptcha({ siteKey, onToken }: { siteKey: string; onToken: (token: string) => void }) {
-  const containerRef = useRef<HTMLDivElement | null>(null)
-  const widgetIDRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-    const render = () => {
-      const hcaptcha = (window as any).hcaptcha
-      if (!containerRef.current || !hcaptcha || widgetIDRef.current || cancelled) {
-        return
-      }
-      widgetIDRef.current = hcaptcha.render(containerRef.current, {
-        sitekey: siteKey,
-        callback: onToken,
-        "expired-callback": () => onToken(""),
-      })
-    }
-
-    if (!(window as any).hcaptcha) {
-      const existingScript = document.querySelector<HTMLScriptElement>("script[data-hcaptcha]")
-      const script = existingScript || document.createElement("script")
-      script.src = "https://js.hcaptcha.com/1/api.js?render=explicit"
-      script.async = true
-      script.defer = true
-      script.dataset.hcaptcha = "true"
-      script.addEventListener("load", render)
-      if (!existingScript) {
-        document.body.appendChild(script)
-      }
-    } else {
-      render()
-    }
-
-    return () => {
-      cancelled = true
-    }
-  }, [siteKey, onToken])
-
-  return <div ref={containerRef} className="flex justify-center" />
 }
 
 const zhCopy = {

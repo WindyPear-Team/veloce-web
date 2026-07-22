@@ -1,4 +1,4 @@
-import { BarChart3, Boxes, Building2, ChevronDown, ChevronRight, ClipboardList, Database, History, Home, KeyRound, LayoutDashboard, MessageSquare, Puzzle, ScrollText, Shield, Users } from "lucide-react"
+import { BarChart3, Boxes, Building2, ChevronDown, ChevronRight, ClipboardList, Database, History, Home, KeyRound, LayoutDashboard, LifeBuoy, MessageSquare, Puzzle, ScrollText, Shield, Users } from "lucide-react"
 import type { LucideIcon } from "lucide-react"
 import { Link, useLocation } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query"
@@ -59,6 +59,7 @@ const userMenuItems: MenuItem[] = [
   { icon: History, colorClass: "bg-amber-500/15 text-amber-600 dark:bg-amber-400/15 dark:text-amber-300", labelKey: "nav.details", path: "/dashboard/logs", settingKey: "sidebar_usage_enabled" },
   { icon: KeyRound, colorClass: "bg-cyan-500/15 text-cyan-600 dark:bg-cyan-400/15 dark:text-cyan-300", labelKey: "nav.apiKeys", path: "/dashboard/api-keys", settingKey: "sidebar_api_keys_enabled" },
   { icon: MessageSquare, colorClass: "bg-emerald-500/15 text-emerald-600 dark:bg-emerald-400/15 dark:text-emerald-300", labelKey: "nav.chat", path: "/dashboard/chat", settingKey: "sidebar_chat_enabled" },
+  { icon: LifeBuoy, colorClass: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300", label: "工单", path: "/dashboard/tickets" },
   { icon: ClipboardList, colorClass: "bg-orange-500/15 text-orange-600 dark:bg-orange-400/15 dark:text-orange-300", label: "任务", path: "/dashboard/tasks", enterpriseOnly: true },
 ]
 
@@ -66,6 +67,7 @@ const adminMenuItems: MenuItem[] = [
   { icon: BarChart3, colorClass: "bg-fuchsia-500/15 text-fuchsia-600 dark:bg-fuchsia-400/15 dark:text-fuchsia-300", labelKey: "nav.adminOverview", path: "/dashboard/admin-overview", settingKey: "sidebar_admin_overview_enabled" },
   { icon: ScrollText, colorClass: "bg-slate-500/15 text-slate-600 dark:bg-slate-400/15 dark:text-slate-300", labelKey: "nav.auditLogs", path: "/dashboard/admin-logs", settingKey: "sidebar_admin_overview_enabled" },
   { icon: Shield, colorClass: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300", labelKey: "nav.system", path: "/dashboard/admin/general", settingKey: "sidebar_system_enabled", children: systemSubItems },
+  { icon: LifeBuoy, colorClass: "bg-rose-500/15 text-rose-600 dark:bg-rose-400/15 dark:text-rose-300", label: "工单管理", path: "/dashboard/admin/tickets" },
   { icon: Building2, colorClass: "bg-indigo-500/15 text-indigo-600 dark:bg-indigo-400/15 dark:text-indigo-300", label: "企业管理", path: "/dashboard/enterprise", enterpriseOnly: true },
   { icon: Database, colorClass: "bg-teal-500/15 text-teal-600 dark:bg-teal-400/15 dark:text-teal-300", labelKey: "nav.channels", path: "/dashboard/channels", settingKey: "sidebar_channels_enabled" },
   { icon: Boxes, colorClass: "bg-pink-500/15 text-pink-600 dark:bg-pink-400/15 dark:text-pink-300", labelKey: "nav.models", path: "/dashboard/models", settingKey: "sidebar_models_enabled" },

@@ -27,6 +27,8 @@ import PublicContent from "./pages/PublicContent"
 import EnterpriseTasks from "./pages/EnterpriseTasks"
 import EnterpriseTaskDetail from "./pages/EnterpriseTaskDetail"
 import EnterpriseManagement from "./pages/EnterpriseManagement"
+import Tickets from "./pages/Tickets"
+import AdminTickets from "./pages/AdminTickets"
 import { CloudSandboxHostsPanel } from "./pages/CloudSandboxes"
 import StatusPage from "./pages/StatusPage"
 import api from "./lib/api"
@@ -242,6 +244,12 @@ function pageTitleForPath(pathname: string, language: Language, t: Translate) {
   if (normalizedPathname === "/dashboard/tasks") {
     return language === "zh" ? "我的任务" : "My Tasks"
   }
+  if (normalizedPathname === "/dashboard/tickets") {
+    return language === "zh" ? "工单" : "Support Tickets"
+  }
+  if (normalizedPathname === "/dashboard/admin/tickets") {
+    return language === "zh" ? "工单管理" : "Ticket Management"
+  }
   if (normalizedPathname === "/dashboard/enterprise") {
     return language === "zh" ? "企业管理" : "Enterprise Management"
   }
@@ -361,6 +369,8 @@ function App() {
                 <Route index element={<Dashboard />} />
                 <Route path="data-board" element={<DataBoard />} />
                 <Route path="personal-company" element={<Navigate to="/chat/agent-groups" replace />} />
+                <Route path="tickets" element={<Tickets />} />
+                <Route path="admin/tickets" element={<AdminRoute><AdminTickets /></AdminRoute>} />
                 <Route path="tasks" element={<EnterpriseRoute><EnterpriseTasks /></EnterpriseRoute>} />
 				<Route path="tasks/:id" element={<EnterpriseRoute><EnterpriseTaskDetail /></EnterpriseRoute>} />
 				<Route path="enterprise/tasks/:id" element={<EnterpriseRoute><AdminRoute><EnterpriseTaskDetail /></AdminRoute></EnterpriseRoute>} />
