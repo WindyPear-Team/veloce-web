@@ -8,6 +8,7 @@ import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import { cn } from "@/lib/utils"
+import { formatCurrency, useCurrencyDisplayName } from "@/lib/currency"
 
 interface PlatformStats {
   users: number
@@ -46,6 +47,7 @@ interface StatCard {
 
 export default function AdminOverview() {
   const { language } = useI18n()
+  const currency = useCurrencyDisplayName()
   const copy = language === "zh" ? zhCopy : enCopy
   const { data: stats } = useQuery<PlatformStats>({
     queryKey: ["stats", "admin"],
@@ -92,7 +94,7 @@ export default function AdminOverview() {
 
       <PageTitleSlot />
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6">
-        {platformCards(copy, stats, logs).map((card) => (
+        {platformCards(copy, stats, currency, logs).map((card) => (
           <Card key={card.title}>
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
               <CardTitle className="text-sm font-medium">{card.title}</CardTitle>
@@ -112,7 +114,7 @@ export default function AdminOverview() {
           <BarChart3 className="h-5 w-5 text-muted-foreground" />
         </CardHeader>
         <CardContent>
-          <HourlySpendChart data={hourlySpend} />
+          <HourlySpendChart data={hourlySpend} currency={currency} />
         </CardContent>
       </Card>
 
@@ -124,7 +126,7 @@ export default function AdminOverview() {
             <LineChart className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <DailyTrendChart data={dailyTrend} />
+            <DailyTrendChart data={dailyTrend} currency={currency} />
           </CardContent>
         </Card>
 
@@ -146,7 +148,7 @@ export default function AdminOverview() {
             <Database className="h-5 w-5 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <RankedSpendChart data={channelSpend} emptyText={copy.noData} />
+            <RankedSpendChart data={channelSpend} emptyText={copy.noData} currency={currency} />
           </CardContent>
         </Card>
 
@@ -164,7 +166,7 @@ export default function AdminOverview() {
   )
 }
 
-function platformCards(copy: AdminOverviewCopy, stats?: PlatformStats, logs: TokenLog[] = []): StatCard[] {
+function platformCards(copy: AdminOverviewCopy, stats: PlatformStats | undefined, currency: string, logs: TokenLog[] = []): StatCard[] {
   const oneMinuteAgo = Date.now() - 60_000
   const recentLogs = logs.filter((log) => new Date(log.created_at).getTime() >= oneMinuteAgo)
   const tpm = recentLogs.reduce((sum, log) => sum + Number(log.input_tokens || 0) + Number(log.output_tokens || 0), 0)
@@ -172,7 +174,7 @@ function platformCards(copy: AdminOverviewCopy, stats?: PlatformStats, logs: Tok
     { title: copy.users, value: stats?.users || 0, icon: Users, color: "text-blue-500" },
     { title: copy.channels, value: stats?.channels || 0, icon: Database, color: "text-green-500" },
     { title: copy.todayRequests, value: stats?.today_requests || 0, icon: Activity, color: "text-purple-500" },
-    { title: copy.totalCost, value: `$${stats?.total_cost || 0}`, icon: DollarSign, color: "text-yellow-500" },
+    { title: copy.totalCost, value: formatCurrency(stats?.total_cost || 0, currency), icon: DollarSign, color: "text-yellow-500" },
     { title: "RPM", value: recentLogs.length, icon: BarChart3, color: "text-cyan-500" },
     { title: "TPM", value: tpm, icon: LineChart, color: "text-pink-500" },
   ]
@@ -183,7 +185,7 @@ interface HourSpend {
   cost: number
 }
 
-function HourlySpendChart({ data }: { data: HourSpend[] }) {
+function HourlySpendChart({ data, currency }: { data: HourSpend[]; currency: string }) {
   const maxCost = Math.max(...data.map((item) => item.cost), 0)
   return (
     <div className="space-y-3">
@@ -193,7 +195,7 @@ function HourlySpendChart({ data }: { data: HourSpend[] }) {
             const height = maxCost > 0 ? Math.max(4, (item.cost / maxCost) * 128) : 4
             return (
               <div key={item.hour} className="flex min-w-0 flex-1 flex-col items-center gap-2">
-                <div className="w-full rounded-t bg-primary/80" style={{ height }} title={`${hourLabel(item.hour)} $${item.cost.toFixed(4)}`} />
+                <div className="w-full rounded-t bg-primary/80" style={{ height }} title={`${hourLabel(item.hour)} ${formatCurrency(item.cost.toFixed(4), currency)}`} />
                 <div className="h-4 text-[10px] text-muted-foreground">{item.hour % 3 === 0 ? String(item.hour).padStart(2, "0") : ""}</div>
               </div>
             )
@@ -226,7 +228,7 @@ interface DailySpend {
   requests: number
 }
 
-function DailyTrendChart({ data }: { data: DailySpend[] }) {
+function DailyTrendChart({ data, currency }: { data: DailySpend[]; currency: string }) {
   const maxCost = Math.max(...data.map((item) => item.cost), 0)
   return (
     <div className="overflow-x-auto">
@@ -236,7 +238,7 @@ function DailyTrendChart({ data }: { data: DailySpend[] }) {
           return (
             <div key={item.date.toISOString()} className="flex min-w-0 flex-1 flex-col items-center gap-2">
               <div className="text-[10px] text-muted-foreground">{item.requests}</div>
-              <div className="w-full max-w-10 rounded-t bg-green-500/80" style={{ height }} title={`${dateLabel(item.date)} $${item.cost.toFixed(4)} / ${item.requests}`} />
+              <div className="w-full max-w-10 rounded-t bg-green-500/80" style={{ height }} title={`${dateLabel(item.date)} ${formatCurrency(item.cost.toFixed(4), currency)} / ${item.requests}`} />
               <div className="h-4 text-[10px] text-muted-foreground">{shortDateLabel(item.date)}</div>
             </div>
           )
@@ -340,7 +342,7 @@ interface RankedSpend {
   requests: number
 }
 
-function RankedSpendChart({ data, emptyText }: { data: RankedSpend[]; emptyText: string }) {
+function RankedSpendChart({ data, emptyText, currency }: { data: RankedSpend[]; emptyText: string; currency: string }) {
   const maxCost = Math.max(...data.map((item) => item.cost), 0)
   if (data.length === 0) {
     return <div className="rounded-md border px-3 py-8 text-center text-sm text-muted-foreground">{emptyText}</div>
@@ -351,7 +353,7 @@ function RankedSpendChart({ data, emptyText }: { data: RankedSpend[]; emptyText:
         <div key={item.label} className="space-y-1">
           <div className="flex items-center justify-between gap-3 text-sm">
             <span className="truncate font-medium">{item.label}</span>
-            <span className="shrink-0 text-muted-foreground">${item.cost.toFixed(4)} / {item.requests}</span>
+            <span className="shrink-0 text-muted-foreground">{formatCurrency(item.cost.toFixed(4), currency)} / {item.requests}</span>
           </div>
           <div className="h-2 overflow-hidden rounded-full bg-muted">
             <div className="h-full rounded-full bg-primary" style={{ width: `${maxCost > 0 ? Math.max(3, (item.cost / maxCost) * 100) : 3}%` }} />

@@ -16,6 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useI18n } from "@/lib/i18n"
+import { formatCurrency, useCurrencyDisplayName } from "@/lib/currency"
 
 interface AuditLogUser {
   id: number
@@ -78,6 +79,7 @@ const pageSize = 25
 
 export default function AdminAuditLogs() {
   const { language } = useI18n()
+  const currency = useCurrencyDisplayName()
   const copy = language === "zh" ? zhCopy : enCopy
   const [page, setPage] = useState(1)
   const [logType, setLogType] = useState("")
@@ -238,7 +240,7 @@ export default function AdminAuditLogs() {
             <FilterInput label="模型" value={modelName} placeholder="gpt-4o" onChange={(value) => { setModelName(value); setCallPage(1) }} />
           </div>
           <div className="overflow-x-auto rounded-md border"><Table><TableHeader><TableRow><TableHead>{copy.time}</TableHead><TableHead>{copy.user}</TableHead><TableHead>路由</TableHead><TableHead>模型</TableHead><TableHead>Token</TableHead><TableHead>价格</TableHead><TableHead>倍率</TableHead><TableHead>算式</TableHead><TableHead>FRT / 总耗时</TableHead><TableHead>费用</TableHead></TableRow></TableHeader><TableBody>
-            {isCallLogsLoading ? <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">{copy.loading}</TableCell></TableRow> : callLogs.items.length === 0 ? <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">暂无调用记录</TableCell></TableRow> : callLogs.items.map((log) => <TableRow key={log.id}><TableCell className="whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</TableCell><TableCell>#{log.user_id}</TableCell><TableCell className="whitespace-nowrap text-xs">key {log.api_key_id || "-"}<br />{log.user_channel_id || "-"} / {log.channel_id}</TableCell><TableCell>{log.model_name}</TableCell><TableCell className="whitespace-nowrap text-xs">in {log.input_tokens} · out {log.output_tokens}<br /><span className="text-muted-foreground">cache {log.cached_input_tokens || 0} / write {log.cache_write_input_tokens || 0} / 1h {log.cache_write_1h_input_tokens || 0}</span></TableCell><TableCell className="whitespace-nowrap text-xs">in {formatPrice(log.input_price)}<br />out {formatPrice(log.output_price)}<br />cache {formatPrice(log.cached_input_price)}</TableCell><TableCell className="whitespace-nowrap text-xs">组 {formatMultiplier(log.group_multiplier)}×<br />通道 {formatMultiplier(log.user_channel_multiplier)}×</TableCell><TableCell className="max-w-80 truncate text-xs" title={log.pricing_formula}>{log.pricing_formula || "-"}</TableCell><TableCell className="whitespace-nowrap text-xs">{formatLatency(log.first_response_time_ms)}<br />{formatLatency(log.response_time_ms)}</TableCell><TableCell>${log.cost}</TableCell></TableRow>)}
+            {isCallLogsLoading ? <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">{copy.loading}</TableCell></TableRow> : callLogs.items.length === 0 ? <TableRow><TableCell colSpan={10} className="py-8 text-center text-muted-foreground">暂无调用记录</TableCell></TableRow> : callLogs.items.map((log) => <TableRow key={log.id}><TableCell className="whitespace-nowrap text-xs">{formatDateTime(log.created_at)}</TableCell><TableCell>#{log.user_id}</TableCell><TableCell className="whitespace-nowrap text-xs">key {log.api_key_id || "-"}<br />{log.user_channel_id || "-"} / {log.channel_id}</TableCell><TableCell>{log.model_name}</TableCell><TableCell className="whitespace-nowrap text-xs">in {log.input_tokens} · out {log.output_tokens}<br /><span className="text-muted-foreground">cache {log.cached_input_tokens || 0} / write {log.cache_write_input_tokens || 0} / 1h {log.cache_write_1h_input_tokens || 0}</span></TableCell><TableCell className="whitespace-nowrap text-xs">in {formatPrice(log.input_price, currency)}<br />out {formatPrice(log.output_price, currency)}<br />cache {formatPrice(log.cached_input_price, currency)}</TableCell><TableCell className="whitespace-nowrap text-xs">组 {formatMultiplier(log.group_multiplier)}×<br />通道 {formatMultiplier(log.user_channel_multiplier)}×</TableCell><TableCell className="max-w-80 truncate text-xs" title={log.pricing_formula}>{log.pricing_formula || "-"}</TableCell><TableCell className="whitespace-nowrap text-xs">{formatLatency(log.first_response_time_ms)}<br />{formatLatency(log.response_time_ms)}</TableCell><TableCell>{formatCurrency(log.cost, currency)}</TableCell></TableRow>)}
           </TableBody></Table></div>
           <div className="flex items-center justify-between text-sm text-muted-foreground"><span>{copy.total.replace("{total}", String(callLogs.total))}</span><div className="flex items-center gap-2"><Button variant="outline" size="sm" disabled={callPage <= 1} onClick={() => setCallPage((value) => value - 1)}>{copy.prev}</Button><span>{callPage} / {Math.max(1, Math.ceil(callLogs.total / callLogs.page_size))}</span><Button variant="outline" size="sm" disabled={callPage >= Math.max(1, Math.ceil(callLogs.total / callLogs.page_size))} onClick={() => setCallPage((value) => value + 1)}>{copy.next}</Button></div></div>
         </CardContent>
@@ -301,7 +303,7 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString()
 }
 
-function formatPrice(value: string | number) { const amount = Number(value || 0); return Number.isFinite(amount) && amount > 0 ? `$${amount.toLocaleString("en-US", { maximumFractionDigits: 8 })}/M` : "-" }
+function formatPrice(value: string | number, currency: string) { const amount = Number(value || 0); return Number.isFinite(amount) && amount > 0 ? `${formatCurrency(amount.toLocaleString("en-US", { maximumFractionDigits: 8 }), currency)}/M` : "-" }
 function formatMultiplier(value: string | number) { const amount = Number(value || 0); return Number.isFinite(amount) && amount > 0 ? amount.toLocaleString("en-US", { maximumFractionDigits: 4 }) : "-" }
 function formatLatency(value: number) { return value > 0 ? `${value} ms` : "-" }
 

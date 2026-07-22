@@ -19,6 +19,7 @@ import {
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { isPersonalMode, withPublicSettingsDefaults } from "@/lib/public-settings"
+import { formatCurrency } from "@/lib/currency"
 
 interface TokenLog {
   id: number
@@ -96,7 +97,9 @@ export default function Logs() {
       return res.data
     },
   })
-  const personalMode = isPersonalMode(withPublicSettingsDefaults(settings))
+  const publicSettings = withPublicSettingsDefaults(settings)
+  const personalMode = isPersonalMode(publicSettings)
+  const currency = publicSettings.payment_currency_display_name
   const tabOrder: DetailTab[] = personalMode ? ["calls", "checkIns"] : ["calls", "payments", "checkIns"]
 
   useEffect(() => {
@@ -185,6 +188,7 @@ export default function Logs() {
             loading={isLogsLoading}
             t={t}
             copy={copy}
+            currency={currency}
             apiKeys={apiKeys}
             startDate={startDate}
             endDate={endDate}
@@ -236,6 +240,7 @@ function CallRecordsTable({
   loading,
   t,
   copy,
+  currency,
   apiKeys,
   startDate,
   endDate,
@@ -250,6 +255,7 @@ function CallRecordsTable({
   loading: boolean
   t: ReturnType<typeof useI18n>["t"]
   copy: typeof zhDetailsCopy
+  currency: string
   apiKeys: APIKeyOption[]
   startDate: string
   endDate: string
@@ -320,11 +326,11 @@ function CallRecordsTable({
                   <TableCell>{log.user_channel_id || "-"} / {log.channel_id}</TableCell>
                   <TableCell>{log.model_name}</TableCell>
                   <TableCell className="whitespace-nowrap">in {log.input_tokens} · out {log.output_tokens}<br /><span className="text-xs text-muted-foreground">cache {log.cached_input_tokens || 0} / write {log.cache_write_input_tokens || 0} / 1h {log.cache_write_1h_input_tokens || 0}</span></TableCell>
-                  <TableCell className="whitespace-nowrap text-xs">in {formatPrice(log.input_price)}<br />out {formatPrice(log.output_price)}<br />cache {formatPrice(log.cached_input_price)}</TableCell>
+                  <TableCell className="whitespace-nowrap text-xs">in {formatPrice(log.input_price, currency)}<br />out {formatPrice(log.output_price, currency)}<br />cache {formatPrice(log.cached_input_price, currency)}</TableCell>
                   <TableCell className="whitespace-nowrap text-xs">组 {formatDecimal(log.group_multiplier)}×<br />通道 {formatDecimal(log.user_channel_multiplier)}×</TableCell>
                   <TableCell className="max-w-80 truncate text-xs" title={log.pricing_formula}>{log.pricing_formula || "-"}</TableCell>
                   <TableCell className="whitespace-nowrap text-xs">FRT {formatLatency(log.first_response_time_ms)}<br />总计 {formatLatency(log.response_time_ms)}</TableCell>
-                  <TableCell>${log.cost}</TableCell>
+                  <TableCell>{formatCurrency(log.cost, currency)}</TableCell>
                 </TableRow>
               ))
             )}
@@ -636,9 +642,9 @@ function formatDateTime(value: string) {
   return date.toLocaleString()
 }
 
-function formatPrice(value: string | number | undefined) {
+function formatPrice(value: string | number | undefined, currency: string) {
   const parsed = Number(value || 0)
-  return Number.isFinite(parsed) && parsed > 0 ? `$${parsed.toLocaleString("en-US", { maximumFractionDigits: 8 })}/M` : "-"
+  return Number.isFinite(parsed) && parsed > 0 ? `${formatCurrency(parsed.toLocaleString("en-US", { maximumFractionDigits: 8 }), currency)}/M` : "-"
 }
 
 function formatDecimal(value: string | number | undefined) {
@@ -677,7 +683,7 @@ const zhDetailsCopy = {
   apiKeyFilter: "API Key",
   allAPIKeys: "全部 API Key",
   apiKeyFallback: "API Key",
-  pricing: "价格（$/百万 token）",
+  pricing: "价格（每百万 token）",
   multipliers: "倍率",
   formula: "计费算式",
   performance: "性能",
@@ -720,7 +726,7 @@ const enDetailsCopy: typeof zhDetailsCopy = {
   apiKeyFilter: "API key",
   allAPIKeys: "All API keys",
   apiKeyFallback: "API key",
-  pricing: "Prices ($/M tokens)",
+  pricing: "Prices (per 1M tokens)",
   multipliers: "Multipliers",
   formula: "Billing formula",
   performance: "Performance",

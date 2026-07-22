@@ -21,6 +21,7 @@ import { useToast } from "@/components/ui/toast"
 import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import type { PublicSettings } from "@/lib/public-settings"
 import { isPersonalMode, withPublicSettingsDefaults } from "@/lib/public-settings"
+import { formatCurrency } from "@/lib/currency"
 
 interface UserChannelCatalog {
   id: number
@@ -89,6 +90,7 @@ export default function APIKeys() {
     },
   })
   const publicSettings = withPublicSettingsDefaults(settings)
+  const currency = publicSettings.payment_currency_display_name
   const personalMode = isPersonalMode(publicSettings)
 
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
@@ -250,6 +252,7 @@ export default function APIKeys() {
                 onResetUsage={(id) => resetAPIKeyUsage.mutate(id)}
                 onCopy={copyValue}
                 personalMode={personalMode}
+                currency={currency}
               />
             ))
           )}
@@ -337,6 +340,7 @@ function APIKeyRow({
   onResetUsage,
   onCopy,
   personalMode,
+  currency,
 }: {
   apiKey: APIKey
   catalog: UserChannelCatalog[]
@@ -346,6 +350,7 @@ function APIKeyRow({
   onResetUsage: (id: number) => void
   onCopy: (value: string) => void
   personalMode: boolean
+  currency: string
 }) {
   const { t } = useI18n()
   const [isConfigOpen, setIsConfigOpen] = useState(false)
@@ -434,8 +439,8 @@ function APIKeyRow({
         <UsageBox label={t("settings.requests")} value={formatInteger(apiKey.usage.request_count)} />
         <UsageBox label={t("settings.totalTokens")} value={formatInteger(apiKey.usage.total_tokens)} />
         <UsageBox label={t("settings.inputTokens")} value={formatInteger(apiKey.usage.input_tokens)} />
-        <UsageBox label={t("settings.totalCost")} value={formatCost(apiKey.usage.total_cost)} />
-        {!personalMode && <UsageBox label={t("settings.quotaRemaining")} value={formatQuotaRemaining(apiKey, t("settings.unlimitedQuota"))} />}
+        <UsageBox label={t("settings.totalCost")} value={formatCost(apiKey.usage.total_cost, currency)} />
+        {!personalMode && <UsageBox label={t("settings.quotaRemaining")} value={formatQuotaRemaining(apiKey, t("settings.unlimitedQuota"), currency)} />}
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-3 text-xs text-muted-foreground">
@@ -668,9 +673,9 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat().format(Number.isFinite(value) ? value : 0)
 }
 
-function formatCost(value: string | number) {
+function formatCost(value: string | number, currency: string) {
   const parsed = Number(value || 0)
-  return `$${(Number.isFinite(parsed) ? parsed : 0).toFixed(6)}`
+  return formatCurrency((Number.isFinite(parsed) ? parsed : 0).toFixed(6), currency)
 }
 
 function parseQuotaLimit(value: string) {
@@ -693,12 +698,12 @@ function quotaInputValue(value: string | number) {
   return String(value)
 }
 
-function formatQuotaRemaining(apiKey: APIKey, unlimitedLabel: string) {
+function formatQuotaRemaining(apiKey: APIKey, unlimitedLabel: string, currency: string) {
   const limit = Number(apiKey.quota_limit || 0)
   if (!Number.isFinite(limit) || limit <= 0) {
     return unlimitedLabel
   }
   const remaining = Number(apiKey.quota_remaining ?? Math.max(0, limit - Number(apiKey.usage.total_cost || 0)))
   const safeRemaining = Number.isFinite(remaining) ? Math.max(0, remaining) : 0
-  return `$${safeRemaining.toFixed(6)} / $${limit.toFixed(6)}`
+  return `${formatCurrency(safeRemaining.toFixed(6), currency)} / ${formatCurrency(limit.toFixed(6), currency)}`
 }

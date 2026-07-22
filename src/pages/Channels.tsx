@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/table"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
+import { formatCurrency, useCurrencyDisplayName } from "@/lib/currency"
 
 interface UserChannel {
   id: number
@@ -140,6 +141,7 @@ interface UpstreamChannelUsage extends UsageStats {
 
 export default function Channels() {
   const { language, t } = useI18n()
+  const currency = useCurrencyDisplayName()
   const copy = language === "zh" ? zhChannelCopy : enChannelCopy
   const queryClient = useQueryClient()
   const { success, error } = useToast()
@@ -319,7 +321,7 @@ export default function Channels() {
                     <TableCell>{routingAlgorithmLabel(channel.routing_algorithm, copy)}</TableCell>
                     <TableCell>{formatInteger(usageForUserChannel(channelUsage, channel.id).request_count)}</TableCell>
                     <TableCell>{formatInteger(usageForUserChannel(channelUsage, channel.id).total_tokens)}</TableCell>
-                    <TableCell>{formatCost(usageForUserChannel(channelUsage, channel.id).total_cost)}</TableCell>
+                    <TableCell>{formatCost(usageForUserChannel(channelUsage, channel.id).total_cost, currency)}</TableCell>
                     <TableCell>
                       <StatusBadge enabled={channel.enabled} />
                     </TableCell>
@@ -387,7 +389,7 @@ export default function Channels() {
                     <TableCell>{channel.weight}</TableCell>
                     <TableCell>{formatInteger(usageForUpstreamChannel(channelUsage, channel.id).request_count)}</TableCell>
                     <TableCell>{formatInteger(usageForUpstreamChannel(channelUsage, channel.id).total_tokens)}</TableCell>
-                    <TableCell>{formatCost(usageForUpstreamChannel(channelUsage, channel.id).total_cost)}</TableCell>
+                    <TableCell>{formatCost(usageForUpstreamChannel(channelUsage, channel.id).total_cost, currency)}</TableCell>
                     <TableCell>
                       <StatusBadge enabled={channel.enabled} />
                     </TableCell>
@@ -1553,9 +1555,9 @@ function formatInteger(value: number) {
   return new Intl.NumberFormat().format(Number.isFinite(value) ? value : 0)
 }
 
-function formatCost(value: string | number) {
+function formatCost(value: string | number, currency: string) {
   const parsed = Number(value || 0)
-  return `$${(Number.isFinite(parsed) ? parsed : 0).toFixed(6)}`
+  return formatCurrency((Number.isFinite(parsed) ? parsed : 0).toFixed(6), currency)
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

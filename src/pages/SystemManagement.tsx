@@ -52,6 +52,7 @@ import { useI18n } from "@/lib/i18n"
 import { defaultPublicSettings, parseTopNavItems } from "@/lib/public-settings"
 import type { PublicSettings } from "@/lib/public-settings"
 import { normalizeHexColor } from "@/lib/theme"
+import { formatCurrency } from "@/lib/currency"
 
 interface Group {
   id: number
@@ -1800,7 +1801,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                   subscriptionPlans.map((plan) => (
                     <div key={plan.id} className="grid grid-cols-[1fr_150px_150px_120px_160px] items-center border-b px-3 py-3 text-sm last:border-b-0">
                       <div className="font-medium">{plan.name}</div>
-                      <div>${plan.reset_amount}</div>
+                      <div>{formatCurrency(plan.reset_amount, form.payment_currency_display_name)}</div>
                       <div>{formatDuration(plan.reset_interval_days, copy)}</div>
                       <div>{plan.enabled ? copy.enabled : copy.disabled}</div>
                       <div className="flex justify-end gap-2">
@@ -1894,9 +1895,9 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                       </div>
                       <div>{item.expose_referenced_models ? copy.visible : copy.hidden}</div>
                       <div>{metaBillingModeLabel(item.billing_mode, copy)}</div>
-                      <div>{formatMetaPriceValue(item)}</div>
-                      <div>{formatMetaPriceValue(item, "output_price")}</div>
-                      <div>{formatMetaPriceValue(item, "cached_input_price")}</div>
+                      <div>{formatMetaPriceValue(item, "input_price", form.payment_currency_display_name)}</div>
+                      <div>{formatMetaPriceValue(item, "output_price", form.payment_currency_display_name)}</div>
+                      <div>{formatMetaPriceValue(item, "cached_input_price", form.payment_currency_display_name)}</div>
                       <div>{item.enabled ? copy.enabled : copy.disabled}</div>
                       <div className="flex justify-end gap-2">
                         <Button
@@ -2035,7 +2036,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                         />
                       </label>
                       <div className="font-mono text-xs">{code.code}</div>
-                      <div>${code.amount}</div>
+                      <div>{formatCurrency(code.amount, form.payment_currency_display_name)}</div>
                       <div>{code.group?.name || "-"}</div>
                       <div>{code.group_id ? formatDuration(code.group_duration_days, copy) : "-"}</div>
                       <div>{code.subscription_plan?.name || "-"}</div>
@@ -3496,16 +3497,16 @@ function metaBillingModeLabel(value: string, copy: SystemCopy) {
   return value === "meta" ? copy.billingModeMetaShort : copy.billingModeActualShort
 }
 
-function formatMetaPriceValue(item: MetaModel, key: "input_price" | "output_price" | "cached_input_price" = "input_price") {
+function formatMetaPriceValue(item: MetaModel, key: "input_price" | "output_price" | "cached_input_price", currency: string) {
   if (item.billing_mode !== "meta") {
     return "-"
   }
-  return formatPriceValue(item[key])
+  return formatPriceValue(item[key], currency)
 }
 
-function formatPriceValue(value: string | number) {
+function formatPriceValue(value: string | number, currency: string) {
   const parsed = Number(value || 0)
-  return `$${(Number.isFinite(parsed) ? parsed : 0).toFixed(6)}`
+  return formatCurrency((Number.isFinite(parsed) ? parsed : 0).toFixed(6), currency)
 }
 
 function apiErrorMessage(error: unknown, fallback: string) {

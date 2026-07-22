@@ -17,6 +17,7 @@ import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
 import type { PublicSettings } from "@/lib/public-settings"
 import { withPublicSettingsDefaults } from "@/lib/public-settings"
+import { formatCurrency, useCurrencyDisplayName } from "@/lib/currency"
 
 interface PriceTier {
   min_tokens: number
@@ -377,19 +378,21 @@ function PriceBox({
   tiers?: PriceTier[]
   showTiers?: boolean
 }) {
+  const currency = useCurrencyDisplayName()
   return (
     <div className="rounded-md border px-3 py-2">
       <div className="text-xs text-muted-foreground">{label}</div>
-      <div className="mt-1 font-mono text-sm font-semibold">{formatPrice(value)}</div>
+      <div className="mt-1 font-mono text-sm font-semibold">{formatPrice(value, currency)}</div>
       {showTiers && <TierSummary tiers={tiers} />}
     </div>
   )
 }
 
 function PriceText({ value, tiers }: { value: string | number; tiers?: PriceTier[] }) {
+  const currency = useCurrencyDisplayName()
   return (
     <div>
-      <div>{formatPrice(value)}</div>
+      <div>{formatPrice(value, currency)}</div>
       <TierSummary tiers={tiers} />
     </div>
   )
@@ -397,13 +400,14 @@ function PriceText({ value, tiers }: { value: string | number; tiers?: PriceTier
 
 function TierSummary({ tiers }: { tiers?: PriceTier[] }) {
   const { language } = useI18n()
+  const currency = useCurrencyDisplayName()
   const normalized = normalizePriceTiers(tiers || [])
   if (normalized.length === 0) {
     return null
   }
   return (
     <div className="mt-1 text-xs text-muted-foreground">
-      {normalized.map((tier) => `${tierConditionLabel(tier.condition, language)} ${formatTokenCount(tier.min_tokens)}: ${formatPrice(tier.price)}`).join(" / ")}
+      {normalized.map((tier) => `${tierConditionLabel(tier.condition, language)} ${formatTokenCount(tier.min_tokens)}: ${formatPrice(tier.price, currency)}`).join(" / ")}
     </div>
   )
 }
@@ -530,9 +534,9 @@ function numberValue(value: string | number) {
   return Number.isFinite(parsed) ? parsed : 0
 }
 
-function formatPrice(value: string | number) {
+function formatPrice(value: string | number, currency: string) {
   const parsed = numberValue(value)
-  return `$${parsed.toFixed(6)} / 1M`
+  return `${formatCurrency(parsed.toFixed(6), currency)} / 1M`
 }
 
 function formatTokenCount(value: number) {

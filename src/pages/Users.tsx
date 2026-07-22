@@ -26,6 +26,8 @@ import { useToast } from "@/components/ui/toast"
 import { useConfirmDialog } from "@/components/ui/confirm-dialog"
 import EnterprisePeopleManagement from "@/pages/EnterprisePeopleManagement"
 import type { PublicSettings } from "@/lib/public-settings"
+import { formatCurrency } from "@/lib/currency"
+import { withPublicSettingsDefaults } from "@/lib/public-settings"
 
 interface Group {
   id: number
@@ -65,7 +67,9 @@ export default function Users() {
   const { success, error } = useToast()
   const { confirm, confirmDialog } = useConfirmDialog()
   const { data: settings } = useQuery<Partial<PublicSettings>>({ queryKey: ["public-settings"], queryFn: async () => (await api.get("/public/settings")).data })
-  const enterpriseMode = String(settings?.system_mode || "").toLowerCase() === "enterprise"
+  const publicSettings = withPublicSettingsDefaults(settings)
+  const enterpriseMode = String(publicSettings.system_mode || "").toLowerCase() === "enterprise"
+  const currency = publicSettings.payment_currency_display_name
 
   const { data: users = [], isLoading } = useQuery<User[]>({
     queryKey: ["users"],
@@ -154,7 +158,7 @@ export default function Users() {
                   <TableCell className="font-medium">{user.username}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{groupNames(user)}</TableCell>
-                  <TableCell>${user.balance}</TableCell>
+                  <TableCell>{formatCurrency(user.balance, currency)}</TableCell>
                   <TableCell>{user.is_admin ? t("common.yes") : t("common.no")}</TableCell>
                   <TableCell className="text-right space-x-2">
                     <Button variant="outline" size="icon" title={t("common.edit")} onClick={() => setEditingUser(userToDraft(user))}>

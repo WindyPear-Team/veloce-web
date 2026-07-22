@@ -6,6 +6,7 @@ import { Download, Edit, Plus, Trash } from "lucide-react"
 import type { AxiosError } from "axios"
 import api from "@/lib/api"
 import { useI18n } from "@/lib/i18n"
+import { formatCurrency, useCurrencyDisplayName } from "@/lib/currency"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
@@ -955,9 +956,10 @@ function VideoBillingEditor({
 }
 
 function PriceWithTiers({ value, tiers }: { value: string | number; tiers?: PriceTier[] }) {
+  const currency = useCurrencyDisplayName()
   return (
     <div>
-      <div>{formatModelPrice(value)}</div>
+      <div>{formatModelPrice(value, currency)}</div>
       <TierSummary tiers={tiers} />
     </div>
   )
@@ -966,13 +968,14 @@ function PriceWithTiers({ value, tiers }: { value: string | number; tiers?: Pric
 function TierSummary({ tiers }: { tiers?: PriceTier[] }) {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
+  const currency = useCurrencyDisplayName()
   const normalized = normalizePriceTiers(tiers || [])
   if (normalized.length === 0) {
     return null
   }
   return (
     <div className="mt-1 text-xs text-muted-foreground">
-      {normalized.map((tier) => `${tierConditionLabel(tier.condition, copy)} ${formatTokenCount(tier.min_tokens)}: ${formatModelPrice(tier.price)}`).join(" / ")}
+      {normalized.map((tier) => `${tierConditionLabel(tier.condition, copy)} ${formatTokenCount(tier.min_tokens)}: ${formatModelPrice(tier.price, currency)}`).join(" / ")}
     </div>
   )
 }
@@ -1112,12 +1115,12 @@ function modelPayload(model: Partial<ModelConfig>) {
   }
 }
 
-function formatModelPrice(value: string | number) {
+function formatModelPrice(value: string | number, currency: string) {
   const parsed = Number(value || 0)
   if (!Number.isFinite(parsed)) {
     return "-"
   }
-  return `$${parsed.toFixed(6)} / 1M`
+  return `${formatCurrency(parsed.toFixed(6), currency)} / 1M`
 }
 
 function quotaTypeLabel(value: number | undefined, copy: typeof zhCopy) {
