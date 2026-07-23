@@ -15,6 +15,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuRadioG
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { Switch } from "@/components/ui/switch"
 import { PageInlineSlot, PageTitleSlot } from "@/components/layout/PageTitleSlot"
 import { useToast } from "@/components/ui/toast"
 import { cn } from "@/lib/utils"
@@ -84,6 +85,7 @@ interface ChatSession {
   max_tokens?: number
   temperature?: number | null
   reasoning_effort?: string
+  auto_compress_context: boolean
   created_at: string
   updated_at: string
 }
@@ -2245,6 +2247,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
               reasoning_effort: session.reasoning_effort || "",
+              auto_compress_context: session.auto_compress_context,
               stream: false,
             })
             const serverSession = normalizeSession(res.data?.session)
@@ -2287,6 +2290,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
               reasoning_effort: session.reasoning_effort || "",
+              auto_compress_context: session.auto_compress_context,
               stream: false,
             })
             const content = typeof res.data?.message?.content === "string" ? res.data.message.content : ""
@@ -2350,6 +2354,7 @@ export default function Chat({ variant = "basic" }: ChatProps) {
               max_tokens: session.max_tokens || 0,
               temperature: session.temperature ?? null,
               reasoning_effort: session.reasoning_effort || "",
+              auto_compress_context: session.auto_compress_context,
               stream: true,
             }),
             signal: controller.signal,
@@ -2439,7 +2444,8 @@ export default function Chat({ variant = "basic" }: ChatProps) {
 
       let answer = ""
       const systemPrompt = ""
-      const request = chatRequest(endpointMode, resolvedModel, rawKey, nextMessages, systemPrompt)
+      const requestMessages = session.auto_compress_context ? compressClientChatMessages(nextMessages) : nextMessages
+      const request = chatRequest(endpointMode, resolvedModel, rawKey, requestMessages, systemPrompt)
       const response = await fetch(apiURL(request.url), {
         method: "POST",
         headers: request.headers,
@@ -4248,6 +4254,19 @@ export default function Chat({ variant = "basic" }: ChatProps) {
                       ))}
                     </SelectContent></Select>
                   </label>
+                  <div className="flex items-center justify-between gap-4 rounded-md border px-3 py-2.5">
+                    <div className="min-w-0">
+                      <div className="text-sm font-medium">{copy.autoCompressContext}</div>
+                      <div className="text-xs text-muted-foreground">{copy.autoCompressContextHint}</div>
+                    </div>
+                    <Switch
+                      checked={currentSession?.auto_compress_context !== false}
+                      onCheckedChange={(checked) => {
+                        if (currentSession) updateSession(currentSession.id, (session) => ({ ...session, auto_compress_context: checked }), { persist: true })
+                      }}
+                      aria-label={copy.autoCompressContext}
+                    />
+                  </div>
                 </div>
               )}
 
@@ -5990,6 +6009,7 @@ async function saveAdvancedSessionSnapshot(session: ChatSession): Promise<ChatSe
     max_tokens: safeSession.max_tokens || 0,
     temperature: safeSession.temperature ?? null,
     reasoning_effort: safeSession.reasoning_effort || "",
+    auto_compress_context: safeSession.auto_compress_context,
     messages: safeSession.messages.map((message) => ({
       id: message.id,
       role: message.role,
@@ -6499,6 +6519,20 @@ function normalizeStoredFileContent(value: unknown): StoredFileContent {
   }
 }
 
+const clientContextCompressionChars = 48000
+
+function compressClientChatMessages(messages: ChatMessage[]) {
+  const total = messages.reduce((sum, message) => sum + Array.from(message.content).length, 0)
+  if (total <= clientContextCompressionChars || messages.length <= 8) return messages
+  const recent = messages.slice(-12)
+  const summary = messages.slice(0, -12).map((message) => {
+    const content = message.content.replace(/\s+/g, " ").trim()
+    const excerpt = Array.from(content).slice(0, 240).join("")
+    return content ? `${message.role}: ${excerpt}${Array.from(content).length > 240 ? "..." : ""}` : ""
+  }).filter(Boolean).join("\n")
+  return [createMessage("assistant", `[Earlier conversation compressed for context]\n${summary}`), ...recent]
+}
+
 function normalizeSharedPool(value: unknown): EnterpriseSharedPool | null {
   const item = isRecord(value) ? value : {}
   const id = Number(item.id || 0)
@@ -6585,6 +6619,7 @@ function normalizeSession(value: unknown): ChatSession | null {
     max_tokens: Number(value.max_tokens || 0) || 0,
     temperature: value.temperature === null || value.temperature === undefined ? null : Number(value.temperature),
     reasoning_effort: stringFromUnknown(value.reasoning_effort) || "",
+    auto_compress_context: value.auto_compress_context !== false,
     created_at: typeof value.created_at === "string" ? value.created_at : new Date().toISOString(),
     updated_at: typeof value.updated_at === "string" ? value.updated_at : new Date().toISOString(),
   }
@@ -6968,6 +7003,7 @@ function createSession(input: { agentID?: string; modelName?: string } = {}): Ch
     max_tokens: 0,
     temperature: null,
     reasoning_effort: "",
+    auto_compress_context: true,
     created_at: now,
     updated_at: now,
   }
@@ -7848,6 +7884,8 @@ const chatCopyKeys = {
   reasoningLow: "chat.reasoningLow",
   reasoningMedium: "chat.reasoningMedium",
   reasoningHigh: "chat.reasoningHigh",
+  autoCompressContext: "chat.autoCompressContext",
+  autoCompressContextHint: "chat.autoCompressContextHint",
   addedAgent: "chat.addedAgent",
   noAgentAdded: "chat.noAgentAdded",
   setAgent: "chat.setAgent",

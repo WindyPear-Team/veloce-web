@@ -151,7 +151,8 @@ function DeclarativeActionButton({ pluginId, node, values }: { pluginId: string;
   const label = stringValue(node.submit_label || node.label || "运行")
   const runAction = useMutation({
     mutationFn: async () => {
-      const res = await api.post(`/user/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(action)}`, { values })
+      const requestID = globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`
+      const res = await api.post(`/user/plugins/${encodeURIComponent(pluginId)}/actions/${encodeURIComponent(action)}`, { values }, { headers: { "Idempotency-Key": requestID } })
       return res.data
     },
     onSuccess: (data) => success(stringValue(recordValue(data, "message")) || "插件操作已完成"),

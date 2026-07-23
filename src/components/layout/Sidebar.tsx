@@ -135,11 +135,12 @@ export function Sidebar({ className, onNavigate }: { className?: string; onNavig
                   onNavigate={onNavigate}
                 />
               ))}
-              {pluginItems.map((item) => (
-                <SidebarLink key={item.path} item={item} active={location.pathname === item.path || location.pathname.startsWith(item.path + "/")} onNavigate={onNavigate} />
-              ))}
             </>
           )}
+          {pluginItems.length > 0 && <div className="my-2 border-t" />}
+          {pluginItems.map((item) => (
+            <SidebarLink key={item.path} item={item} active={location.pathname === item.path || location.pathname.startsWith(item.path + "/")} onNavigate={onNavigate} />
+          ))}
         </div>
       </nav>
     </div>
