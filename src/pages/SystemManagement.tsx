@@ -238,6 +238,12 @@ interface AutoUpdateStatus {
   supported: boolean
   last_checked_at: string
   last_error: string
+  in_progress: boolean
+  phase: string
+  progress: number
+  downloaded_bytes: number
+  total_bytes: number
+  message: string
 }
 
 type ConfigurationSection = "system_settings" | "channels" | "model_data" | "model_prices"
@@ -656,6 +662,7 @@ export default function SystemManagement({ section = "general", initialTab }: { 
   const { data: autoUpdateStatus } = useQuery<AutoUpdateStatus>({
     queryKey: ["auto-update-status"],
     queryFn: async () => (await api.get("/updates")).data,
+    refetchInterval: 1000,
   })
 
   useEffect(() => {
@@ -693,6 +700,15 @@ export default function SystemManagement({ section = "general", initialTab }: { 
       success(status.update_available ? copy.autoUpdateAvailable : copy.autoUpdateUpToDate)
     },
     onError: (err) => error(apiErrorMessage(err, copy.autoUpdateCheckFailed)),
+  })
+
+  const startAutoUpdate = useMutation({
+    mutationFn: async () => (await api.post("/updates/apply")).data as AutoUpdateStatus,
+    onSuccess: (status) => {
+      queryClient.setQueryData(["auto-update-status"], status)
+      success(copy.autoUpdateStarted)
+    },
+    onError: (err) => error(apiErrorMessage(err, copy.autoUpdateStartFailed)),
   })
 
   const deleteLogs = useMutation({
@@ -1676,8 +1692,24 @@ export default function SystemManagement({ section = "general", initialTab }: { 
                 <RefreshCw size={16} className={checkForUpdate.isPending ? "animate-spin" : ""} />
                 {copy.autoUpdateCheckNow}
               </Button>
+              <Button className="gap-2" disabled={!autoUpdateStatus?.supported || !autoUpdateStatus?.update_available || autoUpdateStatus.in_progress || startAutoUpdate.isPending} onClick={() => startAutoUpdate.mutate()}>
+                <Download size={16} />
+                {copy.autoUpdateInstallNow}
+              </Button>
               {autoUpdateStatus?.update_available && <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">{copy.autoUpdateAvailable}</span>}
             </div>
+            {autoUpdateStatus?.in_progress && (
+              <div className="rounded-md border p-4">
+                <div className="flex items-center justify-between gap-3 text-sm">
+                  <span>{autoUpdateStatus.message || copy.autoUpdateInProgress}</span>
+                  {autoUpdateStatus.total_bytes > 0 && <span className="font-mono text-xs text-muted-foreground">{Math.min(100, Math.max(0, autoUpdateStatus.progress))}%</span>}
+                </div>
+                <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted">
+                  <div className={`h-full bg-primary transition-[width] ${autoUpdateStatus.total_bytes > 0 ? "" : "w-full animate-pulse"}`} style={autoUpdateStatus.total_bytes > 0 ? { width: `${Math.min(100, Math.max(0, autoUpdateStatus.progress))}%` } : undefined} />
+                </div>
+                {autoUpdateStatus.total_bytes > 0 && <div className="mt-2 text-xs text-muted-foreground">{formatAutoUpdateBytes(autoUpdateStatus.downloaded_bytes)} / {formatAutoUpdateBytes(autoUpdateStatus.total_bytes)}</div>}
+              </div>
+            )}
             <p className="text-xs leading-5 text-muted-foreground">{copy.autoUpdateHint}</p>
           </div>
         </SettingsPanel>
@@ -3572,6 +3604,13 @@ function formatAutoUpdateTime(value?: string) {
   return Number.isNaN(parsed.getTime()) ? value : parsed.toLocaleString()
 }
 
+function formatAutoUpdateBytes(value: number) {
+  if (!Number.isFinite(value) || value <= 0) return "0 B"
+  if (value < 1024) return `${value} B`
+  if (value < 1024 * 1024) return `${(value / 1024).toFixed(1)} KB`
+  return `${(value / 1024 / 1024).toFixed(1)} MB`
+}
+
 function filterAndSortRedeemCodes(
   codes: RedeemCode[],
   filters: { search: string; status: string; groupID: string; sort: string }
@@ -4092,7 +4131,11 @@ const zhCopy = {
   autoUpdateLastChecked: "上次检查",
   autoUpdateLastError: "最近错误",
   autoUpdateCheckNow: "立即检查",
-  autoUpdateAvailable: "发现可用更新；启用后会在下一次检查时自动安装并重启。",
+  autoUpdateInstallNow: "立即更新",
+  autoUpdateStarted: "更新已开始下载，完成后服务会自动重启。",
+  autoUpdateStartFailed: "启动更新失败",
+  autoUpdateInProgress: "正在更新",
+  autoUpdateAvailable: "发现可用更新；可立即更新，或在启用自动更新后按下次计划检查时安装并重启。",
   autoUpdateUpToDate: "当前已是最新版本。",
   autoUpdateCheckFailed: "检查更新失败",
   autoUpdateUnsupported: "当前不是带发布版本号的官方二进制，不能自动更新。请安装官方 Release 包。",
@@ -4530,7 +4573,11 @@ const enCopy: SystemCopy = {
   autoUpdateLastChecked: "Last checked",
   autoUpdateLastError: "Last error",
   autoUpdateCheckNow: "Check now",
-  autoUpdateAvailable: "An update is available. Once enabled, it will install and restart on the next scheduled check.",
+  autoUpdateInstallNow: "Update now",
+  autoUpdateStarted: "Update download started. The service will restart when it finishes.",
+  autoUpdateStartFailed: "Failed to start update",
+  autoUpdateInProgress: "Updating",
+  autoUpdateAvailable: "An update is available. Update now, or enable automatic updates to install it on the next scheduled check.",
   autoUpdateUpToDate: "You are up to date.",
   autoUpdateCheckFailed: "Failed to check for updates",
   autoUpdateUnsupported: "This is not an official release binary with a version, so it cannot update itself. Install an official release package.",
