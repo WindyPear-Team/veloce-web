@@ -44,6 +44,8 @@ export default function Login() {
   const [password, setPassword] = useState("")
   const [emailCode, setEmailCode] = useState("")
   const [captchaToken, setCaptchaToken] = useState("")
+  const [captchaVerifiedEmail, setCaptchaVerifiedEmail] = useState("")
+  const [captchaResetKey, setCaptchaResetKey] = useState(0)
   const [agreementAccepted, setAgreementAccepted] = useState(false)
   const labels = language === "zh"
     ? { about: "关于", privacy: "隐私政策", terms: "用户协议" }
@@ -157,7 +159,12 @@ export default function Login() {
       }
       return body
     },
-    onSuccess: () => success(copy.codeSent),
+    onSuccess: () => {
+      setCaptchaVerifiedEmail(email.trim().toLowerCase())
+      setCaptchaToken("")
+      setCaptchaResetKey((value) => value + 1)
+      success(copy.codeSent)
+    },
     onError: (err) => error(err instanceof Error ? err.message : copy.sendCodeFailed),
   })
 
@@ -170,6 +177,8 @@ export default function Login() {
   }
 
   const passwordAuthEnabled = publicSettings.password_login_enabled || publicSettings.password_registration_enabled
+  const captchaEnabled = passwordAuthEnabled && publicSettings.password_hcaptcha_enabled && Boolean(publicSettings.hcaptcha_site_key)
+  const captchaSatisfiedByEmailCode = mode === "register" && publicSettings.email_verification_required && captchaVerifiedEmail === email.trim().toLowerCase()
   const oauthEnabled = publicSettings.oidc_enabled && oauthProviders.length > 0
   const oidcOnly = oauthEnabled && !passwordAuthEnabled && !publicSettings.passkey_enabled
   const privacyHref = legalHref("privacy", publicSettings)
@@ -233,12 +242,12 @@ export default function Login() {
               {mode === "register" && publicSettings.password_registration_enabled && (
                 <div className="space-y-3">
                   <Input value={username} placeholder={copy.usernamePlaceholder} onChange={(event) => setUsername(event.target.value)} />
-                  <Input value={email} type="email" placeholder={copy.emailPlaceholder} onChange={(event) => setEmail(event.target.value)} />
+                  <Input value={email} type="email" placeholder={copy.emailPlaceholder} onChange={(event) => { setEmail(event.target.value); if (event.target.value.trim().toLowerCase() !== captchaVerifiedEmail) setCaptchaVerifiedEmail("") }} />
                   <Input value={password} type="password" placeholder={copy.passwordPlaceholder} onChange={(event) => setPassword(event.target.value)} />
                   {publicSettings.email_verification_required && (
                     <div className="flex flex-col gap-2 sm:flex-row">
                       <Input value={emailCode} placeholder={copy.emailCodePlaceholder} onChange={(event) => setEmailCode(event.target.value)} />
-                      <Button variant="outline" className="shrink-0" disabled={!email.trim() || sendCode.isPending} onClick={() => sendCode.mutate()}>
+                      <Button variant="outline" className="shrink-0" disabled={!email.trim() || (captchaEnabled && !captchaToken) || sendCode.isPending} onClick={() => sendCode.mutate()}>
                         {copy.sendCode}
                       </Button>
                     </div>
@@ -250,8 +259,8 @@ export default function Login() {
                 <Input value={identifier} placeholder={copy.passkeyIdentifierPlaceholder} onChange={(event) => setIdentifier(event.target.value)} />
               )}
 
-              {passwordAuthEnabled && publicSettings.password_hcaptcha_enabled && publicSettings.hcaptcha_site_key && (
-                <HCaptcha siteKey={publicSettings.hcaptcha_site_key} onToken={setCaptchaToken} />
+              {captchaEnabled && !captchaSatisfiedByEmailCode && (
+                <HCaptcha siteKey={publicSettings.hcaptcha_site_key} onToken={setCaptchaToken} resetKey={captchaResetKey} />
               )}
 
               {hasAgreement && (
