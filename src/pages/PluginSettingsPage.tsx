@@ -1,18 +1,20 @@
 import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Link, useParams } from "react-router-dom"
-import { ChevronLeft, Save, SlidersHorizontal } from "lucide-react"
+import { ChevronLeft, Pencil, Plus, Save, SlidersHorizontal, Trash2 } from "lucide-react"
 import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
+import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { useToast } from "@/components/ui/toast"
 
 interface PluginDetail {
@@ -162,6 +164,7 @@ function PluginSettingsForm({ fields, values, onChange }: { fields: PluginSettin
 
 function PluginSettingsFieldControl({ field, value, onChange }: { field: PluginSettingsField; value: unknown; onChange: (value: unknown) => void }) {
   const label = <div className="space-y-1"><Label className="text-sm font-medium">{field.label}{field.required && <span className="ml-1 text-destructive">*</span>}</Label>{field.description && <div className="text-xs text-muted-foreground">{field.description}</div>}</div>
+  if (field.type === "editable_list") return <EditableListFieldControl field={field} value={value} onChange={onChange} label={label} />
   if (field.type === "switch") return <div className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<Switch className="mt-0.5 shrink-0" checked={Boolean(value)} onCheckedChange={onChange} /></div>
   if (["checkbox", "boolean"].includes(field.type)) return <label className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<Checkbox className="mt-1 shrink-0" checked={Boolean(value)} onCheckedChange={(checked) => onChange(checked === true)} /></label>
   if (["textarea", "text"].includes(field.type)) return <div className="space-y-2">{label}<Textarea className="min-h-28" value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
@@ -170,6 +173,102 @@ function PluginSettingsFieldControl({ field, value, onChange }: { field: PluginS
   if (["multiselect", "multi_select", "tags"].includes(field.type)) { const selected = Array.isArray(value) ? value.map(String) : []; const toggleOption = (optionValue: string, checked: boolean) => onChange(checked ? [...selected, optionValue] : selected.filter((item) => item !== optionValue)); return <div className="space-y-2">{label}<div className="grid gap-2 rounded-2xl bg-input/50 p-3">{field.options.map((option) => <label key={option.value} className="flex cursor-pointer items-center gap-2 text-sm"><Checkbox checked={selected.includes(option.value)} onCheckedChange={(checked) => toggleOption(option.value, checked === true)} />{option.label}</label>)}</div></div> }
   if (["json", "object", "array"].includes(field.type)) return <div className="space-y-2">{label}<Textarea key={JSON.stringify(value ?? null)} className="min-h-28 font-mono" defaultValue={JSON.stringify(value ?? (field.type === "array" ? [] : {}), null, 2)} onBlur={(event) => { try { onChange(JSON.parse(event.target.value || (field.type === "array" ? "[]" : "{}"))) } catch { onChange(event.target.value) } }} /></div>
   return <div className="space-y-2">{label}<Input type={field.type === "password" || field.type === "secret" ? "password" : "text"} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
+}
+
+function EditableListFieldControl({ field, value, onChange, label }: { field: PluginSettingsField; value: unknown; onChange: (value: unknown) => void; label: React.ReactNode }) {
+  const items = Array.isArray(value) ? value.filter(isRecord) : []
+  const columns = field.options
+  const [draft, setDraft] = useState<{ index: number | null; item: Record<string, unknown> } | null>(null)
+  const openNew = () => setDraft({ index: null, item: createEditableListItem(field) })
+  const saveDraft = () => {
+    if (!draft || !editableListDraftValid(draft, items, columns)) return
+    const next = [...items]
+    if (draft.index === null) next.push(draft.item)
+    else next[draft.index] = draft.item
+    onChange(next)
+    setDraft(null)
+  }
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-4">
+        {label}
+        <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={openNew}><Plus size={15} />添加项目</Button>
+      </div>
+      {items.length ? (
+        <div className="rounded-md border">
+          <Table>
+            <TableHeader><TableRow>{columns.map((column) => <TableHead key={column.value}>{column.label}</TableHead>)}<TableHead className="w-24 text-right">操作</TableHead></TableRow></TableHeader>
+            <TableBody>{items.map((item, index) => (
+              <TableRow key={stringValue(item.id) || index}>
+                {columns.map((column) => <TableCell key={column.value}>{editableListCellValue(item[column.value])}</TableCell>)}
+                <TableCell><div className="flex justify-end gap-1"><Button type="button" size="icon" variant="ghost" aria-label={`编辑${field.label}项目`} onClick={() => setDraft({ index, item: { ...item } })}><Pencil size={15} /></Button><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" aria-label={`删除${field.label}项目`} onClick={() => { if (window.confirm("确定删除这个项目吗？")) onChange(items.filter((_, itemIndex) => itemIndex !== index)) }}><Trash2 size={15} /></Button></div></TableCell>
+              </TableRow>
+            ))}</TableBody>
+          </Table>
+        </div>
+      ) : <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">暂无项目，点击“添加项目”开始配置。</div>}
+      <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open) setDraft(null) }}>
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
+          <DialogHeader><DialogTitle>{draft?.index === null ? `添加${field.label}项目` : `编辑${field.label}项目`}</DialogTitle></DialogHeader>
+          {draft && <div className="space-y-4">{columns.map((column) => {
+            const current = draft.item[column.value]
+            const type = editableListValueType(field, column.value, current)
+            if (type === "boolean") return <div key={column.value} className="flex items-center justify-between gap-4 rounded-md border p-3"><Label>{column.label}</Label><Switch checked={Boolean(current)} onCheckedChange={(checked) => setDraft({ ...draft, item: { ...draft.item, [column.value]: checked } })} /></div>
+            return <div key={column.value} className="space-y-2"><Label>{column.label}</Label><Input type={type === "number" ? "number" : "text"} min={column.value === "weight" ? 1 : undefined} step={column.value === "weight" ? 1 : column.value === "reward" ? "0.000001" : undefined} value={current === undefined || current === null ? "" : String(current)} onChange={(event) => setDraft({ ...draft, item: { ...draft.item, [column.value]: type === "number" ? (event.target.value === "" ? "" : Number(event.target.value)) : event.target.value } })} /></div>
+          })}</div>}
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setDraft(null)}>取消</Button><Button type="button" disabled={!draft || !editableListDraftValid(draft, items, columns)} onClick={saveDraft}>保存奖项</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
+function createEditableListItem(field: PluginSettingsField) {
+  const template = Array.isArray(field.defaultValue) && isRecord(field.defaultValue[0]) ? field.defaultValue[0] : {}
+  const item: Record<string, unknown> = {}
+  for (const column of field.options) {
+    const sample = template[column.value]
+    if (column.value === "id") item[column.value] = `item-${Date.now()}`
+    else if (column.value === "enabled") item[column.value] = true
+    else if (column.value === "weight") item[column.value] = 1
+    else if (column.value === "reward") item[column.value] = "0"
+    else if (typeof sample === "boolean") item[column.value] = false
+    else if (typeof sample === "number") item[column.value] = 0
+    else item[column.value] = ""
+  }
+  return item
+}
+
+function editableListValueType(field: PluginSettingsField, key: string, value: unknown) {
+  if (typeof value === "boolean") return "boolean"
+  if (typeof value === "number") return "number"
+  const template = Array.isArray(field.defaultValue) && isRecord(field.defaultValue[0]) ? field.defaultValue[0][key] : undefined
+  if (typeof template === "boolean" || key === "enabled") return "boolean"
+  if (typeof template === "number" || key === "weight") return "number"
+  return "text"
+}
+
+function editableListItemValid(item: Record<string, unknown>, columns: Array<{ label: string; value: string }>) {
+  return columns.every((column) => {
+    const value = item[column.value]
+    if (typeof value === "boolean") return true
+    if (typeof value === "number") return Number.isFinite(value) && (column.value !== "weight" || value > 0)
+    const text = String(value ?? "").trim()
+    if (!text) return false
+    if (column.value === "reward") return /^(?:\d{1,14})(?:\.\d{1,6})?$/.test(text)
+    return true
+  })
+}
+
+function editableListDraftValid(draft: { index: number | null; item: Record<string, unknown> }, items: Record<string, unknown>[], columns: Array<{ label: string; value: string }>) {
+  if (!editableListItemValid(draft.item, columns)) return false
+  const id = String(draft.item.id ?? "").trim()
+  return !id || !items.some((item, index) => index !== draft.index && String(item.id ?? "").trim() === id)
+}
+
+function editableListCellValue(value: unknown) {
+  if (typeof value === "boolean") return value ? <Badge variant="secondary">启用</Badge> : <Badge variant="outline">停用</Badge>
+  return stringValue(value) || "-"
 }
 
 function normalizePluginDetail(value: unknown): PluginDetail {
@@ -236,7 +335,7 @@ function normalizeSettingsFieldType(type: string, options: Array<{ label: string
   if (type === "bool" || type === "boolean") return "switch"
   if (type === "int") return "integer"
   if (type === "float") return "number"
-  return ["select", "enum", "multiselect", "multi_select", "tags", "textarea", "text", "number", "integer", "json", "object", "array", "password", "secret", "switch", "checkbox"].includes(type) ? type : "input"
+  return ["select", "enum", "multiselect", "multi_select", "tags", "textarea", "text", "number", "integer", "json", "object", "array", "editable_list", "password", "secret", "switch", "checkbox"].includes(type) ? type : "input"
 }
 
 function buildSettingsValues(fields: PluginSettingsField[], config: Record<string, unknown>) {
@@ -249,7 +348,7 @@ function buildSettingsValues(fields: PluginSettingsField[], config: Record<strin
 function defaultSettingsFieldValue(field: PluginSettingsField) {
   if (["switch", "checkbox", "boolean"].includes(field.type)) return false
   if (["number", "integer"].includes(field.type)) return ""
-  if (["multiselect", "multi_select", "tags", "array"].includes(field.type)) return []
+  if (["multiselect", "multi_select", "tags", "array", "editable_list"].includes(field.type)) return []
   if (["json", "object"].includes(field.type)) return {}
   return ""
 }
