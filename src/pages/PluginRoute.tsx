@@ -1,5 +1,5 @@
 import { Switch } from "@/components/ui/switch"
-import { useMemo, useState } from "react"
+import { Component, useMemo, useState, type ReactNode } from "react"
 import { useMutation, useQuery } from "@tanstack/react-query"
 import { useParams } from "react-router-dom"
 import api from "@/lib/api"
@@ -52,9 +52,31 @@ export default function PluginRoute() {
         <h1 className="text-3xl font-bold">{stringValue(recordValue(route, "title")) || plugin?.name || "Plugin"}</h1>
         {stringValue(recordValue(route, "description")) && <p className="mt-1 text-sm text-muted-foreground">{stringValue(recordValue(route, "description"))}</p>}
       </div>
-      <DeclarativePluginView pluginId={pluginId} schema={recordValue(route, "page") || route || recordValue(plugin?.frontend, "page")} settings={settings} settingsLoading={settingsQuery.isLoading} />
+      <PluginPageBoundary key={`${pluginId}:${routePath}`}>
+        <DeclarativePluginView pluginId={pluginId} schema={recordValue(route, "page") || route || recordValue(plugin?.frontend, "page")} settings={settings} settingsLoading={settingsQuery.isLoading} />
+      </PluginPageBoundary>
     </div>
   )
+}
+
+class PluginPageBoundary extends Component<{ children: ReactNode }, { message: string }> {
+  state = { message: "" }
+
+  static getDerivedStateFromError(error: unknown) {
+    return { message: error instanceof Error ? error.message : "未知渲染错误" }
+  }
+
+  render() {
+    if (this.state.message) {
+      return (
+        <div className="rounded-md border border-destructive/40 bg-destructive/5 px-4 py-5 text-sm">
+          <div className="font-medium">插件页面暂时无法渲染</div>
+          <p className="mt-1 text-muted-foreground">{this.state.message}</p>
+        </div>
+      )
+    }
+    return this.props.children
+  }
 }
 
 export function DeclarativePluginView({ pluginId, schema, settings = {}, settingsLoading = false }: { pluginId: string; schema: unknown; settings?: Record<string, unknown>; settingsLoading?: boolean }) {
@@ -76,10 +98,13 @@ function DeclarativeNode({ pluginId, node, settings, settingsLoading }: { plugin
   }
   const type = stringValue(node.type || "page")
   if (type === "page" || type === "section") {
+    const content = node.children ?? node.body ?? node.content
     return (
       <div className="space-y-4">
         {stringValue(node.title) && <h2 className="text-xl font-semibold">{stringValue(node.title)}</h2>}
-        <DeclarativeNode pluginId={pluginId} node={node.children || node.body || node.content} settings={settings} settingsLoading={settingsLoading} />
+        {content === undefined || content === null ? (
+          <div className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">插件没有提供可渲染的页面内容</div>
+        ) : <DeclarativeNode pluginId={pluginId} node={content} settings={settings} settingsLoading={settingsLoading} />}
       </div>
     )
   }

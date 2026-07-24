@@ -1,6 +1,6 @@
 import { Switch } from "@/components/ui/switch"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { Download, Edit, ListTree, Plus, Power, SlidersHorizontal, Trash } from "lucide-react"
 import type { AxiosError } from "axios"
@@ -60,12 +60,45 @@ interface UpstreamChannel {
   type: string
   base_url: string
   api_key: string
+	plugin_config: string
   priority: number
   weight: number
   enabled: boolean
   price_sync_enabled: boolean
   price_sync_cron: string
   group_multipliers?: GroupMultiplier[]
+}
+
+interface PluginUpstreamType {
+  id: string
+  name: string
+  description?: string
+  protocol: string
+	default_base_url?: string
+  config?: unknown
+}
+
+interface PluginListItem {
+  id: string
+  enabled: boolean
+  upstreams?: PluginUpstreamType[]
+}
+
+interface PluginSettingsResponse {
+  config: unknown
+}
+
+interface PluginUpstreamConfigField {
+  name: string
+  label: string
+  type: string
+  description: string
+  placeholder: string
+  required: boolean
+  options: Array<{ label: string; value: string }>
+  optionsFrom: string
+  optionLabel: string
+  optionValue: string
 }
 
 interface ChannelModelConfig {
@@ -173,6 +206,25 @@ export default function Channels() {
       return Array.isArray(res.data) ? res.data : []
     },
   })
+
+  const { data: pluginTypes = [] } = useQuery<ChannelTypeConfig[]>({
+    queryKey: ["admin-plugin-upstream-types"],
+    queryFn: async () => {
+      const response = await api.get("/user/plugins")
+      const items = Array.isArray(response.data?.plugins) ? response.data.plugins as PluginListItem[] : []
+      return items.flatMap((plugin) => plugin.enabled ? (plugin.upstreams || []).filter((upstream) => upstream.protocol === "responses").map((upstream) => ({
+        value: `plugin--${plugin.id}--${upstream.id}`,
+        label: upstream.name || plugin.id,
+		defaultBaseURL: upstream.default_base_url || "",
+        baseURLPlaceholder: "https://api.example.com",
+        baseURLHelp: upstream.description || "This upstream is provided by an installed WASM plugin.",
+        pluginID: plugin.id,
+        pluginConfig: upstream.config,
+      })) : [])
+    },
+  })
+
+  const availableProviderTypes = useMemo(() => [...providerTypes, ...pluginTypes], [pluginTypes])
 
   const { data: channelUsage = emptyChannelUsage() } = useQuery<ChannelUsageResponse>({
     queryKey: ["admin-channel-usage"],
@@ -433,6 +485,7 @@ export default function Channels() {
       <UpstreamDialog
         channel={editingUpstream}
         userChannels={userChannels}
+		providerTypes={availableProviderTypes}
         onClose={() => setEditingUpstream(null)}
         onSave={(channel) => saveUpstream.mutate(channel)}
       />
@@ -525,11 +578,13 @@ function UserChannelDialog({
 function UpstreamDialog({
   channel,
   userChannels,
+	providerTypes,
   onClose,
   onSave,
 }: {
   channel: Partial<UpstreamChannel> | null
   userChannels: UserChannel[]
+	providerTypes: ChannelTypeConfig[]
   onClose: () => void
   onSave: (channel: Partial<UpstreamChannel>) => void
 }) {
@@ -537,32 +592,46 @@ function UpstreamDialog({
   const copy = language === "zh" ? zhChannelCopy : enChannelCopy
   const [draft, setDraft] = useState<Partial<UpstreamChannel>>(emptyUpstream(userChannels[0]?.id))
   const selectedType = draft.type || "completion"
-  const selectedTypeConfig = channelTypeConfig(selectedType)
+	const selectedTypeConfig = channelTypeConfig(selectedType, providerTypes)
+	const pluginID = selectedTypeConfig.pluginID || ""
+	const pluginFields = useMemo(() => normalizePluginUpstreamConfigFields(selectedTypeConfig.pluginConfig), [selectedTypeConfig.pluginConfig])
+	const { data: pluginSettings } = useQuery<PluginSettingsResponse>({
+		queryKey: ["plugin-settings-for-upstream", pluginID],
+		enabled: Boolean(pluginID),
+		queryFn: async () => (await api.get(`/user/plugins/${encodeURIComponent(pluginID)}/settings`)).data as PluginSettingsResponse,
+	})
+	const pluginConfig = parsePluginUpstreamConfig(draft.plugin_config)
 
   useEffect(() => {
     setDraft(channel || emptyUpstream(userChannels[0]?.id))
   }, [channel, userChannels])
 
   const updateType = (type: string) => {
-    const nextConfig = channelTypeConfig(type)
-    const currentConfig = channelTypeConfig(draft.type || "")
+		const nextConfig = channelTypeConfig(type, providerTypes)
+		const currentConfig = channelTypeConfig(draft.type || "", providerTypes)
     const currentBaseURL = (draft.base_url || "").trim()
     const shouldUseDefaultBaseURL = !currentBaseURL || currentBaseURL === currentConfig.defaultBaseURL
     setDraft({
       ...draft,
       type,
-      base_url: shouldUseDefaultBaseURL ? nextConfig.defaultBaseURL || "" : draft.base_url,
-    })
+		base_url: shouldUseDefaultBaseURL ? nextConfig.defaultBaseURL || "" : draft.base_url,
+		plugin_config: type === draft.type ? draft.plugin_config : "{}",
+	})
   }
+
+	const updatePluginConfig = (name: string, value: unknown) => {
+		setDraft({ ...draft, plugin_config: JSON.stringify({ ...pluginConfig, [name]: value }) })
+	}
 
   return (
     <Dialog open={Boolean(channel)} onOpenChange={(open) => !open && onClose()}>
-      <DialogContent className="max-w-2xl">
+	  <DialogContent className="grid max-h-[90vh] w-[calc(100vw-2rem)] max-w-2xl grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
         <DialogHeader>
           <DialogTitle>{channel?.id ? t("admin.editUpstream") : t("admin.addUpstream")}</DialogTitle>
           <DialogDescription>{t("admin.upstreamHint")}</DialogDescription>
         </DialogHeader>
-        <div className="grid gap-3 md:grid-cols-2">
+		<div className="min-h-0 overflow-y-auto px-1">
+		<div className="grid gap-3 pb-1 md:grid-cols-2">
           <FieldLabel label={t("channels.name")}>
             <Input value={draft.name || ""} onChange={(e) => setDraft({ ...draft, name: e.target.value })} placeholder={t("channels.name")} />
           </FieldLabel>
@@ -592,14 +661,15 @@ function UpstreamDialog({
             </div>
             {selectedTypeConfig.baseURLHelp && <p className="text-xs text-muted-foreground">{selectedTypeConfig.baseURLHelp}</p>}
           </FieldLabel>
-          <FieldLabel label={selectedTypeConfig.apiKeyLabel}>
+		  <FieldLabel label={selectedTypeConfig.apiKeyLabel}>
             <Input
               value={draft.api_key || ""}
               onChange={(e) => setDraft({ ...draft, api_key: e.target.value })}
               placeholder={selectedTypeConfig.apiKeyPlaceholder}
             />
             {selectedTypeConfig.apiKeyHelp && <p className="text-xs text-muted-foreground">{selectedTypeConfig.apiKeyHelp}</p>}
-          </FieldLabel>
+		  </FieldLabel>
+		  {pluginFields.map((field) => <PluginUpstreamConfigControl key={field.name} field={field} value={pluginConfig[field.name]} settings={pluginSettings?.config} onChange={(value) => updatePluginConfig(field.name, value)} />)}
           <FieldLabel label={t("admin.userChannel")}>
             <Select value={String((draft.user_channel_id || "") || "__shadcn_empty__")} onValueChange={(value) => setDraft({ ...draft, user_channel_id: Number((value === "__shadcn_empty__" ? "" : value)) || null })}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue /></SelectTrigger><SelectContent>
               <SelectItem value="__shadcn_empty__">{t("admin.selectUserChannel")}</SelectItem>
@@ -625,7 +695,7 @@ function UpstreamDialog({
             />
           </FieldLabel>
           <div className="space-y-3 rounded-md border p-3 md:col-span-2">
-            <label className="flex items-center gap-2 text-sm">
+		  <label className="flex items-center gap-2 text-sm">
               <Switch
                 checked={draft.price_sync_enabled ?? true}
                 onCheckedChange={(checked) => setDraft({ ...draft, price_sync_enabled: checked })}
@@ -645,8 +715,9 @@ function UpstreamDialog({
           <label className="flex items-center gap-2 text-sm">
             <Switch checked={Boolean(draft.enabled)} onCheckedChange={(checked) => setDraft({ ...draft, enabled: checked })} />
             {t("common.enabled")}
-          </label>
-        </div>
+		  </label>
+		</div>
+		</div>
         <DialogFooter>
           <Button variant="outline" onClick={onClose}>{t("common.cancel")}</Button>
           <Button onClick={() => onSave(draft)}>{t("admin.save")}</Button>
@@ -1340,6 +1411,65 @@ function FieldLabel({ label, children }: { label: string; children: React.ReactN
   )
 }
 
+function PluginUpstreamConfigControl({ field, value, settings, onChange }: { field: PluginUpstreamConfigField; value: unknown; settings: unknown; onChange: (value: unknown) => void }) {
+  const options = pluginUpstreamConfigOptions(field, settings)
+  if (field.type === "switch" || field.type === "boolean" || field.type === "checkbox") {
+    return <div className="flex items-center justify-between gap-3 rounded-md border p-3"><div><div className="text-sm font-medium">{field.label}</div>{field.description && <p className="mt-1 text-xs text-muted-foreground">{field.description}</p>}</div><Switch checked={Boolean(value)} onCheckedChange={onChange} /></div>
+  }
+  if (field.type === "select" || field.type === "enum") {
+    return <FieldLabel label={`${field.label}${field.required ? " *" : ""}`}><Select value={String(value || "__plugin_empty__")} onValueChange={(next) => onChange(next === "__plugin_empty__" ? "" : next)}><SelectTrigger className="h-10 rounded-2xl border bg-background px-3 text-sm"><SelectValue placeholder={field.placeholder || "Select"} /></SelectTrigger><SelectContent>{!field.required && <SelectItem value="__plugin_empty__">Not set</SelectItem>}{options.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}</SelectContent></Select>{field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}</FieldLabel>
+  }
+  if (field.type === "textarea" || field.type === "text") {
+    return <FieldLabel label={`${field.label}${field.required ? " *" : ""}`}><textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} />{field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}</FieldLabel>
+  }
+  return <FieldLabel label={`${field.label}${field.required ? " *" : ""}`}><Input type={field.type === "number" || field.type === "integer" ? "number" : "text"} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(field.type === "number" || field.type === "integer" ? Number(event.target.value) : event.target.value)} />{field.description && <p className="text-xs text-muted-foreground">{field.description}</p>}</FieldLabel>
+}
+
+function parsePluginUpstreamConfig(value: unknown): Record<string, unknown> {
+  if (isRecord(value)) return value
+  if (typeof value !== "string" || !value.trim()) return {}
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return isRecord(parsed) && !Array.isArray(parsed) ? parsed : {}
+  } catch {
+    return {}
+  }
+}
+
+function normalizePluginUpstreamConfigFields(schema: unknown): PluginUpstreamConfigField[] {
+  const root = isRecord(schema) ? schema : {}
+  const fields = Array.isArray(root.fields) ? root.fields : []
+  return fields.flatMap((value) => {
+    if (!isRecord(value) || typeof value.name !== "string" || !value.name.trim()) return []
+    const rawOptions = Array.isArray(value.options) ? value.options : []
+    const options = rawOptions.flatMap((option) => {
+      if (isRecord(option)) {
+        const optionValue = String(option.value ?? option.id ?? option.name ?? option.label ?? "").trim()
+        return optionValue ? [{ value: optionValue, label: String(option.label ?? option.name ?? optionValue) }] : []
+      }
+      const optionValue = String(option).trim()
+      return optionValue ? [{ value: optionValue, label: optionValue }] : []
+    })
+    return [{
+      name: value.name.trim(), label: String(value.label ?? value.title ?? value.name), type: String(value.type ?? "input").toLowerCase(),
+      description: String(value.description ?? value.help ?? ""), placeholder: String(value.placeholder ?? ""), required: value.required === true,
+      options, optionsFrom: String(value.options_from ?? ""), optionLabel: String(value.option_label ?? "name"), optionValue: String(value.option_value ?? "id"),
+    }]
+  })
+}
+
+function pluginUpstreamConfigOptions(field: PluginUpstreamConfigField, settings: unknown) {
+  if (!field.optionsFrom) return field.options
+  const source = isRecord(settings) ? settings[field.optionsFrom] : undefined
+  if (!Array.isArray(source)) return field.options
+  return source.flatMap((value) => {
+    if (!isRecord(value)) return []
+    const optionValue = String(value[field.optionValue] ?? "").trim()
+    if (!optionValue) return []
+    return [{ value: optionValue, label: String(value[field.optionLabel] ?? optionValue) }]
+  })
+}
+
 function emptyUserChannel(): Partial<UserChannel> {
   return { name: "", description: "", multiplier: 1, routing_algorithm: "priority", enabled: true }
 }
@@ -1361,6 +1491,7 @@ function emptyUpstream(userChannelID?: number): Partial<UpstreamChannel> {
     type: "completion",
     base_url: "",
     api_key: "",
+	plugin_config: "{}",
     priority: 1,
     weight: 1,
     enabled: true,
@@ -1376,6 +1507,7 @@ function upstreamPayload(channel: Partial<UpstreamChannel>) {
     type: channel.type || "completion",
     base_url: channel.base_url || "",
     api_key: channel.api_key || "",
+	plugin_config: channel.plugin_config || "{}",
     priority: Number(channel.priority ?? 1),
     weight: Number(channel.weight ?? 1),
     enabled: channel.enabled ?? true,
@@ -1637,6 +1769,8 @@ interface ChannelTypeConfig {
   apiKeyPlaceholder?: string
   apiKeyHelp?: string
   defaultBaseURLAction?: string
+	pluginID?: string
+	pluginConfig?: unknown
 }
 
 const providerTypes: ChannelTypeConfig[] = [
@@ -1651,15 +1785,6 @@ const providerTypes: ChannelTypeConfig[] = [
     label: "OpenAI Responses",
     defaultBaseURL: "https://api.openai.com",
     baseURLPlaceholder: "https://api.openai.com",
-  },
-  {
-    value: "plugin--codex-subscription--codex",
-    label: "ChatGPT Subscription (Codex)",
-    defaultBaseURL: "https://chatgpt.com",
-    baseURLPlaceholder: "https://chatgpt.com",
-    apiKeyLabel: "Codex OAuth JSON",
-    apiKeyPlaceholder: '{"access_token":"...","refresh_token":"...","account_id":"..."}',
-    apiKeyHelp: "Install the Codex Subscription WASM plugin first. This shared credential stays on the server and is refreshed automatically.",
   },
   {
     value: "openai-video",
@@ -1819,8 +1944,8 @@ const providerTypes: ChannelTypeConfig[] = [
   },
 ]
 
-function channelTypeConfig(type: string): Required<Pick<ChannelTypeConfig, "apiKeyLabel" | "apiKeyPlaceholder" | "defaultBaseURLAction">> & ChannelTypeConfig {
-  const config = providerTypes.find((item) => item.value === type) || providerTypes.find((item) => item.value === "completion") || providerTypes[0]
+function channelTypeConfig(type: string, types = providerTypes): Required<Pick<ChannelTypeConfig, "apiKeyLabel" | "apiKeyPlaceholder" | "defaultBaseURLAction">> & ChannelTypeConfig {
+  const config = types.find((item) => item.value === type) || providerTypes.find((item) => item.value === "completion") || providerTypes[0]
   return {
     apiKeyLabel: "API Key",
     apiKeyPlaceholder: "sk-...",

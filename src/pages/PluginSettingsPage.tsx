@@ -6,12 +6,13 @@ import api from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { PageTab, PageTabs } from "@/components/layout/PageTabs"
+import { TabTransition } from "@/components/layout/TabTransition"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
@@ -144,12 +145,10 @@ export default function PluginSettingsPage() {
             <Textarea className="min-h-[28rem] font-mono" value={rawText} onChange={(event) => setRawText(event.target.value)} />
           ) : tabs.length ? (
             <div className="space-y-5">
-              <Tabs value={currentTab?.id || ""} onValueChange={setActiveTab}>
-                <TabsList className="h-auto w-full justify-start gap-1 rounded-none border-b bg-transparent p-0">
-                  {tabs.map((tab) => <TabsTrigger key={tab.id} value={tab.id} className="rounded-none border-b-2 border-transparent bg-transparent px-3 py-2 shadow-none data-[state=active]:border-primary data-[state=active]:bg-transparent data-[state=active]:text-primary">{tab.label}</TabsTrigger>)}
-                </TabsList>
-              </Tabs>
-              {currentTab && <div className="space-y-5"><div>{currentTab.description && <p className="text-sm text-muted-foreground">{currentTab.description}</p>}</div><PluginSettingsForm fields={currentTab.fields} values={values} onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))} /></div>}
+              <PageTabs aria-label="插件设置分类">
+                {tabs.map((tab) => <PageTab key={tab.id} active={currentTab?.id === tab.id} onClick={() => setActiveTab(tab.id)}>{tab.label}</PageTab>)}
+              </PageTabs>
+              {currentTab && <TabTransition activeKey={currentTab.id} order={tabs.map((tab) => tab.id)}><div className="space-y-5"><div>{currentTab.description && <p className="text-sm text-muted-foreground">{currentTab.description}</p>}</div><PluginSettingsForm fields={currentTab.fields} values={values} onChange={(name, value) => setValues((current) => ({ ...current, [name]: value }))} /></div></TabTransition>}
             </div>
           ) : <div className="rounded-md border border-dashed px-4 py-10 text-center text-sm text-muted-foreground">这个插件没有声明可视化配置项</div>}
         </CardContent>
@@ -159,12 +158,12 @@ export default function PluginSettingsPage() {
 }
 
 function PluginSettingsForm({ fields, values, onChange }: { fields: PluginSettingsField[]; values: Record<string, unknown>; onChange: (name: string, value: unknown) => void }) {
-  return <div className="space-y-4">{fields.map((field) => <PluginSettingsFieldControl key={field.name} field={field} value={values[field.name]} onChange={(value) => onChange(field.name, value)} />)}</div>
+  return <div className="space-y-4">{fields.map((field) => <PluginSettingsFieldControl key={field.name} field={field} value={values[field.name]} values={values} onChange={(value) => onChange(field.name, value)} />)}</div>
 }
 
-function PluginSettingsFieldControl({ field, value, onChange }: { field: PluginSettingsField; value: unknown; onChange: (value: unknown) => void }) {
+function PluginSettingsFieldControl({ field, value, values, onChange }: { field: PluginSettingsField; value: unknown; values: Record<string, unknown>; onChange: (value: unknown) => void }) {
   const label = <div className="space-y-1"><Label className="text-sm font-medium">{field.label}{field.required && <span className="ml-1 text-destructive">*</span>}</Label>{field.description && <div className="text-xs text-muted-foreground">{field.description}</div>}</div>
-  if (field.type === "editable_list") return <EditableListFieldControl field={field} value={value} onChange={onChange} label={label} />
+  if (field.type === "editable_list") return <EditableListFieldControl field={field} value={value} values={values} onChange={onChange} label={label} />
   if (field.type === "switch") return <div className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<Switch className="mt-0.5 shrink-0" checked={Boolean(value)} onCheckedChange={onChange} /></div>
   if (["checkbox", "boolean"].includes(field.type)) return <label className="flex items-start justify-between gap-4 rounded-md border p-3">{label}<Checkbox className="mt-1 shrink-0" checked={Boolean(value)} onCheckedChange={(checked) => onChange(checked === true)} /></label>
   if (["textarea", "text"].includes(field.type)) return <div className="space-y-2">{label}<Textarea className="min-h-28" value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
@@ -175,7 +174,7 @@ function PluginSettingsFieldControl({ field, value, onChange }: { field: PluginS
   return <div className="space-y-2">{label}<Input type={field.type === "password" || field.type === "secret" ? "password" : "text"} value={String(value ?? "")} placeholder={field.placeholder} onChange={(event) => onChange(event.target.value)} /></div>
 }
 
-function EditableListFieldControl({ field, value, onChange, label }: { field: PluginSettingsField; value: unknown; onChange: (value: unknown) => void; label: React.ReactNode }) {
+function EditableListFieldControl({ field, value, values, onChange, label }: { field: PluginSettingsField; value: unknown; values: Record<string, unknown>; onChange: (value: unknown) => void; label: React.ReactNode }) {
   const items = Array.isArray(value) ? value.filter(isRecord) : []
   const columns = field.options
   const [draft, setDraft] = useState<{ index: number | null; item: Record<string, unknown> } | null>(null)
@@ -192,7 +191,7 @@ function EditableListFieldControl({ field, value, onChange, label }: { field: Pl
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-4">
         {label}
-        <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={openNew}><Plus size={15} />添加项目</Button>
+        <Button type="button" size="sm" variant="outline" className="shrink-0 gap-1.5" onClick={openNew}><Plus size={15} />添加{field.label}</Button>
       </div>
       {items.length ? (
         <div className="rounded-md border">
@@ -200,23 +199,25 @@ function EditableListFieldControl({ field, value, onChange, label }: { field: Pl
             <TableHeader><TableRow>{columns.map((column) => <TableHead key={column.value}>{column.label}</TableHead>)}<TableHead className="w-24 text-right">操作</TableHead></TableRow></TableHeader>
             <TableBody>{items.map((item, index) => (
               <TableRow key={stringValue(item.id) || index}>
-                {columns.map((column) => <TableCell key={column.value}>{editableListCellValue(item[column.value])}</TableCell>)}
-                <TableCell><div className="flex justify-end gap-1"><Button type="button" size="icon" variant="ghost" aria-label={`编辑${field.label}项目`} onClick={() => setDraft({ index, item: { ...item } })}><Pencil size={15} /></Button><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" aria-label={`删除${field.label}项目`} onClick={() => { if (window.confirm("确定删除这个项目吗？")) onChange(items.filter((_, itemIndex) => itemIndex !== index)) }}><Trash2 size={15} /></Button></div></TableCell>
+                {columns.map((column) => <TableCell key={column.value}>{editableListCellValue(item[column.value], column.value)}</TableCell>)}
+                <TableCell><div className="flex justify-end gap-1"><Button type="button" size="icon" variant="ghost" aria-label={`编辑${field.label}`} onClick={() => setDraft({ index, item: { ...item } })}><Pencil size={15} /></Button><Button type="button" size="icon" variant="ghost" className="text-destructive hover:text-destructive" aria-label={`删除${field.label}`} onClick={() => { if (window.confirm(`确定删除${field.label}吗？`)) onChange(items.filter((_, itemIndex) => itemIndex !== index)) }}><Trash2 size={15} /></Button></div></TableCell>
               </TableRow>
             ))}</TableBody>
           </Table>
         </div>
-      ) : <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">暂无项目，点击“添加项目”开始配置。</div>}
+      ) : <div className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">暂无{field.label}，点击“添加{field.label}”开始配置。</div>}
       <Dialog open={Boolean(draft)} onOpenChange={(open) => { if (!open) setDraft(null) }}>
         <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
-          <DialogHeader><DialogTitle>{draft?.index === null ? `添加${field.label}项目` : `编辑${field.label}项目`}</DialogTitle></DialogHeader>
+          <DialogHeader><DialogTitle>{draft?.index === null ? `添加${field.label}` : `编辑${field.label}`}</DialogTitle></DialogHeader>
           {draft && <div className="space-y-4">{columns.map((column) => {
             const current = draft.item[column.value]
             const type = editableListValueType(field, column.value, current)
             if (type === "boolean") return <div key={column.value} className="flex items-center justify-between gap-4 rounded-md border p-3"><Label>{column.label}</Label><Switch checked={Boolean(current)} onCheckedChange={(checked) => setDraft({ ...draft, item: { ...draft.item, [column.value]: checked } })} /></div>
+            if (field.name === "accounts" && column.value === "pool_id") return <div key={column.value} className="space-y-2"><Label>{column.label}</Label><Select value={String(current || "__unset__")} onValueChange={(next) => setDraft({ ...draft, item: { ...draft.item, pool_id: next === "__unset__" ? "" : next } })}><SelectTrigger><SelectValue placeholder="选择账号池" /></SelectTrigger><SelectContent><SelectItem value="__unset__">选择账号池</SelectItem>{editableListPoolOptions(values).map((pool) => <SelectItem key={pool.value} value={pool.value}>{pool.label}</SelectItem>)}</SelectContent></Select></div>
+            if (type === "textarea") return <div key={column.value} className="space-y-2"><Label>{column.label}</Label><Textarea className="min-h-40 font-mono" placeholder={column.value === "credentials_json" ? '{"access_token":"...","refresh_token":"...","account_id":"...","expired":"2026-01-02T15:04:05Z"}' : undefined} value={current === undefined || current === null ? "" : String(current)} onChange={(event) => setDraft({ ...draft, item: { ...draft.item, [column.value]: event.target.value } })} />{column.value === "credentials_json" && <p className="text-xs text-muted-foreground">粘贴单个 Codex OAuth 登录凭据 JSON，不要粘贴数组。</p>}</div>
             return <div key={column.value} className="space-y-2"><Label>{column.label}</Label><Input type={type === "number" ? "number" : "text"} min={column.value === "weight" ? 1 : undefined} step={column.value === "weight" ? 1 : column.value === "reward" ? "0.000001" : undefined} value={current === undefined || current === null ? "" : String(current)} onChange={(event) => setDraft({ ...draft, item: { ...draft.item, [column.value]: type === "number" ? (event.target.value === "" ? "" : Number(event.target.value)) : event.target.value } })} /></div>
           })}</div>}
-          <DialogFooter><Button type="button" variant="outline" onClick={() => setDraft(null)}>取消</Button><Button type="button" disabled={!draft || !editableListDraftValid(draft, items, columns)} onClick={saveDraft}>保存奖项</Button></DialogFooter>
+          <DialogFooter><Button type="button" variant="outline" onClick={() => setDraft(null)}>取消</Button><Button type="button" disabled={!draft || !editableListDraftValid(draft, items, columns)} onClick={saveDraft}>保存{field.label}</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
@@ -240,8 +241,9 @@ function createEditableListItem(field: PluginSettingsField) {
 }
 
 function editableListValueType(field: PluginSettingsField, key: string, value: unknown) {
-  if (typeof value === "boolean") return "boolean"
-  if (typeof value === "number") return "number"
+	if (typeof value === "boolean") return "boolean"
+	if (typeof value === "number") return "number"
+	if (key.endsWith("_json")) return "textarea"
   const template = Array.isArray(field.defaultValue) && isRecord(field.defaultValue[0]) ? field.defaultValue[0][key] : undefined
   if (typeof template === "boolean" || key === "enabled") return "boolean"
   if (typeof template === "number" || key === "weight") return "number"
@@ -255,6 +257,9 @@ function editableListItemValid(item: Record<string, unknown>, columns: Array<{ l
     if (typeof value === "number") return Number.isFinite(value) && (column.value !== "weight" || value > 0)
     const text = String(value ?? "").trim()
     if (!text) return false
+		if (column.value.endsWith("_json")) {
+			try { if (!isRecord(JSON.parse(text))) return false } catch { return false }
+		}
     if (column.value === "reward") return /^(?:\d{1,14})(?:\.\d{1,6})?$/.test(text)
     return true
   })
@@ -266,9 +271,19 @@ function editableListDraftValid(draft: { index: number | null; item: Record<stri
   return !id || !items.some((item, index) => index !== draft.index && String(item.id ?? "").trim() === id)
 }
 
-function editableListCellValue(value: unknown) {
+function editableListCellValue(value: unknown, key = "") {
+	if (key.endsWith("_json")) return String(value ?? "").trim() ? <Badge variant="secondary">已配置</Badge> : "-"
   if (typeof value === "boolean") return value ? <Badge variant="secondary">启用</Badge> : <Badge variant="outline">停用</Badge>
   return stringValue(value) || "-"
+}
+
+function editableListPoolOptions(values: Record<string, unknown>) {
+	const pools = Array.isArray(values.pools) ? values.pools.filter(isRecord) : []
+	return pools.flatMap((pool) => {
+		if (pool.enabled === false) return []
+		const value = stringValue(pool.id)
+		return value ? [{ value, label: stringValue(pool.name) || value }] : []
+	})
 }
 
 function normalizePluginDetail(value: unknown): PluginDetail {
