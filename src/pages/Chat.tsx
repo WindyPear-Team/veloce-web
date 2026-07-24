@@ -5835,6 +5835,7 @@ function readStoredSessions(storeKey = sessionsStoreKey, includeLegacy = true): 
       connector_auto_approve: false,
       connector_approval_mode: "manual",
       connector_command_prefixes: [],
+      auto_compress_context: true,
       created_at: now,
       updated_at: now,
     }]
