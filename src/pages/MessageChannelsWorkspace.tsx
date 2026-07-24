@@ -83,6 +83,38 @@ interface AdvancedOptions {
   custom_provider_config_json: string
 }
 
+interface ChannelConfigOption {
+  label: string
+  value: string
+}
+
+interface ChannelConfigField {
+  type: string
+  name: string
+  label: string
+  description?: string
+  placeholder?: string
+  required?: boolean
+  default?: unknown
+  options?: ChannelConfigOption[]
+  min?: number | string
+  max?: number | string
+  step?: number | string
+}
+
+interface ChannelProviderDescriptor {
+  id: string
+  name: string
+  description?: string
+  plugin_id?: string
+  config?: { fields?: ChannelConfigField[] }
+}
+
+interface MessageChannelSettings {
+  enabled: boolean
+  providers: ChannelProviderDescriptor[]
+}
+
 interface MessageChannel {
   id: number
   name: string
@@ -126,7 +158,7 @@ interface MessageRecord {
 interface Draft {
   id?: number
   name: string
-  provider: ChannelProvider
+  provider: ChannelProvider | string
   bot_token: string
   enabled: boolean
   default_device_id: string
@@ -149,13 +181,13 @@ interface Draft {
 
 const channelQueryKey = ["message-channels"] as const
 type ChannelProvider = "telegram" | "discord" | "qq" | "onebot" | "weixin" | "tencent_channel"
-const providerOptions: Array<{ value: ChannelProvider; label: string }> = [
-  { value: "telegram", label: "Telegram" },
-  { value: "discord", label: "Discord" },
-  { value: "qq", label: "QQ 官方机器人" },
-  { value: "onebot", label: "OneBot" },
-  { value: "weixin", label: "微信 Bot" },
-  { value: "tencent_channel", label: "腾讯频道 Gateway" },
+const providerOptions: ChannelProviderDescriptor[] = [
+  { id: "telegram", name: "Telegram" },
+  { id: "discord", name: "Discord" },
+  { id: "qq", name: "QQ 官方机器人" },
+  { id: "onebot", name: "OneBot" },
+  { id: "weixin", name: "微信 Bot" },
+  { id: "tencent_channel", name: "腾讯频道 Gateway" },
 ]
 const emptyAdvancedOptions: AdvancedOptions = {
   temperature: null,
@@ -199,13 +231,7 @@ const emptyDraft: Draft = {
 export default function MessageChannelsWorkspace() {
   const { language } = useI18n()
   const copy = language === "zh" ? zhCopy : enCopy
-  const { data: settings } = useQuery<{ enabled: boolean }>({
-    queryKey: ["message-channel-settings"],
-    queryFn: async () => {
-      const res = await api.get("/user/message-channels/settings")
-      return { enabled: res.data?.enabled === true }
-    },
-  })
+  const { data: settings } = useMessageChannelSettings()
 
   if (settings && !settings.enabled) {
     return (
@@ -307,11 +333,17 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
   const [tencentLoginAutoKey, setTencentLoginAutoKey] = useState(0)
 
   const { data: channels = [] } = useChannels()
+  const { data: channelSettings } = useMessageChannelSettings()
   const current = mode === "edit" ? channels.find((channel) => channel.id === numericID) : undefined
   const lookups = useLookups()
   const modelOptions = useMemo(() => uniqueModels(lookups.catalog), [lookups.catalog])
   const selectedUserChannel = lookups.catalog.find((item) => String(item.id) === draft.default_user_channel_id)
   const defaultModelOptions = selectedUserChannel?.models.length ? selectedUserChannel.models : modelOptions
+  const configuredProviders = channelSettings?.providers?.length ? channelSettings.providers : providerOptions
+  const providers = useMemo(() => {
+    if (configuredProviders.some((provider) => provider.id === draft.provider)) return configuredProviders
+    return [...configuredProviders, { id: draft.provider, name: draft.provider }]
+  }, [configuredProviders, draft.provider])
 
   useEffect(() => {
     if (mode === "create") {
@@ -440,7 +472,7 @@ function ChannelDetail({ copy, mode }: { copy: CopyText; mode: "create" | "edit"
       </PageTabs>
 
       {activeTab === "basic" && (
-        <BasicTab copy={copy} draft={draft} current={current} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={updateDraft} onAdvancedChange={updateAdvanced} />
+        <BasicTab copy={copy} draft={draft} current={current} providers={providers} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={updateDraft} onAdvancedChange={updateAdvanced} />
       )}
       {activeTab === "routing" && (
         <RoutingTab copy={copy} draft={draft} lookups={lookups} modelOptions={modelOptions} defaultModelOptions={defaultModelOptions} onDraftChange={updateDraft} />
@@ -465,6 +497,7 @@ function BasicTab({
   copy,
   draft,
   current,
+  providers,
   lookups,
   tencentLoginAutoStartKey,
   onDraftChange,
@@ -473,6 +506,7 @@ function BasicTab({
   copy: CopyText
   draft: Draft
   current?: MessageChannel
+  providers: ChannelProviderDescriptor[]
   lookups: LookupData
   tencentLoginAutoStartKey: string | number
   onDraftChange: (patch: Partial<Draft>) => void
@@ -500,9 +534,9 @@ function BasicTab({
           <SelectField
             label={copy.provider}
             value={draft.provider}
-            onChange={(provider) => onDraftChange({ provider: provider as Draft["provider"], bot_token: providerUsesBotToken(provider) ? draft.bot_token : "" })}
+            onChange={(provider) => onDraftChange({ provider, bot_token: providerUsesBotToken(provider) ? draft.bot_token : "" })}
           >
-            {providerOptions.map((provider) => <option key={provider.value} value={provider.value}>{provider.label}</option>)}
+            {providers.map((provider) => <option key={provider.id} value={provider.id}>{provider.name}</option>)}
           </SelectField>
           <Field label={copy.status}>
             <label className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm">
@@ -521,7 +555,7 @@ function BasicTab({
             </Button>
           </div>
         )}
-        <ConnectionSettings copy={copy} draft={draft} current={current} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={onDraftChange} onAdvancedChange={onAdvancedChange} />
+        <ConnectionSettings copy={copy} draft={draft} current={current} provider={providers.find((item) => item.id === draft.provider)} lookups={lookups} tencentLoginAutoStartKey={tencentLoginAutoStartKey} onDraftChange={onDraftChange} onAdvancedChange={onAdvancedChange} />
       </CardContent>
     </Card>
   )
@@ -531,6 +565,7 @@ function ConnectionSettings({
   copy,
   draft,
   current,
+  provider,
   lookups,
   tencentLoginAutoStartKey,
   onDraftChange,
@@ -539,6 +574,7 @@ function ConnectionSettings({
   copy: CopyText
   draft: Draft
   current?: MessageChannel
+  provider?: ChannelProviderDescriptor
   lookups: LookupData
   tencentLoginAutoStartKey: string | number
   onDraftChange: (patch: Partial<Draft>) => void
@@ -554,6 +590,10 @@ function ConnectionSettings({
       next[key] = value
     }
     onAdvancedChange({ custom_provider_config_json: stringifyProviderConfig(next) })
+  }
+
+  if (provider?.plugin_id) {
+    return <PluginChannelConnectionSettings copy={copy} provider={provider} config={config} onAdvancedChange={onAdvancedChange} />
   }
 
   return (
@@ -687,6 +727,56 @@ function ConnectionSettings({
         <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">
           {copy.connectionHint}
         </div>
+    </div>
+  )
+}
+
+function PluginChannelConnectionSettings({
+  copy,
+  provider,
+  config,
+  onAdvancedChange,
+}: {
+  copy: CopyText
+  provider: ChannelProviderDescriptor
+  config: Record<string, string>
+  onAdvancedChange: (patch: Partial<AdvancedOptions>) => void
+}) {
+  const fields = provider.config?.fields || []
+  const updateConfig = (key: string, value: string) => {
+    const next = { ...config }
+    if (value.trim() === "") delete next[key]
+    else next[key] = value
+    onAdvancedChange({ custom_provider_config_json: stringifyProviderConfig(next) })
+  }
+
+  return (
+    <div className="space-y-5 border-t pt-5">
+      <div>
+        <h2 className="text-sm font-semibold">{copy.tabConnection}</h2>
+        {provider.description && <p className="mt-1 text-xs text-muted-foreground">{provider.description}</p>}
+      </div>
+      {fields.length === 0 ? (
+        <div className="rounded-md border bg-muted/30 p-3 text-sm text-muted-foreground">{copy.connectionHint}</div>
+      ) : (
+        <div className="grid gap-4 md:grid-cols-2">
+          {fields.map((field) => {
+            const value = config[field.name] ?? (field.default === undefined ? "" : String(field.default))
+            const description = field.description ? <p className="mt-1 text-xs text-muted-foreground">{field.description}</p> : null
+            if (field.type === "select") {
+              return <Field key={field.name} label={field.label || field.name}><SelectField value={value} onChange={(next) => updateConfig(field.name, next)} label={field.label || field.name}><option value="">{copy.inheritNone}</option>{(field.options || []).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</SelectField>{description}</Field>
+            }
+            if (field.type === "textarea") {
+              return <Field key={field.name} label={field.label || field.name}><textarea className="min-h-24 w-full rounded-md border bg-background px-3 py-2 text-sm" value={value} placeholder={field.placeholder} required={field.required} onChange={(event) => updateConfig(field.name, event.target.value)} />{description}</Field>
+            }
+            if (field.type === "switch" || field.type === "checkbox" || field.type === "boolean") {
+              return <Field key={field.name} label={field.label || field.name}><label className="flex h-10 items-center gap-2 rounded-md border px-3 text-sm"><Switch checked={value === "true"} onCheckedChange={(checked) => updateConfig(field.name, checked ? "true" : "false")} />{field.label || field.name}</label>{description}</Field>
+            }
+            return <Field key={field.name} label={field.label || field.name}><Input type={field.type === "secret" ? "password" : field.type === "number" ? "number" : field.type === "password" ? "password" : "text"} value={value} placeholder={field.placeholder} required={field.required} min={field.min} max={field.max} step={field.step} onChange={(event) => updateConfig(field.name, event.target.value)} />{description}</Field>
+          })}
+        </div>
+      )}
+      <div className="rounded-md border bg-muted/30 p-3 text-xs leading-5 text-muted-foreground">{copy.connectionHint}</div>
     </div>
   )
 }
@@ -1563,6 +1653,20 @@ function useChannels() {
   })
 }
 
+function useMessageChannelSettings() {
+  return useQuery<MessageChannelSettings>({
+    queryKey: ["message-channel-settings"],
+    queryFn: async () => {
+      const res = await api.get("/user/message-channels/settings")
+      const data = isRecord(res.data) ? res.data : {}
+      return {
+        enabled: data.enabled === true,
+        providers: Array.isArray(data.providers) ? data.providers.map(normalizeChannelProvider).filter((provider): provider is ChannelProviderDescriptor => Boolean(provider)) : providerOptions,
+      }
+    },
+  })
+}
+
 function useLookups(): LookupData {
   const { data: catalog = [] } = useQuery<UserChannelCatalog[]>({
     queryKey: ["catalog"],
@@ -1748,6 +1852,49 @@ function normalizeProviderValue(value: unknown): ChannelProvider {
       return "tencent_channel"
     default:
       return "telegram"
+  }
+}
+
+function normalizeChannelProvider(value: unknown): ChannelProviderDescriptor | null {
+  if (!isRecord(value)) return null
+  const id = stringValue(value.id)
+  if (!id) return null
+  const config = isRecord(value.config) ? value.config : undefined
+  const fields = config && Array.isArray(config.fields)
+    ? config.fields.map(normalizeChannelConfigField).filter((field): field is ChannelConfigField => Boolean(field))
+    : []
+  return {
+    id,
+    name: stringValue(value.name) || id,
+    description: stringValue(value.description),
+    plugin_id: stringValue(value.plugin_id) || undefined,
+    config: config ? { fields } : undefined,
+  }
+}
+
+function normalizeChannelConfigField(value: unknown): ChannelConfigField | null {
+  if (!isRecord(value)) return null
+  const name = stringValue(value.name)
+  if (!name) return null
+  const options = Array.isArray(value.options)
+    ? value.options.map((option) => {
+      if (!isRecord(option)) return null
+      const optionValue = stringValue(option.value)
+      return optionValue ? { value: optionValue, label: stringValue(option.label) || optionValue } : null
+    }).filter((option): option is ChannelConfigOption => Boolean(option))
+    : []
+  return {
+    name,
+    type: stringValue(value.type).toLowerCase() || "input",
+    label: stringValue(value.label) || name,
+    description: stringValue(value.description),
+    placeholder: stringValue(value.placeholder),
+    required: value.required === true,
+    default: value.default,
+    options,
+    min: typeof value.min === "number" || typeof value.min === "string" ? value.min : undefined,
+    max: typeof value.max === "number" || typeof value.max === "string" ? value.max : undefined,
+    step: typeof value.step === "number" || typeof value.step === "string" ? value.step : undefined,
   }
 }
 
