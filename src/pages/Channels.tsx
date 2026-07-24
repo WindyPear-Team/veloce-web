@@ -1653,6 +1653,15 @@ const providerTypes: ChannelTypeConfig[] = [
     baseURLPlaceholder: "https://api.openai.com",
   },
   {
+    value: "plugin--codex-subscription--codex",
+    label: "ChatGPT Subscription (Codex)",
+    defaultBaseURL: "https://chatgpt.com",
+    baseURLPlaceholder: "https://chatgpt.com",
+    apiKeyLabel: "Codex OAuth JSON",
+    apiKeyPlaceholder: '{"access_token":"...","refresh_token":"...","account_id":"..."}',
+    apiKeyHelp: "Install the Codex Subscription WASM plugin first. This shared credential stays on the server and is refreshed automatically.",
+  },
+  {
     value: "openai-video",
     label: "OpenAI Video",
     defaultBaseURL: "https://api.openai.com",
